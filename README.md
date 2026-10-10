@@ -1,6 +1,6 @@
 # Ouro backend
 
-Status: all 56 backend regression tests passed, including inspection, task contracts, version history, and configuration-revision migration. Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed the earlier import/inspection UI flow. JavaScript syntax checking passed for the extended UI. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and agent sandbox are not implemented; no imported code was executed.
+Status: all 187 backend regression tests passed, including inspection, task contracts, version history, and configuration-revision migration. Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed the earlier import/inspection UI flow. JavaScript syntax checking passed for the extended UI. Synthetic browser fixtures verified model selection, routing preview, save/reload, and retained source names at desktop and mobile widths; this is not a live agent run. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and agent sandbox are not implemented; no imported code was executed. The setup UI saves an explicit LiteLLM model selection separately from source model metadata; owner-scoped service minting binds every call to that choice and records both names. Own-key provider mode remains planned. The non-streaming model gateway supports per-key model maps, requested/upstream model accounting, LiteLLM-reported cost headers, parallel request-sized reservations, text content parts, and interrupted-call recovery with mocked upstream coverage; live LiteLLM access remains unverified. See [GATEWAY.md](GATEWAY.md).
 
 ## Repository setup and inspection
 
@@ -29,6 +29,7 @@ backend/app/
 │   └── worker.py       # One worker consuming the SQLite import queue
 ├── users.py            # User and provider identity storage
 ├── inspection/         # Static findings and confirmed execution configuration
+├── gateway/            # Scoped model proxy and persisted usage/reservations
 ├── contracts/          # Versioned development tasks and correctness requirements
 ├── ui/                 # Testing page and same-origin assets at /setup
 ├── sessions.py         # Session storage, cookies, and logout CSRF checks
@@ -37,7 +38,7 @@ backend/app/
 └── main.py             # Application setup, routers, and shared middleware
 ```
 
-The service modules share the local SQLite database. API paths and the database schema are unchanged by this reorganization.
+The service modules share the local SQLite database. The gateway adds key/call tables and `/gateway/v1/chat/completions`; see [GATEWAY.md](GATEWAY.md) for configuration and accounting limits.
 
 ## Local setup
 
@@ -140,7 +141,7 @@ The separate GitHub App connector supports current-account connection, repositor
 
 ## Verification
 
-Security regression tests are in [backend/tests/test_auth.py](backend/tests/test_auth.py) and [backend/tests/test_github_import.py](backend/tests/test_github_import.py). After the user authorized testing, all 37 passed in 11.52 seconds outside the sandbox on October 10, 2026. Authlib and Starlette emitted HTTP-client deprecation warnings. The sandbox runs stalled during startup; the local server and tests worked outside it. To rerun:
+Latest verification on October 10, 2026: `uv run pytest` passed **187 tests in 38.29 seconds**, including 126 gateway tests, outside the sandbox because uv could not write its cache inside it. Authlib and Starlette emitted two HTTP-client deprecation warnings. Gateway and GitHub upstream traffic uses mocks; no live LiteLLM call or imported source execution was performed. `git diff --check` passed. To rerun:
 
 ```sh
 uv run pytest

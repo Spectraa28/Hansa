@@ -122,7 +122,50 @@ class Database:
                     delivery_id TEXT PRIMARY KEY,
                     received_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS gateway_keys (
+                    key_hash TEXT PRIMARY KEY,
+                    run_label TEXT NOT NULL,
+                    max_calls INTEGER NOT NULL CHECK(max_calls >= 0),
+                    max_spend_usd REAL CHECK(max_spend_usd >= 0),
+                    expires_at INTEGER NOT NULL,
+                    revoked INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    model_map TEXT NOT NULL DEFAULT '{}',
+                    litellm_model TEXT
+                );
+                CREATE TABLE IF NOT EXISTS model_calls (
+                    id INTEGER PRIMARY KEY,
+                    key_hash TEXT NOT NULL REFERENCES gateway_keys(key_hash),
+                    model TEXT NOT NULL,
+                    upstream_model TEXT,
+                    prompt_tokens INTEGER,
+                    completion_tokens INTEGER,
+                    latency_ms INTEGER,
+                    http_status INTEGER,
+                    estimated_cost_usd REAL,
+                    cost_source TEXT,
+                    reserved_cost_usd REAL NOT NULL DEFAULT 0,
+                    lease_expires_at INTEGER,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS model_calls_key ON model_calls(key_hash);
             """)
+            key_columns = {row["name"] for row in db.execute("PRAGMA table_info(gateway_keys)")}
+            if "model_map" not in key_columns:
+                db.execute("ALTER TABLE gateway_keys ADD COLUMN model_map TEXT NOT NULL DEFAULT '{}'")
+            if "litellm_model" not in key_columns:
+                db.execute("ALTER TABLE gateway_keys ADD COLUMN litellm_model TEXT")
+            call_columns = {row["name"] for row in db.execute("PRAGMA table_info(model_calls)")}
+            if "upstream_model" not in call_columns:
+                db.execute("ALTER TABLE model_calls ADD COLUMN upstream_model TEXT")
+                # Earlier gateway versions always forwarded the requested model unchanged.
+                db.execute("UPDATE model_calls SET upstream_model=model")
+            if "cost_source" not in call_columns:
+                db.execute("ALTER TABLE model_calls ADD COLUMN cost_source TEXT")
+                db.execute("UPDATE model_calls SET cost_source='legacy_price_table' WHERE estimated_cost_usd IS NOT NULL")
+            if "lease_expires_at" not in call_columns:
+                db.execute("ALTER TABLE model_calls ADD COLUMN lease_expires_at INTEGER")
+                db.execute("UPDATE model_calls SET lease_expires_at=created_at+120 WHERE http_status IS NULL")
             columns = {row["name"] for row in db.execute("PRAGMA table_info(repository_inspections)")}
             if "configuration_revision" not in columns:
                 db.execute("ALTER TABLE repository_inspections ADD COLUMN configuration_revision TEXT")

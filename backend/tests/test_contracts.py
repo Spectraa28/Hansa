@@ -191,3 +191,15 @@ def test_legacy_confirmed_configuration_gets_stable_revision_on_upgrade(confirme
     assert upgraded["status"] == "confirmed" and len(upgraded["configuration_revision"]) == 32
     database.initialize()
     assert client.get(f"/github/imports/{import_id}/inspection").json()["configuration_revision"] == upgraded["configuration_revision"]
+
+
+def test_model_selection_change_makes_saved_contract_stale(confirmed_client):
+    client, import_id, headers, config = confirmed_client
+    endpoint = f'/github/imports/{import_id}/contract'
+    assert client.post(endpoint, headers=headers, json=content(config['configuration_revision'])).status_code == 201
+    updated = {**configuration(config), 'litellm_model': 'nova-pro'}
+    saved = client.post(f'/github/imports/{import_id}/configuration', headers=headers, json=updated).json()
+    assert saved['configuration_revision'] != config['configuration_revision']
+    assert client.get(endpoint).json()['stale']
+    repeated = client.post(f'/github/imports/{import_id}/configuration', headers=headers, json=updated).json()
+    assert repeated['configuration_revision'] == saved['configuration_revision']

@@ -2,11 +2,13 @@
 
 ## Project Structure & Module Organization
 
-This workspace contains the Autonomous Agent Optimization Engineer plans, authentication, GitHub source import, static inspection/configuration, task contracts, and a testing UI. All 56 backend regression tests passed. Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed that UI flow. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and execution sandbox are not implemented.
+This workspace contains the Autonomous Agent Optimization Engineer plans, authentication, GitHub source import, static inspection/configuration, task contracts, and a testing UI. All 187 backend regression tests passed. The setup UI saves an explicit LiteLLM model selection separately from source model metadata; owner-scoped service minting binds every call to that choice and records both names. Own-key provider mode remains planned. The non-streaming model gateway supports per-key model maps, requested/upstream model accounting, LiteLLM-reported cost headers, parallel request-sized reservations, text content parts, and interrupted-call recovery with mocked upstream coverage; live LiteLLM access remains unverified. See [GATEWAY.md](GATEWAY.md). Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed that UI flow. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and execution sandbox are not implemented.
 
 - `prd.md`: product definition, proposed architecture, evaluation contract, acceptance criteria, and build order.
 - `hackathon.md`: event requirements, sponsor setup, evidence expectations, and submission checklist.
 - `AGENTS.md`: contributor instructions.
+- `backend/app/gateway/`: scoped throwaway keys, per-key model maps, non-streaming LiteLLM proxy, dual-name usage records, LiteLLM response-header costs, parallel request-sized cost reservations, text content parts, and lease/cancellation recovery (estimated spend can differ from billing).
+- `GATEWAY.md`: configuration, accounting limits, service-only mint/summary, and a real-call command.
 - `backend/app/auth/`: authentication routes, request schemas, password login, and sign-in rate limits.
 - `backend/app/oauth/`: Google/GitHub provider clients, identity parsing, redirects, and callbacks.
 - `backend/app/github/`: GitHub App connection, verified repository access, bounded fixed-commit archives, persisted import queue, deletion, and signed webhooks.
@@ -20,7 +22,7 @@ This workspace contains the Autonomous Agent Optimization Engineer plans, authen
 - `backend/app/sessions.py`: session storage, cookie handling, and logout CSRF checks.
 - `backend/app/database.py`: shared SQLite connection and schema initialization.
 - `backend/app/config.py` and `backend/app/main.py`: settings and FastAPI application setup.
-- `backend/tests/`: 56 passing regression tests; GitHub HTTP requests and contract tasks use synthetic fixtures.
+- `backend/tests/`: 187 passing regression tests; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures.
 - `README.md`: setup, authentication contract, and current limitations.
 - `pyproject.toml` and `uv.lock`: Python dependencies.
 
@@ -34,7 +36,7 @@ From the repository root, `uv sync --locked` installs dependencies. Configure `.
 uv run uvicorn backend.app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-`uv run pytest` is the test command. Testing was authorized: all 56 backend tests passed outside the sandbox, including contracts and configuration-revision migration. UI JavaScript syntax checking passed. Imported source execution and dependency installation are not authorized. The illustrative `python runner.py < task.json` in the PRD is not a working command.
+`uv run pytest` is the test command. Testing was authorized: all 187 backend tests passed outside the sandbox, including gateway, contracts, and configuration-revision migration. Gateway upstream calls use mocks; live LiteLLM access is unverified. UI JavaScript syntax checking passed. Imported source execution and dependency installation are not authorized. The illustrative `python runner.py < task.json` in the PRD is not a working command.
 
 Useful documentation checks:
 

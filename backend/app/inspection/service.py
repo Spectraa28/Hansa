@@ -5,6 +5,7 @@ import uuid
 from fastapi import HTTPException
 
 from .scanner import scan
+from ..gateway.models import LITELLM_MODELS
 
 
 def suggestions(findings):
@@ -70,6 +71,7 @@ class InspectionService:
                 "status": row["status"], "findings": findings, "suggested_configuration": findings["suggested_configuration"],
                 "configuration": json.loads(row["configuration"]) if row["configuration"] else None,
                 "configuration_revision": row["configuration_revision"],
+                "litellm_models": LITELLM_MODELS,
                 "created_at": row["created_at"], "updated_at": row["updated_at"], "runnable": False}
 
     def confirm(self, user_id, import_id, body):
@@ -102,7 +104,7 @@ class InspectionService:
                     exists = target + ".py" in files or "src/" + target + ".py" in files or target + "/__init__.py" in files
                 if not exists:
                     raise HTTPException(422, "Corrected entrypoint must reference Python source found by inspection.")
-            configuration = body.model_dump(exclude={"revision", "commit_sha"})
+            configuration = body.model_dump(exclude={"revision", "commit_sha"}, exclude_none=True)
             configuration["tool_permissions"] = [{"tool": tool, "approved": tool in body.approved_tools} for tool in sorted(tools)]
             configuration["field_sources"] = {key: ("detected" if value in [f["value"] for f in findings["findings"] if f["kind"] == key] else "user_confirmed")
                 for key, value in configuration.items() if key in {"python_version", "entrypoint", "model_provider", "model_id"}}

@@ -134,7 +134,7 @@ function render(result) {
     $('findings').append(row);
   }
   $('config-fields').replaceChildren();
-  for (const [key, title] of [['python_version', 'Python version or constraint'], ['entrypoint', 'Entrypoint'], ['model_provider', 'Model provider'], ['model_id', 'Model ID']]) {
+  for (const [key, title] of [['python_version', 'Python version or constraint'], ['entrypoint', 'Entrypoint'], ['model_provider', 'Source model provider'], ['model_id', 'Source model ID']]) {
     const values = [...new Set(scan.findings.filter(f => f.kind === key).map(f => f.value))];
     const label = node('label', title), input = document.createElement(key === 'model_provider' ? 'select' : 'input');
     input.id = 'config-' + key; input.required = true;
@@ -148,6 +148,10 @@ function render(result) {
     }
     input.value = confirmed?.[key] || (values.length === 1 ? values[0] : ''); label.append(input); $('config-fields').append(label);
   }
+  options('config-litellm_model', result.litellm_models, m => m, m => m);
+  $('config-litellm_model').firstChild.textContent = 'Choose a model';
+  $('config-litellm_model').value = confirmed?.litellm_model || '';
+  modelRouting();
   const manifests = [...new Set(scan.findings.filter(f => f.kind === 'dependency_manifest').map(f => f.value))];
   checkboxes('manifests', manifests, confirmed?.dependency_manifests || (manifests.length === 1 ? manifests : []));
   $('no-manifests').hidden = manifests.length > 0;
@@ -155,6 +159,13 @@ function render(result) {
   $('confirmation').textContent = result.status === 'confirmed' ? 'Configuration saved. Execution is not enabled.' : 'Configuration awaits confirmation.';
   contractConfiguration(result);
 }
+function modelRouting() {
+  const selected = $('config-litellm_model').value;
+  $('model-routing').textContent = selected
+    ? `All model calls will use ${selected}. Reports record both the requested model and ${selected}. Execution is not enabled.`
+    : 'Choose a model to see how calls will be routed.';
+}
+action('config-litellm_model', 'change', modelRouting);
 async function inspect(method) {
   const id = $('imports').value; if (!id) return;
   $('inspect').disabled = true; $('retrieve').disabled = true; message(method === 'POST' ? 'Inspecting source…' : 'Retrieving findings…');
@@ -170,6 +181,6 @@ action('configuration', 'submit', async () => {
   const body = { revision: inspection.revision, commit_sha: inspection.commit_sha,
     dependency_manifests: [...$('manifests').querySelectorAll('input:checked')].map(i => i.value),
     approved_tools: [...$('tools').querySelectorAll('input:checked')].map(i => i.value) };
-  for (const key of ['python_version', 'entrypoint', 'model_provider', 'model_id']) body[key] = $('config-' + key).value.trim();
+  for (const key of ['python_version', 'entrypoint', 'model_provider', 'model_id', 'litellm_model']) body[key] = $('config-' + key).value.trim();
   render(await api(`/github/imports/${inspection.import_id}/configuration`, 'POST', body)); message('Configuration and explicit tool permissions saved.');
 });

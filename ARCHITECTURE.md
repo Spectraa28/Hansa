@@ -53,6 +53,10 @@ For the first provider integration, configure the supported target client to use
 
 Account for both optimizer calls and target calls in the same job ceiling, with separate categories. Reserve maximum estimated expense atomically before dispatch, including the permitted output allowance; reconcile provider usage afterward. Unknown usage or ambiguous completion remains unresolved and conservatively reserved. Stop admitting calls when limits are exhausted. A provider's already-dispatched call cannot be assumed cancelled or refunded.
 
+The setup configuration now saves a user-selected LiteLLM alias separately from detected source models. Server-side key minting fixes all calls to that alias while recording substitutions. The next provider mode will accept only fixed provider IDs/URLs and encrypt user credentials with the existing GitHub-token storage pattern; credentials must never enter a container. Own-key storage/routing and the runner remain unimplemented.
+
+Current gateway slice: [GATEWAY.md](GATEWAY.md) records costs from LiteLLM response headers without a local price table. It admits parallel calls with atomic per-request reservations from LiteLLM cost quotes, retains estimates for unknown charges, and recovers interrupted calls without blind replay. Quotes are not independently validated invoice ceilings, and the shared job ceiling above remains planned. See the gateway documentation for token-sizing assumptions, endpoint requirements and single-process recovery limits.
+
 Measure elapsed workflow time, model calls, tokens, estimated expense, tool calls, failures, and container memory use. Instrument context construction and agent memory access separately: machine RAM and conversational memory are different measurements. Neatlogs provides trace evidence; the protected ledger owns accounting.
 
 ## Independent evaluation

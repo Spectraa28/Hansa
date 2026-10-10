@@ -57,3 +57,7 @@ The scanner never imports repository modules, evaluates expressions, runs comman
 SQLite `repository_inspections` stores sanitized findings with suggested configuration, optional confirmed configuration, status, SHA, revision, and timestamps. Source remains in the existing private import workspace. Ownership/ready status are checked before scanning, retrieval, and confirmation. Inspection shares the existing import lock with deletion and rechecks the SHA before persistence. Import deletion removes saved inspection/configuration records.
 
 Both suggested and confirmed responses always include `runnable: false`. Confirmation authorizes neither dependency installation nor code/model/tool execution. A later runner must independently enforce approved tool permissions, model access, network boundaries, dependencies, and budgets; detected tools alone never authorize execution. No sandbox runner, evaluator, or optimizer is included in this change.
+
+## LiteLLM model selection
+
+Inspection responses include the fixed `litellm_models` catalog. Configuration accepts optional `litellm_model` restricted to those seven aliases; the setup UI requires an explicit choice. Source `model_provider` and `model_id` remain separate. Selection changes revise the configuration and stale earlier task contracts. Old configurations remain compatible, but a selected-model gateway key requires a saved choice. See [GATEWAY.md](GATEWAY.md) for service-only minting and future own-key boundaries. No execution is enabled.

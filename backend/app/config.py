@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -32,8 +32,17 @@ class Settings:
     import_extracted_bytes: int = 500 * 1024 * 1024
     import_file_count: int = 20_000
     import_timeout_seconds: int = 120
+    litellm_base_url: str = ""
+    litellm_api_key: str = field(default="", repr=False)
 
     def __post_init__(self):
+        if self.litellm_base_url:
+            parsed = urlsplit(self.litellm_base_url)
+            if (parsed.scheme not in {"http", "https"} or not parsed.hostname
+                    or parsed.username is not None or parsed.password is not None
+                    or parsed.query or parsed.fragment
+                    or (parsed.scheme == "http" and parsed.hostname not in {"localhost", "127.0.0.1", "::1"})):
+                raise ValueError("LITELLM_BASE_URL must be HTTPS (HTTP only on localhost), without credentials or query.")
         if len(self.secret_key) < 32:
             raise ValueError("AUTH_SECRET_KEY must contain at least 32 random characters.")
         for value in (self.app_url, self.frontend_origin):
@@ -104,4 +113,6 @@ class Settings:
             import_extracted_bytes=config("IMPORT_EXTRACTED_BYTES", cast=int, default=500 * 1024 * 1024),
             import_file_count=config("IMPORT_FILE_COUNT", cast=int, default=20_000),
             import_timeout_seconds=config("IMPORT_TIMEOUT_SECONDS", cast=int, default=120),
+            litellm_base_url=config("LITELLM_BASE_URL", default="").rstrip("/"),
+            litellm_api_key=config("LITELLM_API_KEY", default=""),
         )

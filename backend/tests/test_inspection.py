@@ -3,6 +3,7 @@ import json
 import uuid
 
 from fastapi.testclient import TestClient
+from fastapi import HTTPException
 import pytest
 
 from backend.app.config import Settings
@@ -141,3 +142,52 @@ def test_deletion_removes_saved_findings(imported_client):
     assert client.get(f"/github/imports/{import_id}/inspection").status_code == 404
     with client.app.app.state.database.connect() as db:
         assert db.execute("SELECT count(*) FROM repository_inspections").fetchone()[0] == 0
+
+
+def test_model_picker_persists_and_mints_owner_scoped_fixed_key(imported_client):
+    import time
+    from backend.app.sessions import token_hash
+
+    client, import_id, headers = imported_client
+    state = client.app.app.state
+    user_id = client.get('/auth/me').json()['user']['id']
+    findings = client.post(f'/github/imports/{import_id}/inspection', headers=headers).json()
+    assert findings['litellm_models'] == ['nova-micro', 'nova-lite', 'nova-pro', 'nova-2-lite',
+                                        'claude-haiku', 'claude-sonnet-4.6', 'claude-opus-4.6']
+    limits = dict(max_calls=10, max_spend_usd=1, expires_at=int(time.time()) + 60)
+    with pytest.raises(HTTPException) as missing:
+        state.gateway.mint_for_import(user_id, import_id, 'test', **limits)
+    assert missing.value.status_code == 409
+    body = {**configuration(findings), 'litellm_model': 'claude-sonnet-4.6'}
+    endpoint = f'/github/imports/{import_id}/configuration'
+    assert client.post(endpoint, json=body).status_code == 403
+    saved = client.post(endpoint, json=body, headers=headers).json()
+    assert saved['configuration']['model_id'] == 'gpt-4o'
+    assert saved['configuration']['model_provider'] == 'openai'
+    assert saved['configuration']['litellm_model'] == 'claude-sonnet-4.6'
+    assert client.get(f'/github/imports/{import_id}/inspection').json()['configuration'] == saved['configuration']
+    key = state.gateway.mint_for_import(user_id, import_id, 'test', **limits)
+    assert state.gateway.prepare(key, {'model': 'gpt-4o', 'messages': []})[0] == 'claude-sonnet-4.6'
+    body['litellm_model'] = 'nova-lite'
+    changed = client.post(endpoint, json=body, headers=headers).json()
+    assert changed['configuration_revision'] != saved['configuration_revision']
+    assert state.gateway.prepare(key, {'model': 'gpt-4o', 'messages': []})[0] == 'claude-sonnet-4.6'
+    with state.database.connect() as db:
+        assert db.execute('SELECT litellm_model FROM gateway_keys WHERE key_hash=?', (token_hash(key),)).fetchone()[0] == 'claude-sonnet-4.6'
+    with pytest.raises(HTTPException) as denied:
+        state.gateway.mint_for_import('another-owner', import_id, 'test', **limits)
+    assert denied.value.status_code == 404
+    client.post(f'/github/imports/{import_id}/inspection', headers=headers)
+    with pytest.raises(HTTPException) as reinspected:
+        state.gateway.mint_for_import(user_id, import_id, 'test', **limits)
+    assert reinspected.value.status_code == 409
+
+
+@pytest.mark.parametrize('model', ['gpt-4o', 'https://custom-provider.test/v1', 'sk-private-test-credential'])
+def test_model_picker_rejects_unlisted_models_without_echo(imported_client, model):
+    client, import_id, headers = imported_client
+    findings = client.post(f'/github/imports/{import_id}/inspection', headers=headers).json()
+    response = client.post(f'/github/imports/{import_id}/configuration', headers=headers,
+                           json={**configuration(findings), 'litellm_model': model})
+    assert response.status_code == 422
+    assert model not in response.text

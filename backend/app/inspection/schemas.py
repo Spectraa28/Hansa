@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .scanner import MODEL, VERSION, entrypoint, safe_path, SECRET
+from ..gateway.models import LiteLLMModel
 
 
 class ConfirmInput(BaseModel):
@@ -14,6 +15,7 @@ class ConfirmInput(BaseModel):
     entrypoint: str = Field(min_length=1, max_length=180)
     model_provider: Literal["openai", "anthropic", "google", "aws_bedrock", "litellm"]
     model_id: str = Field(min_length=1, max_length=120)
+    litellm_model: LiteLLMModel | None = None
     approved_tools: list[str] = Field(default_factory=list, max_length=100)
 
     @field_validator("python_version")
