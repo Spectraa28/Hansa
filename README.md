@@ -1,6 +1,10 @@
 # Ouro backend
 
-Status: authentication code written; application startup, tests, and real OAuth sign-in have **not been run**. The optimizer and agent sandbox are not implemented yet.
+Status: all 45 backend regression tests passed, including static inspection and configuration confirmation. Real GitHub sign-in and App connection succeeded. SQLite confirms a ready fixed-commit import of `Spectraa28/VaultLearn` on `main` at `896d8802cc5e27a88fc1be691f491d950ed26bbe`, with saved inspection findings. The user confirmed the UI flow works; page/assets returned HTTP 200 and JavaScript syntax checking passed. Live configuration confirmation and Google sign-in remain unverified. The optimizer and agent sandbox are not implemented; no imported code was executed.
+
+## Repository setup and inspection
+
+After an authorized server restart, open `http://localhost:8000/setup` for the simple testing interface. It supports login, GitHub connection/access, repository/branch import, bounded static inspection, evidence review, and configuration/tool-permission confirmation. No imported source is executed. Confirmed configuration remains non-runnable. See [REPOSITORY_INSPECTION.md](REPOSITORY_INSPECTION.md) for endpoints, scan limits, supported detection, and current verification boundaries.
 
 ## Backend layout
 
@@ -15,7 +19,15 @@ backend/app/
 ├── oauth/
 │   ├── providers.py    # Google/GitHub clients and identity parsing
 │   └── routes.py       # Provider redirects and callbacks
+├── github/
+│   ├── routes.py       # Connect, selection, import status, disconnect, webhooks
+│   ├── service.py      # Encrypted connections, access checks, import lifecycle
+│   ├── client.py       # Supported GitHub endpoints, scoped tokens, downloads
+│   ├── archive.py      # Bounded extraction and unsupported-feature warnings
+│   └── worker.py       # One worker consuming the SQLite import queue
 ├── users.py            # User and provider identity storage
+├── inspection/         # Static findings and confirmed execution configuration
+├── ui/                 # Testing page and same-origin assets at /setup
 ├── sessions.py         # Session storage, cookies, and logout CSRF checks
 ├── database.py         # SQLite connections and schema initialization
 ├── config.py           # Environment settings and validation
@@ -61,7 +73,7 @@ For Google, create a Web application OAuth client and configure its consent scre
 
 OAuth uses state, PKCE, and (for Google) OpenID Connect nonce and ID-token validation through Authlib. GitHub identity uses its stable numeric user ID; Google uses its `sub` claim. Only verified provider emails are stored. GitHub users without a verified email can still sign in through their provider identity.
 
-GitHub sign-in does not request `repo` or `public_repo`. Repository authorization and linking GitHub to an existing account are deferred. Use a dedicated identity-only GitHub OAuth App; a future repository connector can have separate permissions and credentials.
+GitHub sign-in does not request `repo` or `public_repo`. Use a dedicated identity-only GitHub OAuth App. Repository authorization uses the separate GitHub App described below; it connects to the current application account without merging login accounts or matching emails.
 
 ## Authentication endpoints
 
@@ -119,18 +131,22 @@ Set `AUTH_EMAIL_LOGIN_ENABLED=false` to disable both email registration and pass
 
 For hosting, set HTTPS `APP_URL` and `FRONTEND_ORIGIN`, set `AUTH_COOKIE_SECURE=true`, and register the exact hosted callback URLs. Serve frontend and API on the same site so SameSite cookies work. Keep the SQLite file and server secrets outside any future candidate sandbox. This single-host authentication slice has not been security-tested or deployed.
 
-## Deferred tests
+## GitHub repository import
 
-Security regression tests are written in [backend/tests/test_auth.py](backend/tests/test_auth.py). At the user's request, none have been executed, and no application process has been started. After authorization to test:
+The separate GitHub App connector supports current-account connection, repository/branch selection, fixed-commit snapshots, persisted status, disconnect, source deletion, and signed webhooks. Follow [GITHUB_IMPORT.md](GITHUB_IMPORT.md) for App configuration, API flow, limits, and storage boundaries. The frontend is still pending.
+
+## Verification
+
+Security regression tests are in [backend/tests/test_auth.py](backend/tests/test_auth.py) and [backend/tests/test_github_import.py](backend/tests/test_github_import.py). After the user authorized testing, all 37 passed in 11.52 seconds outside the sandbox on October 10, 2026. Authlib and Starlette emitted HTTP-client deprecation warnings. The sandbox runs stalled during startup; the local server and tests worked outside it. To rerun:
 
 ```sh
 uv run pytest
 ```
 
-The tests cover password/session storage, login rotation, expiry, logout/CSRF, origin checks, validation redaction, account collision, rate limits, optional providers, and OAuth state rejection. Real Google/GitHub callback success still needs configured OAuth applications and a separate browser check.
+The tests cover authentication and mocked GitHub connection/session binding, encrypted token storage/refresh, access checks, fixed-SHA import, ownership, deletion, restart recovery, signed revocation/removal webhooks, archive limits, path/link rejection, and LFS/submodule warnings. Real OAuth success and private/organization repository imports still need configured applications and separate live checks.
 
 ## Planning references
 
-Read [prd.md](prd.md), [ARCHITECTURE.md](ARCHITECTURE.md), [SPONSORS.md](SPONSORS.md), and [hackathon.md](hackathon.md) for the optimization product and event constraints. Authentication is the first implemented slice; it does not establish a working optimizer, sandbox, or measured improvement.
+Read [prd.md](prd.md), [ARCHITECTURE.md](ARCHITECTURE.md), [SPONSORS.md](SPONSORS.md), and [hackathon.md](hackathon.md) for the optimization product and event constraints. Authentication and source import do not establish a working optimizer, sandbox, or measured improvement.
 
 Implementation references: [Authlib example](https://github.com/authlib/demo-oauth-client/blob/master/starlette-google-login/app.py), [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [GitHub authorization](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps), [GitHub scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps), and [pwdlib password hashing](https://frankie567.github.io/pwdlib/guide/).

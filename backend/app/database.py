@@ -56,4 +56,57 @@ class Database:
                     window_start INTEGER NOT NULL,
                     attempts INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS github_connections (
+                    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                    github_user_id INTEGER NOT NULL UNIQUE,
+                    github_login TEXT NOT NULL,
+                    generation TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    credentials TEXT,
+                    installation_ids TEXT NOT NULL DEFAULT '[]',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS github_oauth_states (
+                    state_hash TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    session_hash TEXT NOT NULL,
+                    verifier TEXT NOT NULL,
+                    expires_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS repository_imports (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                    connection_generation TEXT NOT NULL,
+                    installation_id INTEGER NOT NULL,
+                    repository_id INTEGER NOT NULL,
+                    repository_name TEXT NOT NULL,
+                    branch TEXT NOT NULL,
+                    commit_sha TEXT NOT NULL,
+                    snapshot_path TEXT,
+                    status TEXT NOT NULL,
+                    warnings TEXT NOT NULL DEFAULT '[]',
+                    file_count INTEGER,
+                    extracted_bytes INTEGER,
+                    failure_code TEXT,
+                    failure_reason TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS imports_owner ON repository_imports(user_id, created_at);
+                CREATE INDEX IF NOT EXISTS imports_queue ON repository_imports(status, created_at);
+                CREATE TABLE IF NOT EXISTS repository_inspections (
+                    import_id TEXT PRIMARY KEY REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    commit_sha TEXT NOT NULL,
+                    revision TEXT NOT NULL,
+                    findings TEXT NOT NULL,
+                    configuration TEXT,
+                    status TEXT NOT NULL CHECK(status IN ('suggested','confirmed')),
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS github_webhook_deliveries (
+                    delivery_id TEXT PRIMARY KEY,
+                    received_at INTEGER NOT NULL
+                );
             """)

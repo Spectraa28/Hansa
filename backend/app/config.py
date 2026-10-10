@@ -20,6 +20,18 @@ class Settings:
     google_client_secret: str = ""
     github_client_id: str = ""
     github_client_secret: str = ""
+    github_app_id: int = 0
+    github_app_client_id: str = ""
+    github_app_client_secret: str = ""
+    github_app_private_key_path: Path | None = None
+    github_app_callback_url: str = ""
+    github_token_encryption_key: str = ""
+    github_webhook_secret: str = ""
+    import_workspace_path: Path = ROOT / "var/imports"
+    import_download_bytes: int = 100 * 1024 * 1024
+    import_extracted_bytes: int = 500 * 1024 * 1024
+    import_file_count: int = 20_000
+    import_timeout_seconds: int = 120
 
     def __post_init__(self):
         if len(self.secret_key) < 32:
@@ -42,6 +54,22 @@ class Settings:
             raise ValueError("Set AUTH_COOKIE_SECURE=true when APP_URL uses HTTPS.")
         if self.cookie_secure and not self.app_url.startswith("https://"):
             raise ValueError("Secure cookies require an HTTPS APP_URL.")
+        if self.github_app_callback_url and self.github_app_callback_url != f"{self.app_url.rstrip('/')}/github/callback":
+            raise ValueError("GITHUB_APP_CALLBACK_URL must be APP_URL + /github/callback.")
+        if min(self.import_download_bytes, self.import_extracted_bytes,
+               self.import_file_count, self.import_timeout_seconds) <= 0:
+            raise ValueError("Import limits must be positive.")
+        if self.github_app_enabled:
+            from cryptography.fernet import Fernet
+            Fernet(self.github_token_encryption_key.encode())
+            if self.app_url.startswith("https://") and len(self.github_webhook_secret) < 32:
+                raise ValueError("Hosted GitHub imports require a random GITHUB_WEBHOOK_SECRET of at least 32 characters.")
+
+    @property
+    def github_app_enabled(self) -> bool:
+        return bool(self.github_app_id > 0 and self.github_app_client_id and self.github_app_client_secret
+                    and self.github_app_private_key_path and self.github_app_callback_url
+                    and self.github_token_encryption_key)
 
     @property
     def allowed_origins(self) -> set[str]:
@@ -51,6 +79,8 @@ class Settings:
     def from_env(cls):
         config = Config(str(ROOT / ".env") if (ROOT / ".env").exists() else None)
         path = Path(config("AUTH_DATABASE_PATH", default="var/auth.sqlite3"))
+        private_key = config("GITHUB_APP_PRIVATE_KEY_PATH", default="")
+        workspace = Path(config("IMPORT_WORKSPACE_PATH", default="var/imports"))
         return cls(
             database_path=path if path.is_absolute() else ROOT / path,
             secret_key=config("AUTH_SECRET_KEY", default=""),
@@ -62,4 +92,16 @@ class Settings:
             google_client_secret=config("GOOGLE_CLIENT_SECRET", default=""),
             github_client_id=config("GITHUB_CLIENT_ID", default=""),
             github_client_secret=config("GITHUB_CLIENT_SECRET", default=""),
+            github_app_id=int(config("GITHUB_APP_ID", default="0") or "0"),
+            github_app_client_id=config("GITHUB_APP_CLIENT_ID", default=""),
+            github_app_client_secret=config("GITHUB_APP_CLIENT_SECRET", default=""),
+            github_app_private_key_path=(ROOT / private_key).resolve() if private_key else None,
+            github_app_callback_url=config("GITHUB_APP_CALLBACK_URL", default=""),
+            github_token_encryption_key=config("GITHUB_TOKEN_ENCRYPTION_KEY", default=""),
+            github_webhook_secret=config("GITHUB_WEBHOOK_SECRET", default=""),
+            import_workspace_path=workspace if workspace.is_absolute() else ROOT / workspace,
+            import_download_bytes=config("IMPORT_DOWNLOAD_BYTES", cast=int, default=100 * 1024 * 1024),
+            import_extracted_bytes=config("IMPORT_EXTRACTED_BYTES", cast=int, default=500 * 1024 * 1024),
+            import_file_count=config("IMPORT_FILE_COUNT", cast=int, default=20_000),
+            import_timeout_seconds=config("IMPORT_TIMEOUT_SECONDS", cast=int, default=120),
         )

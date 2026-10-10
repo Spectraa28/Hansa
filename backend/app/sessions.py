@@ -2,7 +2,7 @@ import hashlib
 import secrets
 import time
 
-from fastapi import HTTPException, Request
+from fastapi import Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from .database import Database
@@ -71,3 +71,9 @@ def logout_session(request: Request, user: dict):
     response.delete_cookie(SESSION_COOKIE, path="/", httponly=True,
                            secure=request.app.state.settings.cookie_secure, samesite="lax")
     return response
+
+
+def require_csrf(request: Request, user: dict = Depends(current_session)) -> dict:
+    if not secrets.compare_digest(request.headers.get("x-csrf-token", "").encode(), user["csrf_token"].encode()):
+        raise HTTPException(403, "Missing or invalid CSRF token.")
+    return user

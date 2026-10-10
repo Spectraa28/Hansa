@@ -5,6 +5,7 @@ description = "Autonomous agent optimization experiments and verified patches"
 requires-python = ">=3.12,<3.14"
 dependencies = [
     "authlib>=1.8,<2",
+    "cryptography>=46,<51",
     "email-validator>=2.2,<3",
     "fastapi",
     "httpx>=0.28,<1",

@@ -1,6 +1,6 @@
 # Architecture: Autonomous Agent Optimization Engineer
 
-Status: architecture plan, October 10, 2026. Backend authentication source has been written; its setup and storage contract are in [README.md](README.md). It has not been run or tested. The optimizer, execution boundary, integrations, and performance claims remain unverified. This document follows [prd.md](prd.md); [SPONSORS.md](SPONSORS.md) defines sponsor roles and AWS restrictions.
+Status: architecture plan, October 10, 2026. All 37 backend regression tests passed; local authentication startup and real GitHub sign-in succeeded. GitHub source-import tests use mocks; real App/repository access and Google sign-in remain unverified. Setup and storage contracts are in [README.md](README.md) and [GITHUB_IMPORT.md](GITHUB_IMPORT.md). Source import uses one in-process worker and a persisted SQLite queue and never executes source. The optimizer, execution boundary, hosted integrations, and performance claims remain unverified. This document follows [prd.md](prd.md); [SPONSORS.md](SPONSORS.md) defines sponsor roles and AWS restrictions.
 
 ## Stack and deployment
 
