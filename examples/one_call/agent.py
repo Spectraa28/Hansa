@@ -6,6 +6,7 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.request
 
 
@@ -15,6 +16,18 @@ def denied(address, port):
             return False
     except OSError:
         return True
+
+
+def fetch(url):
+    """Status through the configured proxy, or the refusal status; urllib honours HTTP(S)_PROXY."""
+    try:
+        with urllib.request.urlopen(url, timeout=20) as response:
+            response.read(1024)
+            return response.status
+    except urllib.error.HTTPError as error:
+        return error.code
+    except OSError as error:
+        return type(error).__name__
 
 
 def main():
@@ -51,6 +64,13 @@ def main():
     checks["scratch_writable"] = True
     if task.get("mode") == "isolation":
         print(json.dumps({"isolation": checks}))
+        return
+    if task.get("mode") == "internet":
+        print(json.dumps({"isolation": checks, "internet": {
+            "https_public": fetch("https://example.com/"), "http_public": fetch("http://example.com/"),
+            "metadata": fetch("http://169.254.169.254/latest/meta-data/"),
+            "private": fetch("http://10.0.0.1/"), "docker_host": fetch("http://172.17.0.1/"),
+            "other_port": fetch("http://example.com:8081/")}}))
         return
     request = urllib.request.Request(os.environ["OPENAI_BASE_URL"] + "/chat/completions",
         data=json.dumps({"model": "claude-haiku", "messages": [{"role": "user", "content": task["prompt"]}],

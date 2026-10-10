@@ -19,6 +19,7 @@ from backend.app.runner.service import RunnerService
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--live-call-only", action="store_true", help="One live call without dollar-budget admission.")
+    parser.add_argument("--internet", action="store_true", help="Also prove filtered internet access through the egress sidecar.")
     args = parser.parse_args()
     settings = Settings.from_env()
     database = Database(settings.database_path)
@@ -49,7 +50,7 @@ def main():
     build = runner.build(owner, import_id)
     print(json.dumps({"fixture_import": import_id, "fixture_owner": owner, "build": build}), flush=True)
     live = runner.run(owner, import_id, build["build_id"], {"prompt": "Reply with OK."}, timeout_seconds=30,
-                      max_calls=1, max_spend_usd=None if args.live_call_only else 0.01)
+                      max_calls=1, max_spend_usd=None if args.live_call_only else 0.01, internet=args.internet)
     print(json.dumps({"live": live}, indent=2), flush=True)
     assert live["stop_reason"] == "completed" and live["output"]["http_status"] == 200
     assert all(live["output"]["isolation"].values()) and live["gateway"]["calls"] == 1
@@ -59,8 +60,18 @@ def main():
     print(json.dumps({"timeout": timeout}, indent=2), flush=True)
     assert timeout["stop_reason"] == "timeout" and timeout["exit_code"] == 137
     assert timeout["cleanup_complete"] and not timeout["container_running"] and timeout["gateway"]["calls"] == 0
+    internet = None
+    if args.internet:
+        internet = runner.run(owner, import_id, build["build_id"], {"mode": "internet"}, timeout_seconds=60,
+                              max_calls=0, internet=True)
+        print(json.dumps({"internet": internet}, indent=2), flush=True)
+        assert internet["stop_reason"] == "completed" and all(internet["output"]["isolation"].values())
+        assert internet["output"]["internet"] == {"https_public": 200, "http_public": 200, "metadata": 403,
+                                                  "private": 403, "docker_host": 403, "other_port": 403}
+        assert internet["egress"]["allowed"] == 2 and internet["egress"]["denied"] == 4
     evidence = ROOT / "var/runner-proof.json"
-    evidence.write_text(json.dumps({"fixture": True, "build": build, "live": live, "timeout": timeout}, indent=2))
+    evidence.write_text(json.dumps({"fixture": True, "build": build, "live": live, "timeout": timeout,
+                                    "internet": internet}, indent=2))
     evidence.chmod(0o600)
     print("Saved private evidence: var/runner-proof.json", flush=True)
 

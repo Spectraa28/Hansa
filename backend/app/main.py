@@ -27,6 +27,8 @@ from .contracts.service import ContractService
 from .gateway.routes import router as gateway_router
 from .gateway.service import GatewayService
 from .runner.service import RunnerService
+from .runner.baseline import BaselineService
+from .runner.routes import router as runner_router
 from .ui.routes import router as ui_router
 from .oauth.providers import oauth_clients
 from .oauth.routes import router as oauth_router
@@ -65,6 +67,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.state.contracts = ContractService(database, app.state.inspection)
     app.state.gateway = GatewayService(settings, database, app.state.inspection)
     app.state.runner = RunnerService(settings, database, app.state.inspection, app.state.gateway)
+    app.state.baselines = BaselineService(app.state.runner)
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key,
                        session_cookie="ouro_oauth", max_age=600,
                        same_site="lax", https_only=settings.cookie_secure)
@@ -74,6 +77,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.include_router(inspection_router)
     app.include_router(contracts_router)
     app.include_router(gateway_router)
+    app.include_router(runner_router)
     app.include_router(ui_router)
 
     @app.middleware("http")

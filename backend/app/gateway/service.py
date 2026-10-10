@@ -61,14 +61,6 @@ def text_content(value):
         ) for part in value))
 
 
-def request_tokens(body):
-    data = {name: body[name] for name in ("messages", "tools", "response_format") if name in body}
-    # shortcut: UTF-8 bytes plus framing estimate text tokens; validate provider tokenization before strict billing caps.
-    prompt = len(json.dumps(data, ensure_ascii=False, separators=(",", ":")).encode()) + 32 * len(body["messages"]) + 128
-    output = body.get("max_completion_tokens", body.get("max_tokens", DEFAULT_OUTPUT_TOKENS)) * body.get("n", 1)
-    return prompt, output
-
-
 def contains_secret(value, secret):
     if isinstance(value, str):
         return secret in value
@@ -173,39 +165,13 @@ class GatewayService:
                 raise HTTPException(400, "Invalid output token limit or n.")
         return key["litellm_model"] or json.loads(key["model_map"]).get(body["model"], body["model"]), limited
 
-    async def estimate(self, body, model):
-        try:
-            prompt, output = request_tokens(body)
-            async with asyncio.timeout(10):
-                async with httpx.AsyncClient(timeout=10, follow_redirects=False, trust_env=False) as client:
-                    url = self.settings.litellm_base_url.rstrip("/").removesuffix("/v1") + "/cost/estimate"
-                    async with client.stream("POST", url,
-                            headers={"Authorization": "Bearer " + self.settings.litellm_api_key},
-                            json={"model": model, "input_tokens": prompt, "output_tokens": output}) as response:
-                        if response.status_code != 200:
-                            if response.status_code in {401, 403}:
-                                raise HTTPException(503, "LiteLLM key must have access to /cost/estimate for spend-limited calls.")
-                            raise ValueError("Cost estimate unavailable")
-                        content = bytearray()
-                        async for chunk in response.aiter_bytes():
-                            if len(content) + len(chunk) > 64 * 1024:
-                                raise ValueError("Cost estimate too large")
-                            content.extend(chunk)
-                        data = json.loads(content)
-                        cost = usd_cost(data.get("cost_per_request")) if isinstance(data, dict) else None
-                        if cost is None or data.get("model", model) != model:
-                            raise ValueError("Invalid cost estimate")
-                        return cost
-        except (httpx.HTTPError, ValueError, RecursionError, TimeoutError):
-            raise HTTPException(503, "LiteLLM request cost estimate is unavailable.") from None
-
     def recover(self, restart=False):
         with self.database.connect() as db:
             db.execute("""UPDATE model_calls SET http_status=504, lease_expires_at=NULL
                 WHERE http_status IS NULL AND (? OR lease_expires_at <= ?)""",
                        (restart, int(time.time())))
 
-    def admit(self, raw_key, body, reservation):
+    def admit(self, raw_key, body):
         self.recover()
         now = int(time.time())
         hashed = token_hash(raw_key)
@@ -214,23 +180,18 @@ class GatewayService:
             key = db.execute("SELECT * FROM gateway_keys WHERE key_hash=?", (hashed,)).fetchone()
             if key is None or key["revoked"] or key["expires_at"] <= now:
                 raise HTTPException(401, "Invalid or expired gateway key.")
-            ledger = db.execute(f"""SELECT COUNT(*) AS calls,
-                COALESCE(SUM(COALESCE(estimated_cost_usd,
-                    CASE WHEN http_status IN ({REJECTED_SQL}) THEN 0 ELSE reserved_cost_usd END)), 0) AS spend
+            ledger = db.execute("""SELECT COUNT(*) AS calls,
+                COALESCE(SUM(estimated_cost_usd), 0) AS spend
                 FROM model_calls WHERE key_hash=?""", (hashed,)).fetchone()
             if ledger["calls"] >= key["max_calls"]:
                 raise HTTPException(429, "Gateway call limit reached.")
-            if key["max_spend_usd"] is not None:
-                if usd_cost(reservation) is None:
-                    raise HTTPException(503, "A request cost estimate is required.")
-                if ledger["spend"] >= key["max_spend_usd"] or ledger["spend"] + reservation > key["max_spend_usd"]:
-                    raise HTTPException(429, "Gateway spend limit reached or insufficient unreserved budget.")
-            else:
-                reservation = 0
+            # shortcut: recorded spend is a soft threshold; admitted/unknown calls can overshoot until the call cap.
+            if key["max_spend_usd"] is not None and ledger["spend"] >= key["max_spend_usd"]:
+                raise HTTPException(429, "Gateway recorded spend limit reached.")
             upstream_model = key["litellm_model"] or json.loads(key["model_map"]).get(body["model"], body["model"])
             cursor = db.execute("""INSERT INTO model_calls
                 (key_hash, model, upstream_model, reserved_cost_usd, lease_expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)""",
-                                (hashed, body["model"], upstream_model, reservation, now + CALL_LEASE_SECONDS, now))
+                                (hashed, body["model"], upstream_model, 0, now + CALL_LEASE_SECONDS, now))
             return cursor.lastrowid, upstream_model
 
     def finish(self, call_id, status, latency, payload, cost):
@@ -247,8 +208,7 @@ class GatewayService:
         upstream_model, limited = await run_in_threadpool(self.prepare, raw_key, body)
         if limited and "max_tokens" not in body and "max_completion_tokens" not in body:
             body = {**body, "max_tokens": DEFAULT_OUTPUT_TOKENS}
-        reservation = await self.estimate(body, upstream_model) if limited else 0
-        call_id, upstream_model = await run_in_threadpool(self.admit, raw_key, body, reservation)
+        call_id, upstream_model = await run_in_threadpool(self.admit, raw_key, body)
         body = {**body, "model": upstream_model}
         started = time.monotonic()
         status, payload, cost = 502, {}, None

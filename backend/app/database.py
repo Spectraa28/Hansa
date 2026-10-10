@@ -138,6 +138,16 @@ class Database:
                     result TEXT NOT NULL,
                     created_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS runner_dependencies (
+                    build_id TEXT PRIMARY KEY REFERENCES runner_builds(id) ON DELETE CASCADE,
+                    resolved TEXT NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS baselines (
+                    id TEXT PRIMARY KEY,
+                    import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    result TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS gateway_keys (
                     key_hash TEXT PRIMARY KEY,
                     run_label TEXT NOT NULL,

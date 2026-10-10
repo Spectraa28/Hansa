@@ -55,6 +55,13 @@ def test_readme_and_decorated_tools_are_inferred_without_running(tmp_path):
     assert any(f["kind"] == "tool" and f["value"] == "search_orders" for f in result["findings"])
 
 
+def test_swarm_function_tools_are_detected_as_data(tmp_path):
+    (tmp_path / "agent.py").write_text("agent = Agent(functions=[transfer_to_triage, transfer_to_lost_baggage])")
+    result = scan(tmp_path)
+    assert {f["value"] for f in result["findings"] if f["kind"] == "tool"} == {
+        "transfer_to_triage", "transfer_to_lost_baggage"}
+
+
 @pytest.fixture
 def imported_client(tmp_path):
     settings = Settings(database_path=tmp_path / "auth.sqlite3", secret_key="test-only-secret-" * 4,

@@ -293,6 +293,7 @@ class GitHubService:
         with self.lock:
             self.import_result(user_id, import_id)
             with self.database.connect() as db:
+                db.execute("DELETE FROM baselines WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM runner_runs WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM runner_builds WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM task_contracts WHERE import_id=?", (import_id,))

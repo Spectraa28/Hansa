@@ -1,4 +1,5 @@
 """No imported Python is loaded in this process. Docker is a trusted local service."""
+from configparser import ConfigParser
 from contextlib import contextmanager
 import hashlib
 import json
@@ -18,6 +19,9 @@ import uuid
 
 from fastapi import FastAPI, HTTPException
 import uvicorn
+from packaging.requirements import Requirement, InvalidRequirement
+from packaging.specifiers import SpecifierSet, InvalidSpecifier
+from packaging.utils import parse_wheel_filename
 
 from ..contracts.schemas import bounded_data
 from ..gateway.routes import router as gateway_router
@@ -29,7 +33,6 @@ BASE_IMAGE = "python:3.12-slim"
 HERE = Path(__file__).parent
 MAX_OUTPUT = 1024 * 1024
 STDERR_TAIL = 16384
-PIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*==[A-Za-z0-9][A-Za-z0-9.!+_-]*\Z")
 RUN_LOCK = threading.Lock()
 
 
@@ -97,14 +100,61 @@ def requirements(snapshot, manifests):
                       if line.strip() and not line.lstrip().startswith("#")]
         elif path.name == "pyproject.toml":
             values = tomllib.loads(path.read_text()).get("project", {}).get("dependencies", [])
+        elif path.name == "setup.cfg":
+            data = ConfigParser(interpolation=None)
+            data.read_string(path.read_text())
+            values = [line.strip() for line in data.get("options", "install_requires", fallback="").splitlines() if line.strip()]
         else:
-            raise ValueError("Use requirements.txt or pyproject.toml with exact package==version dependencies.")
-        if not isinstance(values, list) or any(not isinstance(v, str) or not PIN.fullmatch(v) for v in values):
-            raise ValueError("Offline builds require exact package==version dependencies without URLs/options.")
+            raise ValueError("Use requirements.txt, pyproject.toml or setup.cfg dependencies.")
+        if not isinstance(values, list):
+            raise ValueError("Dependencies must be a list.")
+        for value in values:
+            try:
+                dependency = Requirement(value)
+            except (InvalidRequirement, TypeError):
+                raise ValueError("Use package requirements without URLs, paths or pip options.") from None
+            if dependency.url or "\n" in value or "\r" in value:
+                raise ValueError("Dependency URLs and options are unsupported.")
         pins.extend(values)
     if len(pins) > 200:
         raise ValueError("Too many dependencies.")
     return sorted(set(pins))
+
+
+def resolve_wheels(context):
+    """Only validated requirement text and an empty wheel directory enter this container."""
+    name = "ouro-resolve-" + uuid.uuid4().hex
+    created = False
+    try:
+        docker("create", "--name", name, "--network", "bridge", *limits(512, 1, 64),
+               "--user", f"{os.getuid()}:{os.getgid()}",
+               "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
+               "--mount", f"type=bind,src={context / 'requirements.txt'},dst=/requirements.txt,readonly",
+               "--mount", f"type=bind,src={context / 'wheels'},dst=/wheels",
+               "--entrypoint", "/usr/bin/env", BASE_IMAGE, "-i", "PATH=/usr/local/bin:/usr/bin:/bin",
+               "HOME=/tmp", "TMPDIR=/tmp", "python", "-m", "pip", "--isolated", "download",
+               "--index-url", "https://pypi.org/simple", "--only-binary=:all:", "--no-cache-dir",
+               "--disable-pip-version-check", "--timeout", "20", "--retries", "0",
+               "--dest", "/wheels", "-r", "/requirements.txt")
+        created = True
+        docker("start", "--attach", name, timeout=300)
+        state = json.loads(docker("inspect", "--format", "{{json .State}}", name))
+        if state["ExitCode"] != 0:
+            raise RuntimeError("Binary-wheel resolution failed; source builds and private indexes are unsupported.")
+    finally:
+        if created:
+            docker("rm", "--force", name)
+    resolved, total = [], 0
+    for path in sorted((context / "wheels").iterdir()):
+        if path.is_symlink() or not path.is_file() or path.suffix != ".whl":
+            raise ValueError("Resolver must produce regular binary wheels only.")
+        total += path.stat().st_size
+        if total > 500 * 1024 * 1024 or len(resolved) >= 200:
+            raise ValueError("Resolved wheels exceed dependency limits.")
+        package, version, _, _ = parse_wheel_filename(path.name)
+        resolved.append(f"{package}=={version} --hash=sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}")
+    (context / "requirements.txt").write_text("\n".join(resolved) + "\n")
+    return resolved
 
 
 def command(value):
@@ -157,6 +207,30 @@ def kill(container):
         state = json.loads(docker("inspect", "--format", "{{json .State}}", container))
         if state["Running"]:
             raise RuntimeError("Container could not be killed.")
+
+
+def egress_log(text):
+    """Parse the sidecar's JSON lines; a malformed or oversized log is reported, never trusted."""
+    records, hosts = [], {}
+    for line in text.splitlines()[:2000]:
+        try:
+            item = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(item, dict) or type(item.get("allowed")) is not bool:
+            continue
+        record = {key: item.get(key) for key in ("host", "port", "kind", "method", "allowed", "reason",
+                                                 "started_at", "duration_ms", "bytes_up", "bytes_down")}
+        records.append(record)
+        if record["allowed"] and isinstance(record["host"], str):
+            host = hosts.setdefault(record["host"], {"connections": 0, "duration_ms": 0, "bytes_down": 0})
+            host["connections"] += 1
+            for key in ("duration_ms", "bytes_down"):
+                if type(record[key]) is int:
+                    host[key] += record[key]
+    return {"connections": records[:500], "truncated": len(records) > 500,
+            "allowed": sum(r["allowed"] for r in records), "denied": sum(not r["allowed"] for r in records),
+            "hosts": hosts}
 
 
 def finite_float(value):
@@ -261,8 +335,14 @@ class RunnerService:
         config = result["configuration"]
         if result["status"] != "confirmed" or not config or not config.get("litellm_model"):
             raise HTTPException(409, "Confirm configuration and a LiteLLM model before building/running.")
-        if config.get("python_version") != "3.12":
-            raise HTTPException(422, "This runner supports confirmed Python 3.12 only.")
+        version = config.get("python_version", "")
+        try:
+            constraint = version if re.match(r"[<>=!~]", version) else "==" + version
+            compatible = SpecifierSet(constraint).contains("3.12")
+        except InvalidSpecifier:
+            compatible = False
+        if not compatible:
+            raise HTTPException(422, "The confirmed Python constraint must accept 3.12.")
         command(config["entrypoint"])
         return result
 
@@ -286,8 +366,6 @@ class RunnerService:
             context.mkdir()
             wheels = context / "wheels"
             wheels.mkdir()
-            if pins and wheelhouse is None:
-                raise ValueError("Provide a reviewed wheelhouse containing all pinned dependencies and transitive wheels.")
             if wheelhouse is not None:
                 wheelhouse = Path(wheelhouse)
                 total = 0
@@ -299,6 +377,9 @@ class RunnerService:
                         raise ValueError("Wheelhouse exceeds 500 MiB.")
                     shutil.copyfile(path, wheels / path.name)
             (context / "requirements.txt").write_text("\n".join(pins) + "\n")
+            resolved = []
+            if pins and wheelhouse is None:
+                resolved = resolve_wheels(context)
             # Only a trusted generated Dockerfile enters the build; no repository Dockerfile or source.
             base = json.loads(docker("image", "inspect", BASE_IMAGE))[0]["Id"]
             (context / "Dockerfile").write_text(f"FROM {base}\nCOPY wheels /wheels\nCOPY requirements.txt /requirements.txt\n"
@@ -315,10 +396,16 @@ class RunnerService:
                     raise HTTPException(409, "Configuration changed during build.")
                 db.execute("INSERT INTO runner_builds VALUES (?,?,?,?,?,?,?)", (build_id, import_id,
                     config["commit_sha"], config["configuration_revision"], digest, image, int(time.time())))
-            return {"build_id": build_id, "image_id": image, "snapshot_digest": digest, "dependencies": pins}
+                db.execute("INSERT INTO runner_dependencies VALUES (?,?)", (build_id, json.dumps(resolved)))
+            return {"build_id": build_id, "image_id": image, "snapshot_digest": digest,
+                    "dependencies": pins, "resolved_dependencies": resolved}
 
     def run(self, user_id, import_id, build_id, task, *, timeout_seconds=60, max_calls=10,
-            max_spend_usd=0.01, memory_mb=256, cpus=1.0, pids=64):
+            max_spend_usd=0.01, memory_mb=256, cpus=1.0, pids=64, adapter=None, internet=False):
+        if adapter not in {None, "swarm_airline"}:
+            raise ValueError("Unsupported trusted adapter.")
+        if type(internet) is not bool:
+            raise ValueError("internet must be a boolean.")
         bounded_data(task, 16384)
         if (type(timeout_seconds) not in {int, float} or not math.isfinite(timeout_seconds) or not 0.1 <= timeout_seconds <= 300
                 or type(memory_mb) is not int or not 64 <= memory_mb <= 4096
@@ -328,6 +415,10 @@ class RunnerService:
         with RUN_LOCK, tempfile.TemporaryDirectory(prefix="ouro-run-") as temporary:
             root = Path(temporary)
             config, digest = self.stage(user_id, import_id, root)
+            if adapter and not {"transfer_to_flight_modification", "transfer_to_lost_baggage",
+                                "transfer_to_flight_cancel", "transfer_to_flight_change"}.issubset(
+                                    config["configuration"].get("approved_tools", [])):
+                raise HTTPException(422, "Approve the four airline routing tools before running its evals.")
             with self.database.connect() as db:
                 build = db.execute("SELECT * FROM runner_builds WHERE id=? AND import_id=?", (build_id, import_id)).fetchone()
             if (not build or build["commit_sha"] != config["commit_sha"]
@@ -336,6 +427,7 @@ class RunnerService:
                 raise HTTPException(409, "Build is absent or stale. Build this confirmed snapshot again.")
             run_id = uuid.uuid4().hex
             relay, container = "ouro-relay-" + run_id, "ouro-run-" + run_id
+            network, egress = "ouro-net-" + run_id, "ouro-egress-" + run_id
             with self.inspection.github.lock:
                 current = self.configuration(user_id, import_id)
                 if current["configuration_revision"] != config["configuration_revision"]:
@@ -345,10 +437,29 @@ class RunnerService:
             broker = root / "broker"
             broker.mkdir(mode=0o755)
             relay_created, created = False, False
+            network_created, egress_created, proxy_environment = False, False, []
             began = time.monotonic()
             try:
                 with gateway_socket(self.gateway, broker):
-                    docker("create", "--name", relay, "--network", "none", *limits(64, 0.5, 32),
+                    if internet:
+                        # The run keeps no external route: an isolated internal network has no host
+                        # gateway, and only the trusted sidecar is also attached to the public bridge.
+                        docker("network", "create", "--driver", "bridge", "--internal",
+                               "--opt", "com.docker.network.bridge.gateway_mode_ipv4=isolated", network)
+                        network_created = True
+                        docker("create", "--name", egress, "--network", network, *limits(96, 0.5, 64),
+                               "--ulimit", "nofile=1024:1024", "--log-driver", "json-file",
+                               "--log-opt", "max-size=2m", "--log-opt", "max-file=1",
+                               "--mount", f"type=bind,src={HERE / 'egress.py'},dst=/egress.py,readonly",
+                               "--entrypoint", "/usr/local/bin/python", BASE_IMAGE, "-I", "-B", "-u", "/egress.py")
+                        egress_created = True
+                        docker("network", "connect", "bridge", egress)
+                        docker("start", egress)
+                        address = json.loads(docker("inspect", egress))[0]["NetworkSettings"]["Networks"][network]["IPAddress"]
+                        proxy = f"http://{address}:3128"
+                        proxy_environment = [f"{name}={proxy}" for name in ("HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy")]
+                        proxy_environment += ["NO_PROXY=127.0.0.1,localhost", "no_proxy=127.0.0.1,localhost"]
+                    docker("create", "--name", relay, "--network", network if internet else "none", *limits(64, 0.5, 32),
                            "--mount", f"type=bind,src={broker},dst=/broker,readonly",
                            "--mount", f"type=bind,src={HERE / 'relay.py'},dst=/relay.py,readonly",
                            "--entrypoint", "/usr/local/bin/python", BASE_IMAGE, "-I", "-B", "/relay.py")
@@ -356,35 +467,50 @@ class RunnerService:
                     docker("start", relay)
                     docker("exec", relay, "/usr/local/bin/python", "-c",
                            "import socket,time\nfor _ in range(100):\n try:\n  s=socket.create_connection(('127.0.0.1',8000),.1); s.close(); break\n except OSError: time.sleep(.02)\nelse: raise RuntimeError('relay unavailable')")
+                    adapter_mount = (["--mount", f"type=bind,src={HERE / 'airline_adapter.py'},dst=/adapter.py,readonly"]
+                                     if adapter else [])
                     docker("create", "--name", container, "--interactive", "--network", "container:" + relay,
                            *limits(memory_mb, cpus, pids), "--workdir", "/snapshot",
                            "--tmpfs", "/scratch:rw,noexec,nosuid,nodev,size=64m,mode=1777",
                            "--mount", f"type=bind,src={root / 'snapshot'},dst=/snapshot,readonly",
-                           "--entrypoint", "/usr/bin/env", build["image_id"], "-i",
+                           *adapter_mount, "--entrypoint", "/usr/bin/env", build["image_id"], "-i",
                            "PATH=/usr/local/bin:/usr/bin:/bin", "HOME=/scratch", "TMPDIR=/scratch", "LANG=C.UTF-8",
                            "PYTHONPATH=/snapshot:/snapshot/src:/opt/deps",
                            "OPENAI_BASE_URL=http://127.0.0.1:8000/gateway/v1", "OPENAI_API_KEY=" + key,
-                           *command(config["configuration"]["entrypoint"]))
+                           *proxy_environment,
+                           *(["/usr/local/bin/python", "-u", "-B", "/adapter.py"]
+                             if adapter else command(config["configuration"]["entrypoint"])))
                     created = True
                     result = collect(container, json.dumps(task, allow_nan=False).encode() + b"\n", timeout_seconds)
                     state = json.loads(docker("inspect", container))[0]
                     result["isolation"] = {"network": state["HostConfig"]["NetworkMode"],
                         "user": state["Config"]["User"], "read_only_root": state["HostConfig"]["ReadonlyRootfs"],
                         "memory_bytes": state["HostConfig"]["Memory"], "nano_cpus": state["HostConfig"]["NanoCpus"],
-                        "pids_limit": state["HostConfig"]["PidsLimit"], "relay_network": "none"}
-            except (RuntimeError, OSError, subprocess.TimeoutExpired):
+                        "pids_limit": state["HostConfig"]["PidsLimit"],
+                        "relay_network": "internal" if internet else "none",
+                        "internet": "filtered_proxy" if internet else "none"}
+                    if internet:
+                        result["egress"] = egress_log(docker("logs", "--tail", "2000", egress))
+            except (RuntimeError, OSError, subprocess.TimeoutExpired, KeyError, IndexError, ValueError):
                 result = {"exit_code": None, "output": None, "stderr_tail": "",
                           "wall_time_seconds": round(time.monotonic() - began, 6),
                           "stop_reason": "infrastructure_error", "container_running": None}
             finally:
                 with self.database.connect() as db:
                     db.execute("UPDATE gateway_keys SET revoked=1 WHERE key_hash=?", (token_hash(key),))
-                try:
-                    if created:
-                        docker("rm", "--force", container)
-                finally:
-                    if relay_created:
-                        docker("rm", "--force", relay)
+                # Attempt every removal; report the first failure only after the rest have run.
+                failures = []
+                for present, arguments in [(created, ("rm", "--force", container)),
+                                           (relay_created, ("rm", "--force", relay)),
+                                           (egress_created, ("rm", "--force", egress)),
+                                           (network_created, ("network", "rm", network))]:
+                    if present:
+                        try:
+                            docker(*arguments)
+                        except RuntimeError as exc:
+                            failures.append(exc)
+                if failures:
+                    raise failures[0]
             # Remove scoped credentials even if the untrusted program echoes its environment.
             encoded = json.dumps(result, ensure_ascii=True)
             for secret in (key, self.settings.litellm_api_key):
@@ -393,7 +519,7 @@ class RunnerService:
             result = json.loads(encoded)
             result.update({"run_id": run_id, "import_id": import_id, "commit_sha": config["commit_sha"],
                            "configuration_revision": config["configuration_revision"], "build_id": build_id,
-                           "gateway": self.gateway.summarize_key(key), "cleanup_complete": True})
+                           "adapter": adapter, "gateway": self.gateway.summarize_key(key), "cleanup_complete": True})
             with self.inspection.github.lock, self.database.connect() as db:
                 self.inspection.ready(db, user_id, import_id)
                 db.execute("INSERT INTO runner_runs VALUES (?,?,?,?,?)", (run_id, import_id, build_id,

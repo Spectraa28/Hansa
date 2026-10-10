@@ -33,6 +33,7 @@ class Settings:
     import_file_count: int = 20_000
     import_timeout_seconds: int = 120
     litellm_base_url: str = ""
+    runner_internet: bool = True
     litellm_api_key: str = field(default="", repr=False)
 
     def __post_init__(self):
@@ -114,5 +115,6 @@ class Settings:
             import_file_count=config("IMPORT_FILE_COUNT", cast=int, default=20_000),
             import_timeout_seconds=config("IMPORT_TIMEOUT_SECONDS", cast=int, default=120),
             litellm_base_url=config("LITELLM_BASE_URL", default="").rstrip("/"),
+            runner_internet=config("RUNNER_INTERNET", cast=bool, default=True),
             litellm_api_key=config("LITELLM_API_KEY", default=""),
         )

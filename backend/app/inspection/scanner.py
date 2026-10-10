@@ -163,6 +163,10 @@ def scan(root):
                                     add("tool", integration, path, location, False)
                     if isinstance(node, ast.keyword) and isinstance(node.value, ast.Constant):
                         scalar(node.arg or "", node.value.value, path, location)
+                    if isinstance(node, ast.keyword) and node.arg == "functions" and isinstance(node.value, (ast.List, ast.Tuple)):
+                        for tool in node.value.elts[:100]:
+                            if isinstance(tool, ast.Name) and IDENTIFIER.fullmatch(tool.id):
+                                add("tool", tool.id, path, location)
                     if isinstance(node, ast.Assign) and isinstance(node.value, (ast.List, ast.Tuple)) and any(isinstance(t, ast.Name) and t.id == "tools" for t in node.targets):
                         for tool in node.value.elts[:100]:
                             if isinstance(tool, ast.Name) and IDENTIFIER.fullmatch(tool.id):

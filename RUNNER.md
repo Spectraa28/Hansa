@@ -4,7 +4,7 @@ The service executes one JSON task against a ready, owner-scoped Python snapshot
 
 ## Prerequisites and interface
 
-Use a trusted local Linux Docker Engine, the local `python:3.12-slim` image, and confirmed Python `3.12` configuration with a LiteLLM model selection. Docker must support the default seccomp policy, cgroup memory/CPU/PID limits, and network namespace sharing. Docker access grants host-level privileges to the controller; execution containers receive no Docker socket. Run only one runner/controller process. The service serializes local builds/runs; multi-process scheduling is not implemented.
+Use a trusted local Linux Docker Engine, the local `python:3.12-slim` image, and confirmed Python constraint accepting `3.12` with a LiteLLM model selection. Docker must support the default seccomp policy, cgroup memory/CPU/PID limits, and network namespace sharing. Docker access grants host-level privileges to the controller; execution containers receive no Docker socket. Run only one runner/controller process. The service serializes local builds/runs; multi-process scheduling is not implemented.
 
 The application exposes `app.state.runner` internally:
 
@@ -24,9 +24,11 @@ Task JSON uses the existing data-only bounds (16 KiB, finite numbers, depth/node
 
 ## Separate dependency build
 
-Only the trusted generated Dockerfile enters the build. Repository Dockerfiles, scripts, editable installs, and source-package builds are unsupported. Source is not copied into the dependency image. Requirements are read from the confirmed `requirements.txt` or `[project].dependencies` in `pyproject.toml`, restricted to exact `package==version` pins. Optional extras, environment markers, dependency groups, URLs, recursive requirements and arbitrary pip options are rejected.
+Only validated requirement text and the trusted generated Dockerfile enter dependency preparation. Repository Dockerfiles, editable installs, URLs, pip options, private indexes and source builds are unsupported. Requirements may contain package names, ranges, extras and environment markers, read as data from `requirements.txt`, `[project].dependencies` in `pyproject.toml`, or `[options].install_requires` in `setup.cfg`. No setup code or repository build backend runs.
 
-Supply reviewed `.whl` files, including all transitive dependencies, in `wheelhouse`. Missing wheels fail the build. Wheel acquisition/review is a separate operator task; the runner does not download them or execute a repository build backend. Dependency installation runs through pip in a separate Docker build with `--network none`, no credentials, no host secrets, `--no-index`, and binary-only packages. A standard-library-only repository needs no wheelhouse. Builds have a 300-second controller timeout. Build resource limits and total image-storage quotas are not implemented.
+Without a supplied wheelhouse, a separate bounded container downloads binary wheels from public PyPI, including transitive dependencies. It has bridge networking, a clean environment with no secrets, a read-only root, CPU/memory/PID limits, and mounts only validated requirements and the wheel output directory. It receives no snapshot or gateway key. Resolution has a 300-second deadline and cleanup on failure. The controller validates at most 200 regular wheels and 500 MiB after download; this is not a hard disk quota during downloading.
+
+Resolved distribution versions and SHA-256 hashes are saved in `runner_dependencies` against the build ID. Pip installs those exact hashed requirements offline in a separate generated Docker build with `--network none`, `--no-index`, and `--only-binary=:all:`. Supplying a reviewed wheelhouse remains supported. The snapshot source is never installed as a package; execution imports it from the read-only mount.
 
 Build records bind the resulting immutable Docker image ID to the import SHA, configuration revision and copied source digest. A changed configuration or source requires a new build. Local dependency images remain cached for reuse; import deletion deletes build/run database records, but Docker image pruning is an operator task.
 
@@ -42,6 +44,26 @@ The controller drains stdout/stderr concurrently. At the hard deadline or 1 MiB 
 
 The key is revoked and both containers removed before a result is marked `cleanup_complete`. Scoped keys/server keys echoed in output are redacted. Results and gateway summaries are stored in private SQLite, accessible through owner-scoped service reads; deleting the import deletes the run content. Other private data returned by an agent is still private run content and must not be published automatically.
 
+## Filtered internet access
+
+`runner.run(..., internet=True)` lets an agent's tools reach the public web. It is off by default for direct runner calls; baselines follow `RUNNER_INTERNET` (default `true`).
+
+The execution container still has no external route. Each run gets its own internal Docker network created with `gateway_mode_ipv4=isolated`, so there is no host gateway address on it. A trusted sidecar running [`backend/app/runner/egress.py`](backend/app/runner/egress.py) is the only container also attached to the public bridge. The agent receives `HTTP_PROXY`/`HTTPS_PROXY` pointing at the sidecar and `NO_PROXY` for the loopback gateway.
+
+The sidecar accepts `CONNECT host:443`, `CONNECT host:80` and absolute `http://` requests on port 80. It resolves every destination itself (IPv4), refuses the request unless all resolved addresses are public, and connects to the address it checked. Private, loopback, link-local (including the cloud metadata address), carrier-grade NAT, multicast and reserved ranges are refused with `403`. Plain HTTP is one request per connection so each destination is re-checked.
+
+Each run result gains `egress`: one record per connection (host, port, method, allowed or refused with the reason, duration, bytes each way) and a per-host summary. Paths, query strings, headers and bodies are never logged. `isolation.internet` is `filtered_proxy` or `none`.
+
+Limits of this design, stated plainly:
+
+- Only clients that honour proxy environment variables reach the web: `requests`, `httpx`, `urllib` and the OpenAI SDK do; `aiohttp` (unless `trust_env=True`) and raw sockets do not.
+- Only ports 80 and 443. No UDP, no IPv6, no direct DNS from the agent.
+- HTTPS content is tunnelled, not inspected; the log shows where an agent connected, not what it sent.
+- An agent with internet access can send its own source, task input and the short-lived scoped gateway key anywhere public. The key is revoked when the run ends and is bounded by its call and spend limits. Host credentials, the server LiteLLM key and other imports are not in the container.
+- Results now vary between runs when tools read live data. Compare repeated runs, not single ones.
+
+Verified on October 11 with real containers: `https://example.com` and `http://example.com` returned `200` through the sidecar; the metadata address, `10.0.0.1`, the Docker host bridge and port 8081 returned `403`; a direct connection to `1.1.1.1:443` failed; no sidecar, relay, run container or network remained afterwards. A live `claude-haiku` call through the gateway succeeded with internet enabled.
+
 ## Reproduce the live proof
 
 Configure the server-only LiteLLM settings in `.env` first:
@@ -49,29 +71,19 @@ Configure the server-only LiteLLM settings in `.env` first:
 ```sh
 uv run python -m scripts.probe_gateway
 uv run python -m scripts.prove_runner
+uv run python -m scripts.prove_runner --internet
 RUNNER_DOCKER_TEST=1 uv run pytest backend/tests/test_runner.py -q
 uv run pytest -q
 ```
 
 The proof script registers `examples/one_call` as a clearly labelled **local fixture**, not a real GitHub import. It uses the normal owner-scoped ready-import, inspection, configuration, build, execution and result persistence paths. It makes one real model call, checks isolation, then runs an injected timeout with a child process. Private evidence is saved in ignored `var/runner-proof.json`.
 
-## Verified live gateway limitation
+## Prior local proof
 
-On October 10, the configured LiteLLM key returned **401** for `/cost/estimate`, but a one-call, 16-token `claude-haiku` diagnostic returned **200**, with 11 prompt tokens, 5 completion tokens, and `x-litellm-response-cost` recorded as **$0.0000396**. Spend-limited requests continue to fail closed; the gateway now explains that the key needs `/cost/estimate` access. This matches the [documented LiteLLM quote endpoint](https://docs.litellm.ai/docs/proxy/pricing_calculator). No guessed price or automatic budget bypass was added.
-
-For the explicitly bounded diagnostic proof only:
-
-```sh
-uv run python -m scripts.probe_gateway --call-only
-uv run python -m scripts.prove_runner --live-call-only
-```
-
-The runner sample returned `OK.`, exit 0, HTTP 200, and one recorded Haiku call costing $0.0000396. Its wall time was 1.955603 seconds. The injected one-second timeout returned exit 137, reason `timeout`, wall time 1.200845 seconds including termination, no model calls, and successful container cleanup. These results establish sample compatibility, not arbitrary imported-framework compatibility, optimization gains, or billing reconciliation.
-
-Final validation: `RUNNER_DOCKER_TEST=1 uv run pytest -q` passed all **196 tests in 81.76 seconds**. Actual Docker checks covered isolation, timeout with a child process, output flooding, invalid JSON, nonzero exit, stale-source rejection, persistence, revocation and offline installation of a labelled synthetic wheel. An output-flood termination stall was fixed by continuing pipe draining while Docker termination runs concurrently. A final `docker ps` check found no remaining runner/relay containers.
+On October 10, the labelled `examples/one_call` fixture verified real Docker → gateway → LiteLLM Haiku execution and timeout/child cleanup. At that time `/cost/estimate` returned 401, so the diagnostic explicitly disabled dollar admission. The current gateway no longer depends on that endpoint. Prior fixture evidence does not establish imported-agent compatibility or optimization gains. See [BASELINE.md](BASELINE.md) for the airline baseline workflow.
 
 ## Remaining boundaries
 
 Docker shares the host kernel; this is a local reviewed-workflow runner, not a hardened arbitrary-code hosting platform. Hard termination depends on the controller and Docker daemon remaining available; controller-crash recovery and an independent watchdog are not implemented. A terminated container does not cancel an already-dispatched remote model request: the gateway drains in-flight requests (up to roughly 70 seconds) before completing teardown, and preserves unknown costs/reservations when usage cannot be resolved. Cleanup failure is raised rather than reported as success.
 
-Neatlogs export/readback, a full tool/orchestration trace, optimizer logic, protected evaluation, public run endpoints, and deployment remain unimplemented.
+Neatlogs export/readback, a full tool/orchestration trace, optimizer logic, protected evaluation, public execution endpoints, and deployment remain unimplemented.

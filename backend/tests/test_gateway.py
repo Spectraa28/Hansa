@@ -27,14 +27,6 @@ def gateway(tmp_path, monkeypatch):
     async def respond(request):
         assert request.headers["authorization"] == "Bearer " + REAL_KEY
         assert "cookie" not in request.headers
-        if request.url.path == "/cost/estimate":
-            state["quotes"].append(request)
-            if state.get("quote_timeout"):
-                raise httpx.ReadTimeout(REAL_KEY, request=request)
-            data = json.loads(request.content)
-            cost = data["input_tokens"] * state.get("input_rate", 1e-7) + data["output_tokens"] * state.get("output_rate", 1e-6)
-            return httpx.Response(state.get("quote_status", 200), json=state.get("quote_body", {
-                "model": data["model"], "cost_per_request": cost}))
         assert request.url == "https://provider.test/v1/chat/completions"
         state["requests"].append(request)
         if state.get("started") is not None:
@@ -76,14 +68,10 @@ def call(client, key, body=None):
                        headers={"Authorization": "Bearer " + key})
 
 
-@pytest.mark.parametrize("status", [401, 403])
-def test_cost_quote_permissions_are_actionable_and_fail_closed(gateway, status):
+def test_spend_limited_call_never_requests_quote(gateway):
     client, service, key, state = gateway
-    state["quote_status"] = status
-    response = call(client, key)
-    assert response.status_code == 503
-    assert "key must have access to /cost/estimate" in response.json()["error"]["message"]
-    assert not state["requests"] and service.summarize_key(key)["calls"] == 0
+    assert call(client, key).status_code == 200
+    assert len(state["requests"]) == 1 and not state["quotes"]
 
 
 def rows(service):
@@ -193,7 +181,7 @@ def test_timeout_recorded(gateway, caplog):
     response = call(client, key)
     assert response.status_code == 504 and REAL_KEY not in response.text
     assert rows(service)[0]["http_status"] == 504
-    assert rows(service)[0]["reserved_cost_usd"] > 0
+    assert rows(service)[0]["reserved_cost_usd"] == 0
     assert service.summarize_key(key)["unresolved_cost_calls"] == 1
     state["timeout"] = False
     assert call(client, key).status_code == 200
@@ -229,7 +217,7 @@ def test_atomic_admission(gateway):
 
     def admit():
         try:
-            return service.admit(key, BODY, 0.1)
+            return service.admit(key, BODY)
         except HTTPException as exc:
             return exc.status_code
 
@@ -237,7 +225,7 @@ def test_atomic_admission(gateway):
         results = list(pool.map(lambda _: admit(), range(2)))
     assert all(isinstance(result, tuple) for result in results) and len(rows(service)) == 2
     assert service.summarize_key(key)["pending_calls"] == 2
-    assert service.summarize_key(key)["reserved_cost_usd"] == pytest.approx(0.2)
+    assert service.summarize_key(key)["reserved_cost_usd"] == 0
 
 
 @pytest.mark.parametrize("changes", [{"max_tokens": -1}, {"max_tokens": None}, {"n": 0}, {"tools": [{"type": "web_search"}]},
@@ -277,7 +265,7 @@ def test_missing_invalid_header_cost_null(gateway, cost, caplog):
     assert response.status_code == 200 and REAL_KEY not in response.text
     row = rows(service)[0]
     assert row["estimated_cost_usd"] is None and row["cost_source"] is None
-    assert 0 < row["reserved_cost_usd"] < 0.001
+    assert row["reserved_cost_usd"] == 0
     summary = service.summarize_key(key)
     assert summary["unknown_cost_calls"] == 1 and summary["unknown_usage_calls"] == 0
     assert summary["estimated_cost_usd"] is None
@@ -495,41 +483,21 @@ def test_parallel_model_calls_share_key(gateway):
     assert summary["reserved_cost_usd"] == 0
 
 
-@pytest.mark.parametrize("limit, budget, reservation", [(1, 1, 0.01), (5, 0.015, 0.01)])
-def test_parallel_admission_cannot_exceed_call_or_reserved_spend_limit(gateway, limit, budget, reservation):
+@pytest.mark.parametrize("limit, admitted", [(1, 1), (5, 2)])
+def test_parallel_admission_obeys_calls_while_spend_is_unrecorded(gateway, limit, admitted):
     client, service, key, state = gateway
     with service.database.connect() as db:
-        db.execute("UPDATE gateway_keys SET max_calls=?, max_spend_usd=?", (limit, budget))
-
+        db.execute("UPDATE gateway_keys SET max_calls=?, max_spend_usd=0.001", (limit,))
     def admit():
         try:
-            return service.admit(key, BODY, reservation)
+            return service.admit(key, BODY)
         except HTTPException as exc:
             return exc.status_code
-
     with ThreadPoolExecutor(max_workers=2) as pool:
         results = list(pool.map(lambda _: admit(), range(2)))
-    assert sum(isinstance(result, tuple) for result in results) == 1 and 429 in results
-    assert len(rows(service)) == 1
-    assert service.summarize_key(key)["reserved_cost_usd"] == reservation
-
-
-def test_sonnet_reservation_uses_request_not_full_context(gateway):
-    client, service, key, state = gateway
-    # Synthetic Sonnet-like rates exercise expensive routes without a real provider call.
-    state.update(input_rate=3e-6, output_rate=15e-6, cost=None)
-    mapped_key = service.mint_key("sized-reserve", max_calls=5, max_spend_usd=0.05,
-                                 expires_at=int(time.time()) + 3600, model_map={"gpt-4o": "claude-sonnet-4.6"})
-    text = "Summarize this text. " * 100
-    body = {**BODY, "model": "gpt-4o", "messages": [{"role": "user", "content": text}], "max_tokens": 128}
-    assert call(client, mapped_key, body).status_code == 200
-    quote = json.loads(state["quotes"][0].content)
-    assert quote["model"] == "claude-sonnet-4.6" and quote["output_tokens"] == 128
-    assert len(text.encode()) < quote["input_tokens"] < 128_000
-    assert set(quote) == {"model", "input_tokens", "output_tokens"}
-    row = rows(service)[0]
-    assert 0 < row["reserved_cost_usd"] < 0.05 and row["estimated_cost_usd"] is None
-    assert row["prompt_tokens"] == 100
+    assert sum(isinstance(result, tuple) for result in results) == admitted
+    assert len(rows(service)) == admitted
+    assert service.summarize_key(key)["reserved_cost_usd"] == 0
 
 
 @pytest.mark.parametrize("parts", [[{"type": "text", "text": "hello"}, {"type": "text", "text": "world"}],
@@ -539,7 +507,7 @@ def test_langchain_text_parts_pass_through(gateway, parts):
     body = {**BODY, "messages": [{"role": "user", "content": parts}]}
     assert call(client, key, body).status_code == 200
     assert json.loads(state["requests"][0].content) == body
-    assert json.loads(state["quotes"][0].content)["input_tokens"] > 0
+    assert not state["quotes"]
 
 
 @pytest.mark.parametrize("parts", [[42], [{"type": "text", "text": 42}], [{"type": "text"}]])
@@ -556,7 +524,7 @@ def test_disconnect_records_unknown_charge_without_locking_key(gateway):
     assert response.status_code == 502 and REAL_KEY not in response.text
     row = rows(service)[0]
     assert row["http_status"] == 502 and row["lease_expires_at"] is None
-    assert row["estimated_cost_usd"] is None and row["reserved_cost_usd"] > 0
+    assert row["estimated_cost_usd"] is None and row["reserved_cost_usd"] == 0
     state["disconnect"] = False
     assert call(client, key).status_code == 200
     assert service.summarize_key(key)["pending_calls"] == 0
@@ -574,7 +542,7 @@ def test_cancelled_request_finishes_ledger_and_key_can_continue(gateway):
             await task
         row = rows(service)[0]
         assert row["http_status"] == 499 and row["lease_expires_at"] is None
-        assert row["estimated_cost_usd"] is None and row["reserved_cost_usd"] > 0
+        assert row["estimated_cost_usd"] is None and row["reserved_cost_usd"] == 0
         state.pop("started")
         state.pop("release")
         response = await service.forward(key, BODY)
@@ -586,11 +554,11 @@ def test_cancelled_request_finishes_ledger_and_key_can_continue(gateway):
 
 def test_stale_lease_recovery_retains_estimate_and_accepts_late_cost(gateway):
     client, service, key, state = gateway
-    call_id, model = service.admit(key, BODY, 0.01)
+    call_id, model = service.admit(key, BODY)
     with service.database.connect() as db:
         db.execute("UPDATE model_calls SET lease_expires_at=0")
     summary = service.summarize_key(key)
-    assert summary["pending_calls"] == 0 and summary["reserved_cost_usd"] == 0.01
+    assert summary["pending_calls"] == 0 and summary["reserved_cost_usd"] == 0
     assert summary["estimated_cost_usd"] is None
     assert rows(service)[0]["http_status"] == 504
     assert call(client, key).status_code == 200
@@ -603,55 +571,41 @@ def test_stale_lease_recovery_retains_estimate_and_accepts_late_cost(gateway):
 
 def test_startup_recovers_prior_pending_call(gateway):
     client, service, key, state = gateway
-    service.admit(key, BODY, 0.01)
+    service.admit(key, BODY)
     with TestClient(create_app(service.settings)) as restarted:
         assert rows(service)[0]["http_status"] == 504
-        assert rows(service)[0]["reserved_cost_usd"] == 0.01
+        assert rows(service)[0]["reserved_cost_usd"] == 0
         assert call(restarted, key).status_code == 200
-
-
-@pytest.mark.parametrize("changes", [{"quote_status": 401}, {"quote_status": 404}, {"quote_status": 503},
-                                    {"quote_body": {"cost_per_request": None}},
-                                    {"quote_body": {"cost_per_request": "NaN"}},
-                                    {"quote_body": {"cost_per_request": -1}},
-                                    {"quote_body": {"model": "wrong", "cost_per_request": 0.01}},
-                                    {"quote_timeout": True}])
-def test_unavailable_estimate_does_not_dispatch_or_leak_secret(gateway, changes):
-    client, service, key, state = gateway
-    state.update(changes)
-    response = call(client, key)
-    assert response.status_code == 503 and REAL_KEY not in response.text
-    assert not state["requests"] and not rows(service)
 
 
 def test_missing_output_limit_gets_bounded_default(gateway):
     client, service, key, state = gateway
     body = {name: value for name, value in BODY.items() if name != "max_tokens"}
     assert call(client, key, body).status_code == 200
-    assert json.loads(state["quotes"][0].content)["output_tokens"] == DEFAULT_OUTPUT_TOKENS
+    assert not state["quotes"]
     assert json.loads(state["requests"][0].content) == {**body, "max_tokens": DEFAULT_OUTPUT_TOKENS}
 
 
-def test_unknown_call_estimates_still_exhaust_budget(gateway):
+def test_unknown_cost_does_not_invent_spend(gateway):
     client, service, key, state = gateway
     with service.database.connect() as db:
         db.execute("UPDATE gateway_keys SET max_spend_usd=0.01")
-    call_id, model = service.admit(key, BODY, 0.01)
+    call_id, model = service.admit(key, BODY)
     service.finish(call_id, 502, 1, {}, None)
-    assert call(client, key).status_code == 429
-    assert not state["requests"] and rows(service)[0]["estimated_cost_usd"] is None
+    assert call(client, key).status_code == 200
+    assert len(state["requests"]) == 1 and rows(service)[0]["estimated_cost_usd"] is None
 
 
 def test_lease_migration_recovers_old_pending_rows_without_refund(gateway):
     client, service, key, state = gateway
-    service.admit(key, BODY, 0.01)
+    service.admit(key, BODY)
     with service.database.connect() as db:
         db.execute("ALTER TABLE model_calls DROP COLUMN lease_expires_at")
         db.execute("UPDATE model_calls SET created_at=0")
     service.database.initialize()
     service.database.initialize()
     summary = service.summarize_key(key)
-    assert summary["pending_calls"] == 0 and summary["reserved_cost_usd"] == 0.01
+    assert summary["pending_calls"] == 0 and summary["reserved_cost_usd"] == 0
     assert rows(service)[0]["http_status"] == 504 and rows(service)[0]["estimated_cost_usd"] is None
     assert call(client, key).status_code == 200
 import asyncio
@@ -666,7 +620,7 @@ def test_fixed_model_routes_all_names_and_quotes_selected_model(gateway, selecte
     for requested in ['gpt-4o', 'another-runtime-model']:
         assert call(client, key, {**BODY, 'model': requested}).status_code == 200
     assert {json.loads(r.content)['model'] for r in state['requests']} == {selected}
-    assert {json.loads(r.content)['model'] for r in state['quotes']} == {selected}
+    assert not state["quotes"]
     assert {(r['model'], r['upstream_model']) for r in rows(service)} == {
         ('gpt-4o', selected), ('another-runtime-model', selected)}
     assert {r['upstream_model'] for r in service.summarize_key(key)['models']} == {selected}
