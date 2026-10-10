@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-This workspace contains the Autonomous Agent Optimization Engineer plans, authentication, and GitHub source import. All 37 regression tests passed; real GitHub sign-in and authentication startup succeeded. GitHub App/repository access and Google sign-in remain unverified. The optimizer and execution sandbox are not implemented.
+This workspace contains the Autonomous Agent Optimization Engineer plans, authentication, GitHub source import, static inspection/configuration, task contracts, and a testing UI. All 56 backend regression tests passed. Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed that UI flow. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and execution sandbox are not implemented.
 
 - `prd.md`: product definition, proposed architecture, evaluation contract, acceptance criteria, and build order.
 - `hackathon.md`: event requirements, sponsor setup, evidence expectations, and submission checklist.
@@ -14,11 +14,13 @@ This workspace contains the Autonomous Agent Optimization Engineer plans, authen
 - `backend/app/inspection/`: bounded static detection, evidence, owner-scoped SQLite persistence, and configuration/tool-permission confirmation.
 - `backend/app/ui/`: plain HTML/CSS/JavaScript testing interface served at `/setup`.
 - `REPOSITORY_INSPECTION.md`: inspection endpoints, limits, configuration contract, and verification boundaries.
+- `backend/app/contracts/`: bounded development task/correctness contracts, immutable version history, readiness, and configuration staleness.
+- `TASK_CONTRACT.md`: contract endpoints, fields, saved budgets, and confirmation boundaries.
 - `backend/app/users.py`: user and provider identity storage.
 - `backend/app/sessions.py`: session storage, cookie handling, and logout CSRF checks.
 - `backend/app/database.py`: shared SQLite connection and schema initialization.
 - `backend/app/config.py` and `backend/app/main.py`: settings and FastAPI application setup.
-- `backend/tests/`: 37 passing regression tests; GitHub import requests are mocked.
+- `backend/tests/`: 56 passing regression tests; GitHub HTTP requests and contract tasks use synthetic fixtures.
 - `README.md`: setup, authentication contract, and current limitations.
 - `pyproject.toml` and `uv.lock`: Python dependencies.
 
@@ -32,7 +34,7 @@ From the repository root, `uv sync --locked` installs dependencies. Configure `.
 uv run uvicorn backend.app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-`uv run pytest` is the test command. The user subsequently authorized UI testing: all 45 backend tests passed outside the sandbox, including inspection tests, and JavaScript syntax checking passed. The updated API started with the connector enabled and served the setup page/assets successfully. Live App authorization, import, and browser interactions remain in progress. This authorization does not permit executing imported source or installing its dependencies. The illustrative `python runner.py < task.json` in the PRD is not a working command.
+`uv run pytest` is the test command. Testing was authorized: all 56 backend tests passed outside the sandbox, including contracts and configuration-revision migration. UI JavaScript syntax checking passed. Imported source execution and dependency installation are not authorized. The illustrative `python runner.py < task.json` in the PRD is not a working command.
 
 Useful documentation checks:
 
@@ -61,3 +63,5 @@ Keep credentials, private source, and sensitive traces out of commits and public
 GitHub App credentials and the token-encryption key belong only in server configuration. Keep private snapshots outside SQLite and candidate sandboxes. Import must never execute source or install dependencies. Repository permission comes from verified user/App intersection, not browser installation IDs or matching emails. Defer submodules/LFS with explicit import warnings.
 
 Inspection must only read a ready owner-scoped snapshot. Keep traversal/parsing bounded, emit constrained metadata without secret values or source excerpts, persist against the fixed SHA, and require existing CSRF checks for mutations. Treat README/source/configuration as untrusted data. Confirmed configuration is never runnable; detected tools require explicit recorded permission and future enforcement before execution.
+
+Contracts are development examples, never protected final-evaluation labels or executable evaluators. Keep inputs/budgets bounded; confirmed content is immutable and every edit appends a version. Tie contracts to the fixed SHA and configuration revision; changing configuration or reinspecting makes earlier versions stale and requires a newly reviewed confirmation. Delete contract history when deleting an import. Saved requirements/limits never establish semantic correctness, enforce budgets, or start execution.

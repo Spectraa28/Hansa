@@ -101,12 +101,30 @@ class Database:
                     revision TEXT NOT NULL,
                     findings TEXT NOT NULL,
                     configuration TEXT,
+                    configuration_revision TEXT,
                     status TEXT NOT NULL CHECK(status IN ('suggested','confirmed')),
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS task_contracts (
+                    import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    version INTEGER NOT NULL,
+                    commit_sha TEXT NOT NULL,
+                    configuration_revision TEXT NOT NULL,
+                    configuration_snapshot TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK(status IN ('draft','confirmed')),
+                    created_at INTEGER NOT NULL,
+                    confirmed_at INTEGER,
+                    PRIMARY KEY (import_id, version)
                 );
                 CREATE TABLE IF NOT EXISTS github_webhook_deliveries (
                     delivery_id TEXT PRIMARY KEY,
                     received_at INTEGER NOT NULL
                 );
             """)
+            columns = {row["name"] for row in db.execute("PRAGMA table_info(repository_inspections)")}
+            if "configuration_revision" not in columns:
+                db.execute("ALTER TABLE repository_inspections ADD COLUMN configuration_revision TEXT")
+            db.execute("UPDATE repository_inspections SET configuration_revision=lower(hex(randomblob(16))) "
+                       "WHERE status='confirmed' AND configuration_revision IS NULL")

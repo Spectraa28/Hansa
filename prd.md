@@ -55,6 +55,8 @@ If the implementation only displays expensive calls, recommends shorter prompts 
 
 ## 4. Inputs and onboarding
 
+Implemented task-contract stage: [TASK_CONTRACT.md](TASK_CONTRACT.md) defines development tasks, correctness criteria, saved resource limits, version history, and configuration staleness. All 56 backend tests passed; contract browser interactions and agent execution remain unverified. Requirements are saved declarations, not measured correctness or enforced execution guarantees.
+
 Code access alone is insufficient. A supported workflow must provide:
 
 | Input | Purpose |

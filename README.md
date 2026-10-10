@@ -1,10 +1,12 @@
 # Ouro backend
 
-Status: all 45 backend regression tests passed, including static inspection and configuration confirmation. Real GitHub sign-in and App connection succeeded. SQLite confirms a ready fixed-commit import of `Spectraa28/VaultLearn` on `main` at `896d8802cc5e27a88fc1be691f491d950ed26bbe`, with saved inspection findings. The user confirmed the UI flow works; page/assets returned HTTP 200 and JavaScript syntax checking passed. Live configuration confirmation and Google sign-in remain unverified. The optimizer and agent sandbox are not implemented; no imported code was executed.
+Status: all 56 backend regression tests passed, including inspection, task contracts, version history, and configuration-revision migration. Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed the earlier import/inspection UI flow. JavaScript syntax checking passed for the extended UI. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and agent sandbox are not implemented; no imported code was executed.
 
 ## Repository setup and inspection
 
 After an authorized server restart, open `http://localhost:8000/setup` for the simple testing interface. It supports login, GitHub connection/access, repository/branch import, bounded static inspection, evidence review, and configuration/tool-permission confirmation. No imported source is executed. Confirmed configuration remains non-runnable. See [REPOSITORY_INSPECTION.md](REPOSITORY_INSPECTION.md) for endpoints, scan limits, supported detection, and current verification boundaries.
+
+After configuration confirmation, the same page supports representative tasks, exact/type checks, fact/evidence requirements, human-review rubrics, acceptable failures, protected behavior, and explicit budgets. Save a draft version, review its complete content, and confirm requirements. Edits preserve history; configuration changes make contracts stale. Confirmation does not start execution or enforce limits. See [TASK_CONTRACT.md](TASK_CONTRACT.md).
 
 ## Backend layout
 
@@ -27,6 +29,7 @@ backend/app/
 │   └── worker.py       # One worker consuming the SQLite import queue
 ├── users.py            # User and provider identity storage
 ├── inspection/         # Static findings and confirmed execution configuration
+├── contracts/          # Versioned development tasks and correctness requirements
 ├── ui/                 # Testing page and same-origin assets at /setup
 ├── sessions.py         # Session storage, cookies, and logout CSRF checks
 ├── database.py         # SQLite connections and schema initialization

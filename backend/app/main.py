@@ -22,6 +22,8 @@ from .github.service import GitHubService
 from .github.worker import import_worker
 from .inspection.routes import router as inspection_router
 from .inspection.service import InspectionService
+from .contracts.routes import router as contracts_router
+from .contracts.service import ContractService
 from .ui.routes import router as ui_router
 from .oauth.providers import oauth_clients
 from .oauth.routes import router as oauth_router
@@ -56,6 +58,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.state.oauth = oauth_clients(settings)
     app.state.github = github
     app.state.inspection = InspectionService(database, github)
+    app.state.contracts = ContractService(database, app.state.inspection)
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key,
                        session_cookie="ouro_oauth", max_age=600,
                        same_site="lax", https_only=settings.cookie_secure)
@@ -63,6 +66,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.include_router(oauth_router)
     app.include_router(github_router)
     app.include_router(inspection_router)
+    app.include_router(contracts_router)
     app.include_router(ui_router)
 
     @app.middleware("http")

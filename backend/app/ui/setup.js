@@ -50,6 +50,7 @@ async function session() {
   } catch (e) { $('login').hidden = false; $('account').hidden = true; message(e.message, true); }
 }
 async function refresh() {
+  $('contract-section').hidden = true;
   inspection = null; $('review').hidden = true;
   options('installation', [], i => i.id, i => i.account);
   options('repository', [], r => r.id, r => r.full_name);
@@ -101,6 +102,7 @@ action('import-form', 'submit', async () => {
   } finally { $('import-button').disabled = !$('branch').value; }
 });
 async function importStatus() {
+  $('contract-section').hidden = true;
   $('review').hidden = true; inspection = null;
   $('inspect').disabled = true; $('retrieve').disabled = true;
   if (!$('imports').value) return;
@@ -151,6 +153,7 @@ function render(result) {
   $('no-manifests').hidden = manifests.length > 0;
   checkboxes('tools', [...new Set(scan.findings.filter(f => f.kind === 'tool').map(f => f.value))], confirmed?.approved_tools || []);
   $('confirmation').textContent = result.status === 'confirmed' ? 'Configuration saved. Execution is not enabled.' : 'Configuration awaits confirmation.';
+  contractConfiguration(result);
 }
 async function inspect(method) {
   const id = $('imports').value; if (!id) return;
@@ -170,4 +173,3 @@ action('configuration', 'submit', async () => {
   for (const key of ['python_version', 'entrypoint', 'model_provider', 'model_id']) body[key] = $('config-' + key).value.trim();
   render(await api(`/github/imports/${inspection.import_id}/configuration`, 'POST', body)); message('Configuration and explicit tool permissions saved.');
 });
-session();

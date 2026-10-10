@@ -54,7 +54,7 @@ class InspectionService:
                     (import_id,commit_sha,revision,findings,configuration,status,created_at,updated_at)
                     VALUES (?,?,?,?,NULL,'suggested',?,?) ON CONFLICT(import_id) DO UPDATE SET
                     commit_sha=excluded.commit_sha,revision=excluded.revision,findings=excluded.findings,
-                    configuration=NULL,status='suggested',updated_at=excluded.updated_at""",
+                    configuration=NULL,configuration_revision=NULL,status='suggested',updated_at=excluded.updated_at""",
                     (import_id, sha, revision, json.dumps(findings), now, now))
         return self.get(user_id, import_id)
 
@@ -69,6 +69,7 @@ class InspectionService:
         return {"import_id": import_id, "commit_sha": row["commit_sha"], "revision": row["revision"],
                 "status": row["status"], "findings": findings, "suggested_configuration": findings["suggested_configuration"],
                 "configuration": json.loads(row["configuration"]) if row["configuration"] else None,
+                "configuration_revision": row["configuration_revision"],
                 "created_at": row["created_at"], "updated_at": row["updated_at"], "runnable": False}
 
     def confirm(self, user_id, import_id, body):
@@ -105,6 +106,9 @@ class InspectionService:
             configuration["tool_permissions"] = [{"tool": tool, "approved": tool in body.approved_tools} for tool in sorted(tools)]
             configuration["field_sources"] = {key: ("detected" if value in [f["value"] for f in findings["findings"] if f["kind"] == key] else "user_confirmed")
                 for key, value in configuration.items() if key in {"python_version", "entrypoint", "model_provider", "model_id"}}
-            db.execute("UPDATE repository_inspections SET configuration=?,status='confirmed',updated_at=? WHERE import_id=?",
-                       (json.dumps(configuration), int(time.time()), import_id))
+            encoded = json.dumps(configuration, sort_keys=True)
+            unchanged = row["configuration"] and json.loads(row["configuration"]) == configuration
+            revision = row["configuration_revision"] if unchanged and row["configuration_revision"] else uuid.uuid4().hex
+            db.execute("UPDATE repository_inspections SET configuration=?,configuration_revision=?,status='confirmed',updated_at=? WHERE import_id=?",
+                       (encoded, revision, int(time.time()), import_id))
         return self.get(user_id, import_id)

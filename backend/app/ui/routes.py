@@ -15,6 +15,6 @@ def setup():
 
 @router.get("/setup/{asset}", include_in_schema=False)
 def asset(asset: str):
-    if asset not in {"setup.js", "setup.css"}:
+    if asset not in {"setup.js", "setup.css", "contracts.js"}:
         raise HTTPException(404, "Asset not found.")
     return FileResponse(ROOT / asset, headers={"X-Content-Type-Options": "nosniff"})
