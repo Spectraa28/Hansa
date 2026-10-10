@@ -183,6 +183,8 @@ class GatewayService:
                             headers={"Authorization": "Bearer " + self.settings.litellm_api_key},
                             json={"model": model, "input_tokens": prompt, "output_tokens": output}) as response:
                         if response.status_code != 200:
+                            if response.status_code in {401, 403}:
+                                raise HTTPException(503, "LiteLLM key must have access to /cost/estimate for spend-limited calls.")
                             raise ValueError("Cost estimate unavailable")
                         content = bytearray()
                         async for chunk in response.aiter_bytes():

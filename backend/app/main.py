@@ -26,6 +26,7 @@ from .contracts.routes import router as contracts_router
 from .contracts.service import ContractService
 from .gateway.routes import router as gateway_router
 from .gateway.service import GatewayService
+from .runner.service import RunnerService
 from .ui.routes import router as ui_router
 from .oauth.providers import oauth_clients
 from .oauth.routes import router as oauth_router
@@ -63,6 +64,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.state.inspection = InspectionService(database, github)
     app.state.contracts = ContractService(database, app.state.inspection)
     app.state.gateway = GatewayService(settings, database, app.state.inspection)
+    app.state.runner = RunnerService(settings, database, app.state.inspection, app.state.gateway)
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key,
                        session_cookie="ouro_oauth", max_age=600,
                        same_site="lax", https_only=settings.cookie_secure)

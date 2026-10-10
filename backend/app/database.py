@@ -122,6 +122,22 @@ class Database:
                     delivery_id TEXT PRIMARY KEY,
                     received_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS runner_builds (
+                    id TEXT PRIMARY KEY,
+                    import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    commit_sha TEXT NOT NULL,
+                    configuration_revision TEXT NOT NULL,
+                    snapshot_digest TEXT NOT NULL,
+                    image_id TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS runner_runs (
+                    id TEXT PRIMARY KEY,
+                    import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    build_id TEXT NOT NULL REFERENCES runner_builds(id),
+                    result TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
                 CREATE TABLE IF NOT EXISTS gateway_keys (
                     key_hash TEXT PRIMARY KEY,
                     run_label TEXT NOT NULL,

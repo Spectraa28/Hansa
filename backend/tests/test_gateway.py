@@ -76,6 +76,16 @@ def call(client, key, body=None):
                        headers={"Authorization": "Bearer " + key})
 
 
+@pytest.mark.parametrize("status", [401, 403])
+def test_cost_quote_permissions_are_actionable_and_fail_closed(gateway, status):
+    client, service, key, state = gateway
+    state["quote_status"] = status
+    response = call(client, key)
+    assert response.status_code == 503
+    assert "key must have access to /cost/estimate" in response.json()["error"]["message"]
+    assert not state["requests"] and service.summarize_key(key)["calls"] == 0
+
+
 def rows(service):
     with service.database.connect() as db:
         return [dict(row) for row in db.execute("SELECT * FROM model_calls")]

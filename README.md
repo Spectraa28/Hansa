@@ -1,6 +1,6 @@
 # Ouro backend
 
-Status: all 187 backend regression tests passed, including inspection, task contracts, version history, and configuration-revision migration. Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed the earlier import/inspection UI flow. JavaScript syntax checking passed for the extended UI. Synthetic browser fixtures verified model selection, routing preview, save/reload, and retained source names at desktop and mobile widths; this is not a live agent run. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and agent sandbox are not implemented; no imported code was executed. The setup UI saves an explicit LiteLLM model selection separately from source model metadata; owner-scoped service minting binds every call to that choice and records both names. Own-key provider mode remains planned. The non-streaming model gateway supports per-key model maps, requested/upstream model accounting, LiteLLM-reported cost headers, parallel request-sized reservations, text content parts, and interrupted-call recovery with mocked upstream coverage; live LiteLLM access remains unverified. See [GATEWAY.md](GATEWAY.md).
+Status: authentication, fixed-commit source import, inspection/configuration, task contracts, the model gateway, and a service-only Docker runner are implemented. Real GitHub sign-in/App connection and a fixed-commit import succeeded; the user confirmed the setup UI. A real `claude-haiku` gateway call and local sample container run returned HTTP 200 with LiteLLM-reported cost, and the injected timeout killed the container and its child. The configured LiteLLM key lacks `/cost/estimate` permission, so normal spend-limited calls remain blocked. See [GATEWAY.md](GATEWAY.md) and [RUNNER.md](RUNNER.md). The local sample is a labelled fixture, not proof of arbitrary GitHub-agent compatibility. End-to-end task contract confirmation, Google sign-in, optimizer logic, Neatlogs run export, protected evaluation and hosted execution remain unverified or unimplemented. Own-key provider mode remains planned.
 
 ## Repository setup and inspection
 
@@ -141,7 +141,7 @@ The separate GitHub App connector supports current-account connection, repositor
 
 ## Verification
 
-Latest verification on October 10, 2026: `uv run pytest` passed **187 tests in 38.29 seconds**, including 126 gateway tests, outside the sandbox because uv could not write its cache inside it. Authlib and Starlette emitted two HTTP-client deprecation warnings. Gateway and GitHub upstream traffic uses mocks; no live LiteLLM call or imported source execution was performed. `git diff --check` passed. To rerun:
+Latest verification on October 10, 2026: `RUNNER_DOCKER_TEST=1 uv run pytest -q` passed **196 tests in 81.76 seconds** outside the sandbox, including real container lifecycle and offline dependency installation. Authlib and Starlette emitted two HTTP-client deprecation warnings. Gateway/GitHub regression HTTP traffic uses mocks; separate live probes verified Haiku model access, cost-header accounting, and the sample runner path. See [RUNNER.md](RUNNER.md) for private evidence and reproduction commands. `git diff --check` passed. To rerun the default suite (which skips real Docker checks):
 
 ```sh
 uv run pytest
@@ -151,6 +151,6 @@ The tests cover authentication and mocked GitHub connection/session binding, enc
 
 ## Planning references
 
-Read [prd.md](prd.md), [ARCHITECTURE.md](ARCHITECTURE.md), [SPONSORS.md](SPONSORS.md), and [hackathon.md](hackathon.md) for the optimization product and event constraints. Authentication and source import do not establish a working optimizer, sandbox, or measured improvement.
+Read [prd.md](prd.md), [ARCHITECTURE.md](ARCHITECTURE.md), [SPONSORS.md](SPONSORS.md), and [hackathon.md](hackathon.md) for the optimization product and event constraints. Authentication and source import do not establish optimization or measured improvement; the reviewed-workflow runner has separate evidence in [RUNNER.md](RUNNER.md).
 
 Implementation references: [Authlib example](https://github.com/authlib/demo-oauth-client/blob/master/starlette-google-login/app.py), [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [GitHub authorization](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps), [GitHub scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps), and [pwdlib password hashing](https://frankie567.github.io/pwdlib/guide/).

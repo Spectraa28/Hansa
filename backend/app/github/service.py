@@ -293,6 +293,8 @@ class GitHubService:
         with self.lock:
             self.import_result(user_id, import_id)
             with self.database.connect() as db:
+                db.execute("DELETE FROM runner_runs WHERE import_id=?", (import_id,))
+                db.execute("DELETE FROM runner_builds WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM task_contracts WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM repository_inspections WHERE import_id=?", (import_id,))
                 db.execute("UPDATE repository_imports SET status='deleted',snapshot_path=NULL,updated_at=? WHERE id=? AND user_id=?",

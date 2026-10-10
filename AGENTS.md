@@ -2,13 +2,15 @@
 
 ## Project Structure & Module Organization
 
-This workspace contains the Autonomous Agent Optimization Engineer plans, authentication, GitHub source import, static inspection/configuration, task contracts, and a testing UI. All 187 backend regression tests passed. The setup UI saves an explicit LiteLLM model selection separately from source model metadata; owner-scoped service minting binds every call to that choice and records both names. Own-key provider mode remains planned. The non-streaming model gateway supports per-key model maps, requested/upstream model accounting, LiteLLM-reported cost headers, parallel request-sized reservations, text content parts, and interrupted-call recovery with mocked upstream coverage; live LiteLLM access remains unverified. See [GATEWAY.md](GATEWAY.md). Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed that UI flow. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer and execution sandbox are not implemented.
+This workspace contains the Autonomous Agent Optimization Engineer plans, authentication, GitHub source import, static inspection/configuration, task contracts, a testing UI, and a service-only Docker runner. The setup UI saves an explicit LiteLLM model selection separately from source model metadata; owner-scoped service minting binds every call to that choice and records both names. Own-key provider mode remains planned. The non-streaming model gateway supports per-key model maps, requested/upstream model accounting, LiteLLM-reported cost headers, parallel request-sized reservations, text content parts, and interrupted-call recovery. A real `claude-haiku` gateway call succeeded with HTTP 200 and a recorded $0.0000396 cost header; the configured key lacks `/cost/estimate` access (401), so spend-limited calls remain blocked. See [GATEWAY.md](GATEWAY.md). The local sample runner → Docker → gateway → LiteLLM path and timeout/child cleanup succeeded; this is a labelled local fixture, not GitHub-agent compatibility or optimization evidence. See [RUNNER.md](RUNNER.md). Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed that UI flow. The user reports that the updated setup UI works with their repository. No confirmed task contract is recorded yet; end-to-end contract confirmation and Google sign-in remain unverified. The optimizer, protected evaluation and hosted execution remain unimplemented.
 
 - `prd.md`: product definition, proposed architecture, evaluation contract, acceptance criteria, and build order.
 - `hackathon.md`: event requirements, sponsor setup, evidence expectations, and submission checklist.
 - `AGENTS.md`: contributor instructions.
 - `backend/app/gateway/`: scoped throwaway keys, per-key model maps, non-streaming LiteLLM proxy, dual-name usage records, LiteLLM response-header costs, parallel request-sized cost reservations, text content parts, and lease/cancellation recovery (estimated spend can differ from billing).
 - `GATEWAY.md`: configuration, accounting limits, service-only mint/summary, and a real-call command.
+- `backend/app/runner/`: owner-scoped snapshot copies, offline dependency images, a networkless gateway relay, bounded execution and saved results.
+- `RUNNER.md`, `examples/one_call/`, and `scripts/prove_runner.py`: runner contract, labelled sample agent, live-call and timeout evidence workflow.
 - `backend/app/auth/`: authentication routes, request schemas, password login, and sign-in rate limits.
 - `backend/app/oauth/`: Google/GitHub provider clients, identity parsing, redirects, and callbacks.
 - `backend/app/github/`: GitHub App connection, verified repository access, bounded fixed-commit archives, persisted import queue, deletion, and signed webhooks.
@@ -22,11 +24,11 @@ This workspace contains the Autonomous Agent Optimization Engineer plans, authen
 - `backend/app/sessions.py`: session storage, cookie handling, and logout CSRF checks.
 - `backend/app/database.py`: shared SQLite connection and schema initialization.
 - `backend/app/config.py` and `backend/app/main.py`: settings and FastAPI application setup.
-- `backend/tests/`: 187 passing regression tests; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures.
+- `backend/tests/`: 196 passing regression tests with Docker checks enabled; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures. Docker lifecycle and offline-wheel checks use real containers; separate live Haiku proof uses the labelled local sample.
 - `README.md`: setup, authentication contract, and current limitations.
 - `pyproject.toml` and `uv.lock`: Python dependencies.
 
-Read both planning documents before extending the product. Python/FastAPI is used for authentication, imports, and inspection; a simple testing UI is written. The optimizer, full product frontend, and sandbox remain planned. Keep new modules focused on the supported workflow. Run only one API process for the import queue; startup recovery is not compatible with multiple API workers.
+Read both planning documents before extending the product. Python/FastAPI is used for authentication, imports, inspection and the runner; a simple testing UI is written. The optimizer and full product frontend remain planned. Keep new modules focused on the supported workflow. Run only one API process for the import queue and one runner/controller process; multi-process runner scheduling and controller-crash cleanup are not implemented.
 
 ## Build, Test, and Development Commands
 
@@ -36,7 +38,7 @@ From the repository root, `uv sync --locked` installs dependencies. Configure `.
 uv run uvicorn backend.app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
 ```
 
-`uv run pytest` is the test command. Testing was authorized: all 187 backend tests passed outside the sandbox, including gateway, contracts, and configuration-revision migration. Gateway upstream calls use mocks; live LiteLLM access is unverified. UI JavaScript syntax checking passed. Imported source execution and dependency installation are not authorized. The illustrative `python runner.py < task.json` in the PRD is not a working command.
+`uv run pytest` is the test command. The final `RUNNER_DOCKER_TEST=1 uv run pytest -q` passed all 196 tests in 81.76 seconds outside the sandbox, including real Docker lifecycle and offline dependency installation. Gateway regression upstream calls use mocks; a separate real Haiku call and container sample verified model access/cost-header accounting. UI JavaScript syntax checking previously passed. On October 10 the user authorized imported-source execution inside isolated Docker containers only, plus a separate dependency build with no keys. Host execution of imported source remains unauthorized. The runner uses a read-only snapshot copy, scratch space, non-root user, memory/CPU/process limits, a hard timeout, and no Docker socket or access to metadata/private networks. Only a scoped throwaway gateway key and gateway URL may be provided; host credentials must not enter builds or execution containers. Use `RUNNER_DOCKER_TEST=1 uv run pytest backend/tests/test_runner.py -q` for actual Docker regression checks. Use `uv run python -m scripts.prove_runner --live-call-only` only for the explicitly bounded diagnostic when cost-estimate permission is missing; normal spend-limited runs fail closed. The illustrative `python runner.py < task.json` in the PRD is not a working command.
 
 Useful documentation checks:
 
@@ -62,7 +64,7 @@ Use concise imperative commit messages, such as `Document evaluation boundaries`
 
 Keep credentials, private source, and sensitive traces out of commits and public artifacts. Separate candidate execution from protected evaluators and accounting. Report measured results honestly. External publication, paid signup, and production changes require separate authorization.
 
-GitHub App credentials and the token-encryption key belong only in server configuration. Keep private snapshots outside SQLite and candidate sandboxes. Import must never execute source or install dependencies. Repository permission comes from verified user/App intersection, not browser installation IDs or matching emails. Defer submodules/LFS with explicit import warnings.
+GitHub App credentials and the token-encryption key belong only in server configuration. Keep original private snapshots outside SQLite and candidate sandboxes; execution gets only an independent read-only copy of its own snapshot. Import must never execute source or install dependencies. The separate runner may execute a reviewed ready snapshot inside Docker under the user's authorization; dependency installation uses the trusted offline build recipe, never a repository Dockerfile or source build backend. Repository permission comes from verified user/App intersection, not browser installation IDs or matching emails. Defer submodules/LFS with explicit import warnings.
 
 Inspection must only read a ready owner-scoped snapshot. Keep traversal/parsing bounded, emit constrained metadata without secret values or source excerpts, persist against the fixed SHA, and require existing CSRF checks for mutations. Treat README/source/configuration as untrusted data. Confirmed configuration is never runnable; detected tools require explicit recorded permission and future enforcement before execution.
 
