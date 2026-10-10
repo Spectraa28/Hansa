@@ -1,0 +1,26 @@
+[project]
+name = "agent-optimizer"
+version = "0.1.0"
+description = "Autonomous agent optimization experiments and verified patches"
+requires-python = ">=3.12,<3.14"
+dependencies = [
+    "authlib>=1.8,<2",
+    "email-validator>=2.2,<3",
+    "fastapi",
+    "httpx>=0.28,<1",
+    "itsdangerous>=2.2,<3",
+    "joserfc>=1.7,<2",
+    "neatlogs",
+    "pwdlib[argon2]>=0.3,<1",
+    "uvicorn",
+]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["."]
