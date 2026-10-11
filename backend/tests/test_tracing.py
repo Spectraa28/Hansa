@@ -98,9 +98,9 @@ def test_run_trace_carries_calls_gaps_egress_cost_provenance_and_scope(traced):
     assert [span["kind"] for span in arguments["spans"]] == ["LLM", "CHAIN", "TOOL", "TOOL", "LLM"]
     first, second = spans["llm-1"], spans["llm-2"]
     assert first["attributes"]["neatlogs.llm.model_name"] == "claude-haiku" and first["attributes"]["hansa.requested_model"] == "gpt-4o"
-    assert first["attributes"]["neatlogs.llm.token_count.total"] == 110 and first["attributes"]["hansa.cost_usd"] == 0.001
+    assert first["attributes"]["neatlogs.llm.token_count.prompt"] == 100 and first["attributes"]["hansa.cost_usd"] == 0.001
     assert second["attributes"]["hansa.cost_usd"] == "unknown" and second["attributes"]["hansa.repeated_messages"] == 2
-    assert second["attributes"]["hansa.repeated_chars"] == 408 and "408 characters) repeat" in second["attributes"]["neatlogs.input.value"]
+    assert second["attributes"]["hansa.repeated_size"] == 408 and "(size 408) repeat" in second["attributes"]["neatlogs.input.value"]
     gap = spans["gap-llm-1"]
     assert gap["attributes"] == {"hansa.inferred": True, "hansa.gap_ms": 700} and gap["parent_span_id"] == "llm-1"
     assert spans["egress-0"]["parent_span_id"] == "llm-1" and spans["egress-0"]["status_code"] == "OK"
@@ -149,7 +149,7 @@ def test_tracing_failure_or_absence_never_fails_the_run(traced):
         def call(self, tool, arguments):
             raise NeatlogsError("Neatlogs could not be reached.")
     service.client = Broken()
-    assert service.log_run(imported, token_hash("gw_key"), run_result(), {}) == {"status": "failed", "reason": "Neatlogs could not be reached."}
+    assert service.log_run(imported, token_hash("gw_key"), run_result(), {}) == {"status": "failed", "reason": "Neatlogs could not be reached.", "trace_ids": []}
     with pytest.raises(HTTPException) as exc:
         service.search(owner, imported, "anything")
     assert exc.value.status_code == 502
@@ -255,11 +255,11 @@ def test_refused_payload_is_resent_with_less_text_each_time(traced):
     assert "passwd" not in json.dumps(sent) and sent["metadata"]["hansa_content"] == "withheld"
     llm = [span for span in sent["spans"] if span["kind"] == "LLM"]
     assert all("neatlogs.input.value" not in span["attributes"] and span["attributes"]["hansa.content_withheld"] for span in llm)
-    assert llm[0]["attributes"]["neatlogs.llm.token_count.total"] == 110 and llm[1]["attributes"]["hansa.repeated_chars"] == 408
+    assert llm[0]["attributes"]["neatlogs.llm.token_count.prompt"] == 100 and llm[1]["attributes"]["hansa.repeated_size"] == 408
     assert service.list(owner, imported)["traces"][0]["content"] == "withheld"
-    # A third refusal, or any other failure, is reported and never raised.
+    # Refused at every size, or any other failure: reported and never raised.
     attempts.clear()
-    service.client = Filtered(3)
+    service.client = Filtered(99)
     assert service.log_run(imported, token_hash("gw_key"), run_result(), {})["status"] == "failed"
 
 
@@ -306,3 +306,39 @@ def test_readback_cannot_confirm_a_different_trace(traced):
             raise NeatlogsError("Neatlogs log_trace failed with status 500.", 500)
     service.client = Down()
     assert service.log_run(imported, token_hash("gw_key"), run_result(), {})["status"] == "failed"
+
+
+def test_long_traces_are_sent_in_parts_under_the_endpoint_limit(traced):
+    from backend.app.tracing.service import MODEL_SPANS_PER_TRACE, parts
+    state, service, owner, imported, calls = traced
+    def span(index, kind, parent=None):
+        return {"span_id": f"{kind}-{index}", "name": kind, "kind": kind, "attributes": {}, **({"parent_span_id": parent} if parent else {})}
+    spans = []
+    for index in range(40):
+        spans.append(span(index, "LLM"))
+        spans.append(span(index, "TOOL", f"LLM-{index}"))
+    spans.insert(2 * MODEL_SPANS_PER_TRACE, span(999, "TOOL", f"LLM-{MODEL_SPANS_PER_TRACE - 1}"))
+    arguments = {"workflow_name": "hansa-investigation", "cost_usd": 0.7, "metadata": {"hansa_job": "j"}, "spans": spans}
+    split = parts(arguments)
+    assert [sum(s["kind"] == "LLM" for s in part["spans"]) for part in split] == [10, 10, 10, 10]
+    assert sum(len(part["spans"]) for part in split) == len(spans)
+    assert [part["metadata"]["hansa_part"] for part in split] == ["1/4", "2/4", "3/4", "4/4"]
+    # Cost is stated once; a tool whose caller is in the previous part loses only its parent link.
+    assert [("cost_usd" in part) for part in split] == [True, False, False, False]
+    assert split[0]["spans"][-1]["span_id"] == "TOOL-999" and split[0]["spans"][-1]["parent_span_id"] == "LLM-9"
+    assert all(s.get("parent_span_id") in {x["span_id"] for x in part["spans"]} for part in split for s in part["spans"] if "parent_span_id" in s)
+    assert parts({**arguments, "spans": spans[:10]}) == [{**arguments, "spans": spans[:10]}]
+    service.client.call = lambda tool, args: {"trace_id": "part-trace-" + args["metadata"]["hansa_part"][0] * 4}
+    logged = service.send(imported, "investigation", arguments, {"kind": "investigation"}, job_id="j")
+    assert logged["trace_ids"] == ["part-trace-1111", "part-trace-2222", "part-trace-3333", "part-trace-4444"] and logged["trace_id"] == "part-trace-1111"
+    assert [t["part"] for t in service.list(owner, imported)["traces"]][::-1] == ["1/4", "2/4", "3/4", "4/4"]
+    # A part the endpoint refuses even without text is halved until it is accepted.
+    sent = []
+    def picky(tool, args):
+        sent.append(len(args["spans"]))
+        if len(args["spans"]) > 6:
+            raise NeatlogsError("Neatlogs log_trace failed with status 403.", 403)
+        return {"trace_id": f"half-trace-{len(sent):04d}"}
+    service.client.call = picky
+    halves = service.send(imported, "investigation", {**arguments, "spans": spans[:20]}, {"kind": "investigation"}, job_id="k")
+    assert halves["status"] == "queued" and len(halves["trace_ids"]) == 4 and sent.count(5) == 4 and sent.count(20) == 3

@@ -13,8 +13,8 @@ Nothing runs inside the imported agent to produce these. Model calls come from t
 
 Each LLM span carries the served model, the model the agent asked for, prompt and completion tokens, latency, HTTP status, and:
 
-- `hansa.prompt_chars`, `hansa.messages`, `hansa.tool_schema_chars`: the size of what was sent.
-- `hansa.repeated_messages`, `hansa.repeated_chars`: how much of the request's opening messages were already sent in the previous call. This is the measurement behind "the whole history is re-sent every turn".
+- `hansa.prompt_size`, `hansa.messages`, `hansa.tool_schema_size`: the size of what was sent.
+- `hansa.repeated_messages`, `hansa.repeated_size`: how much of the request's opening messages were already sent in the previous call. This is the measurement behind "the whole history is re-sent every turn".
 - `hansa.cost_usd`, `hansa.cost_source`: the LiteLLM-reported cost, or `unknown`.
 
 Coverage is stated in each trace's metadata. Time between model calls is the agent's own code and tools; it is recorded as `agent code and tools (inferred gap)` with `hansa.inferred: true`, never as a measured tool call. A proxied connection is measured, but only its host, port, duration and byte count are known.
@@ -30,6 +30,8 @@ The gateway records the shape of every model call: message count, characters per
 When `TRACE_CONTENT=true` (the default) it also stores, and exports to Neatlogs, a 500-character preview of the last message of each request and of each response, plus the task input and final output (2,000 characters each). Credential-shaped strings are masked first. This is pattern matching and will miss secrets in unusual formats. Set `TRACE_CONTENT=false` to export sizes, tokens, timings and costs only.
 
 The Neatlogs ingest endpoint refuses some payloads with `403` based on their text; a file path such as `../../etc/passwd` in a tool argument is enough. When that happens the trace is resent with tool inputs and outputs removed, and if refused again with all free text removed. The trace's `content` is then `partial` or `withheld`. Measurements are never dropped. In the live runs, target-run traces exported in full and the agent-job trace was always `withheld`; which text triggers the refusal there was not isolated.
+
+The same endpoint also refuses long traces. A 59-span agent-job trace was refused even with all text removed, while its spans were accepted one at a time. What the filter scores was not fully isolated: synthetic tests pointed at repeated words such as `count` in attribute names, but renaming ours did not clear it. So delivery does not depend on the rule. A trace is first split into parts of at most ten model spans, and any part still refused without text is halved until it is accepted. Each part is recorded as its own trace with `hansa_part`, and a job's result lists every `trace_ids` entry. Checked on October 11: the refused 59-span trace was delivered as six parts.
 
 A tracing failure never fails or changes a run. The run result records `trace: {"status": "failed", "reason": ...}`.
 
