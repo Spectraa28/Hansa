@@ -2,15 +2,25 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { Navigate, useNavigate } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 import { api, ApiError } from './api'
 import type { Providers, Session } from './api'
+
+// Codes the API sends back when Google or GitHub sign-in fails.
+const providerErrors: Record<string, string> = {
+  email_in_use: 'That email already has a Hansa account under a different sign-in. Use the one you signed up with (GitHub or Google).',
+  cancelled: 'Sign-in was cancelled or expired. Try again.',
+  provider: 'Could not reach the sign-in provider. Try again in a moment.',
+  identity: 'The provider did not return a usable account. Try again.',
+}
 
 export default function SignIn({ session }: { session: UseQueryResult<Session | null, Error> }) {
   const providers = useQuery({ queryKey: ['providers'], queryFn: ({ signal }) => api<Providers>('/auth/providers', { signal }) })
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [submitting, setSubmitting] = useState(false)
+  const [params] = useSearchParams()
+  const provider = providerErrors[params.get('error') || '']
   const [error, setError] = useState('')
 
   async function signIn(event: FormEvent<HTMLFormElement>) {
@@ -37,17 +47,18 @@ export default function SignIn({ session }: { session: UseQueryResult<Session | 
   if (session.data) return <Navigate to="/app" replace />
   return (
     <main className="page max-w-lg">
-      <h1 className="page-title">Sign in to Hansa</h1>
-      <p className="mt-3 text-muted">Continue to your imported repositories.</p>
-      <section aria-label="Sign-in methods" className="mt-8 rounded-card border border-line bg-surface p-6 sm:p-8">
+      <h1 className="page-title">Get your receipts.</h1>
+      <p className="mt-4 text-[17px] text-muted">Sign in to import an agent and see where it overspends.</p>
+      <section aria-label="Sign-in methods" className="slab mt-10 p-6 pt-8 sm:p-8 sm:pt-9"><span className="slab-tab">sign in</span>
+        {provider && <p role="alert" className="mb-6 rounded-control border-2 border-ink bg-waste px-4 py-3 text-[14px] font-medium">{provider}</p>}
         {session.isPending || providers.isPending ? <p role="status">Checking sign-in methods…</p>
           : session.isError || providers.isError ? <div role="alert"><p>Could not load sign-in. Please try again.</p><button className="button-secondary mt-4" onClick={() => { void session.refetch(); void providers.refetch() }}>Try again</button></div>
           : providers.data && <>
             <div className="flex flex-col gap-3">
-              {providers.data.github && <a href="/auth/github/login" className="button-primary">Continue with GitHub</a>}
+              {providers.data.github && <a href="/auth/github/login" className="button-primary min-h-14 text-[16px]">Continue with GitHub</a>}
               {providers.data.google && <a href="/auth/google/login" className="button-secondary">Continue with Google</a>}
             </div>
-            {providers.data.email && <form onSubmit={signIn} className={providers.data.github || providers.data.google ? 'mt-6 border-t border-line pt-6' : ''}>
+            {providers.data.email && <form onSubmit={signIn} className={providers.data.github || providers.data.google ? 'mt-7 border-t-2 border-dashed border-ink pt-6' : ''}>
               <label className="block text-[13px] font-medium" htmlFor="email">Email</label>
               <input className="field mt-2" id="email" name="email" type="email" autoComplete="username" maxLength={254} required />
               <label className="mt-4 block text-[13px] font-medium" htmlFor="password">Password</label>

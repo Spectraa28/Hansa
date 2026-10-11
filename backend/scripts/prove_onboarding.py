@@ -9,15 +9,15 @@ import shutil
 import time
 import uuid
 
-from backend.app.agent.service import AgentService
-from backend.app.config import Settings, ROOT
-from backend.app.database import Database
-from backend.app.gateway.service import GatewayService
-from backend.app.github.service import GitHubService
-from backend.app.inspection.schemas import ConfirmInput
-from backend.app.inspection.service import InspectionService
-from backend.app.runner.service import RunnerService
-from backend.app.tracing.service import TraceService
+from app.agent.service import AgentService
+from app.config import Settings, ROOT, BACKEND
+from app.database import Database
+from app.gateway.service import GatewayService
+from app.github.service import GitHubService
+from app.inspection.schemas import ConfirmInput
+from app.inspection.service import InspectionService
+from app.runner.service import RunnerService
+from app.tracing.service import TraceService
 
 
 def main():
@@ -37,7 +37,7 @@ def main():
     agent = AgentService(settings, database, runner, gateway)
     agent.tracer = runner.tracer
     owner, import_id = str(uuid.uuid4()), str(uuid.uuid4())
-    source = ROOT / "examples" / args.example
+    source = BACKEND / "examples" / args.example
     files = sorted(p for p in source.rglob("*") if p.is_file() and "__pycache__" not in p.parts)
     sha = hashlib.sha1(b"".join(p.read_bytes() for p in files)).hexdigest()
     snapshot = github.source_path(owner, import_id)

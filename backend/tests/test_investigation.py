@@ -5,15 +5,15 @@ import json
 from fastapi import HTTPException
 import pytest
 
-from backend.app.agent.investigation import CATEGORIES, InvestigationTools, SYSTEM, toolset
-from backend.app.agent.service import TOOLS, JOB_LOCK
-from backend.app.runner.baseline import measured
-from backend.app.sessions import token_hash
-from backend.app.tracing.neatlogs import NeatlogsError
-from backend.tests.test_agent import call, finished
-from backend.tests.test_inspection import imported_client
-from backend.tests.test_runner import configured_runner
-from backend.tests.test_tracing import traced, run_result
+from app.agent.investigation import CATEGORIES, InvestigationTools, SYSTEM, toolset
+from app.agent.service import TOOLS, JOB_LOCK
+from app.runner.baseline import measured
+from app.sessions import token_hash
+from app.tracing.neatlogs import NeatlogsError
+from tests.test_agent import call, finished
+from tests.test_inspection import imported_client
+from tests.test_runner import configured_runner
+from tests.test_tracing import traced, run_result
 
 
 @pytest.fixture

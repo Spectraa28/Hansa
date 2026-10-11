@@ -6,9 +6,9 @@ from fastapi.testclient import TestClient
 from fastapi import HTTPException
 import pytest
 
-from backend.app.config import Settings
-from backend.app.main import create_app
-from backend.app.inspection.scanner import MAX_FILE_BYTES, scan
+from app.config import Settings
+from app.main import create_app
+from app.inspection.scanner import MAX_FILE_BYTES, scan
 
 SHA = "a" * 40
 
@@ -153,7 +153,7 @@ def test_deletion_removes_saved_findings(imported_client):
 
 def test_model_picker_persists_and_mints_owner_scoped_fixed_key(imported_client):
     import time
-    from backend.app.sessions import token_hash
+    from app.sessions import token_hash
 
     client, import_id, headers = imported_client
     state = client.app.app.state

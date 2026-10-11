@@ -72,8 +72,8 @@ function StageForm({ kind, data, session, preview, busy, disabled, onStarted, re
     } finally { setPending(false) }
   }
 
-  return <section aria-label="Start a stage" className="mb-6 rounded-card border border-line bg-surface p-6">
-    <h2 className="text-lg font-semibold">{stageLabels[kind]}</h2>
+  return <section aria-label="Start a stage" className="slab mb-9 p-6 pt-8 md:p-8">
+    <span className="slab-tab">start</span><h2 className="font-display text-[28px] font-[760] tracking-[-.03em]">{stageLabels[kind]}</h2>
     <p className="mt-2 text-[13px] text-muted">Review the spend cap before starting. This launches model calls{kind === 'investigation' ? '.' : ' and isolated task runs.'}</p>
     <form onSubmit={event => void start(event)} className="mt-5">
       {kind === 'baseline' ? <>
@@ -109,7 +109,7 @@ export default function StageRunner({ data, step, session, preview, disabled, re
   const kind = kinds[step]
   const busy = Boolean(job) && !finished
   return <>
-    {busy && <p role="status" className="mb-4 text-[13px]">A job is already running. Reattached to its live feed.</p>}
+    {busy && <p role="status" className="mb-4 flex items-center gap-2 font-mono text-[13px]"><span className="live-dot" /> A job is running. Live feed below.</p>}
     {kind && !busy && <StageForm key={`${kind}:${step === 'fix' ? data.investigation?.job_id || '' : ''}`} kind={kind} data={data} session={session} preview={preview} busy={busy} disabled={disabled} onStarted={onStarted} refresh={refresh} />}
     {job && session && !preview && <RunFeed key={job.job_id} job={job} importId={data.import.import_id} ownerId={session.user.id} onFinished={onFinished} />}
   </>

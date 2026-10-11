@@ -5,7 +5,9 @@ from urllib.parse import urlsplit
 from starlette.config import Config
 
 
+# ROOT is the repository: .env and the ignored var/ runtime data live there, beside backend/ and frontend/.
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND = Path(__file__).resolve().parents[1]
 
 
 @dataclass(frozen=True)
@@ -34,6 +36,7 @@ class Settings:
     import_timeout_seconds: int = 120
     litellm_base_url: str = ""
     runner_internet: bool = True
+    runner_parallel: int = 3
     agent_model: str = "claude-sonnet-4.6"
     agent_context: str = "managed"
     neatlogs_mcp_url: str = "https://ingest.neatlogs.com/mcp"
@@ -42,6 +45,8 @@ class Settings:
     litellm_api_key: str = field(default="", repr=False)
 
     def __post_init__(self):
+        if not 1 <= self.runner_parallel <= 8:
+            raise ValueError("RUNNER_PARALLEL must be between 1 and 8.")
         if self.agent_context not in {"managed", "naive"}:
             raise ValueError("AGENT_CONTEXT must be managed or naive.")
         if not self.neatlogs_mcp_url.startswith("https://"):
@@ -125,6 +130,7 @@ class Settings:
             import_timeout_seconds=config("IMPORT_TIMEOUT_SECONDS", cast=int, default=120),
             litellm_base_url=config("LITELLM_BASE_URL", default="").rstrip("/"),
             runner_internet=config("RUNNER_INTERNET", cast=bool, default=True),
+            runner_parallel=config("RUNNER_PARALLEL", cast=int, default=3),
             agent_model=config("AGENT_MODEL", default="claude-sonnet-4.6"),
             agent_context=config("AGENT_CONTEXT", default="managed"),
             neatlogs_mcp_url=config("NEATLOGS_MCP_URL", default="https://ingest.neatlogs.com/mcp"),

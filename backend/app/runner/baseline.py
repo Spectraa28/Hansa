@@ -4,6 +4,7 @@ import json
 import time
 import uuid
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException
 
@@ -305,21 +306,35 @@ class BaselineService:
         limits = contract["limits"]
         calls, cost, tokens, outside = 0, 0.0, 0, 0
         started = time.monotonic()
-        for index, task in enumerate(contract["tasks"], 1):
-            task_report = {"task_id": str(index), "name": task["name"], "input": task["input"], "runs": []}
-            report["tasks"].append(task_report)
-            for repetition in range(1, report["repetitions"] + 1):
-                current = self.confirmed(user_id, imported)
-                if current["version"] != report["contract_version"] or current["configuration_revision"] != report["configuration_revision"]:
-                    raise HTTPException(409, "Contract or configuration changed during baseline; partial results are saved.")
-                remaining = limits["max_runtime_seconds"] - (time.monotonic() - started)
-                if remaining < 0.1 or calls > limits["max_model_calls"] or cost > limits["max_spend_usd"] or tokens > limits["max_tokens"] or outside > limits["max_tool_calls"]:
-                    raise ValueError("Contract execution budget exhausted; partial results are saved.")
-                result = self.runner.run(user_id, imported, build["build_id"], task["input"],
+        jobs = [(index, task, repetition) for index, task in enumerate(contract["tasks"], 1)
+                for repetition in range(1, report["repetitions"] + 1)]
+        reports, width = {}, self.runner.settings.runner_parallel
+        # Runs are independent, so they go a few at a time. Limits are checked between waves: a wave
+        # may overshoot a budget by what its own runs spend, never by more.
+        for offset in range(0, len(jobs), width):
+            wave = jobs[offset:offset + width]
+            current = self.confirmed(user_id, imported)
+            if current["version"] != report["contract_version"] or current["configuration_revision"] != report["configuration_revision"]:
+                raise HTTPException(409, "Contract or configuration changed during baseline; partial results are saved.")
+            remaining = limits["max_runtime_seconds"] - (time.monotonic() - started)
+            if remaining < 0.1 or calls > limits["max_model_calls"] or cost > limits["max_spend_usd"] or tokens > limits["max_tokens"] or outside > limits["max_tool_calls"]:
+                raise ValueError("Contract execution budget exhausted; partial results are saved.")
+
+            def one(job, remaining=remaining, calls=calls, cost=cost):
+                index, task, repetition = job
+                return self.runner.run(user_id, imported, build["build_id"], task["input"],
                     adapter_code=adapter_code, timeout_seconds=min(300, remaining),
                     max_calls=limits["max_model_calls"] - calls, max_spend_usd=limits["max_spend_usd"] - cost,
                     memory_mb=1024, pids=128, internet=self.runner.settings.runner_internet,
                     labels={"kind": "baseline", "baseline_id": report["baseline_id"], "task_id": str(index), "repetition": repetition})
+
+            with ThreadPoolExecutor(max_workers=len(wave)) as pool:
+                results = list(pool.map(one, wave))
+            for (index, task, repetition), result in zip(wave, results):
+                if index not in reports:
+                    reports[index] = {"task_id": str(index), "name": task["name"], "input": task["input"], "runs": []}
+                    report["tasks"].append(reports[index])
+                task_report = reports[index]
                 run = {**measured(result, True, None), **score_task(result["output"], task, contract, result["stop_reason"]),
                        "repetition": repetition, "output": result["output"], "trace": result.get("trace")}
                 task_report["runs"].append(run)
@@ -332,11 +347,12 @@ class BaselineService:
                 cost += run["cost_usd"] or 0
                 tokens += (run["tokens_in"] or 0) + (run["tokens_out"] or 0)
                 outside += run["external_calls"] + run["external_denied"]
-                if run["unknown_cost_calls"] or run["unknown_usage_calls"]:
-                    raise ValueError("Unknown model cost or usage; no further runs admitted. Partial results are saved.")
-                if tokens > limits["max_tokens"] or outside > limits["max_tool_calls"] or cost > limits["max_spend_usd"]:
-                    raise ValueError("Recorded contract budget exceeded; partial results are saved.")
-            self.event(report["baseline_id"], "task", {"task_id": str(index), "status": task_report["status"], "reason": task_report["reason"]})
+                if repetition == report["repetitions"]:
+                    self.event(report["baseline_id"], "task", {"task_id": str(index), "status": task_report["status"], "reason": task_report["reason"]})
+            if any(run["unknown_cost_calls"] or run["unknown_usage_calls"] for task_report in reports.values() for run in task_report["runs"]):
+                raise ValueError("Unknown model cost or usage; no further runs admitted. Partial results are saved.")
+            if tokens > limits["max_tokens"] or outside > limits["max_tool_calls"] or cost > limits["max_spend_usd"]:
+                raise ValueError("Recorded contract budget exceeded; partial results are saved.")
         report.update(status="completed", total=len(report["tasks"]),
                       passed=sum(task["status"] == "passed" for task in report["tasks"]),
                       failed=sum(task["status"] == "failed" for task in report["tasks"]),
@@ -356,20 +372,28 @@ class BaselineService:
             adapter = db.execute("SELECT * FROM import_adapters WHERE import_id=?", (imported,)).fetchone()
         if adapter is None or adapter["sha256"] != baseline["adapter_sha256"]:
             raise HTTPException(409, "The stored adapter changed since the baseline. Run a new baseline.")
-        limits, tasks = contract["limits"], []
-        for index, task in enumerate(contract["tasks"], 1):
-            if task_ids and str(index) not in task_ids:
-                continue
-            runs = []
-            for repetition in range(1, repetitions + 1):
-                result = self.runner.run(user_id, imported, baseline["build"]["build_id"], task["input"],
-                    adapter_code=adapter["content"], timeout_seconds=min(300, limits["max_runtime_seconds"]),
-                    max_calls=limits["max_model_calls"], max_spend_usd=limits["max_spend_usd"], memory_mb=1024, pids=128,
-                    internet=self.runner.settings.runner_internet, overlay=overlay,
-                    labels={"kind": "candidate", **(labels or {}), "task_id": str(index), "repetition": repetition})
-                runs.append({**measured(result, True, None), **score_task(result["output"], task, contract, result["stop_reason"]),
-                             "repetition": repetition, "output": result["output"], "trace": result.get("trace"),
-                             "stderr_tail": result.get("stderr_tail", "")[-1500:], "candidate_sha256": result.get("candidate_sha256")})
+        limits = contract["limits"]
+        jobs = [(index, task, repetition) for index, task in enumerate(contract["tasks"], 1)
+                if not task_ids or str(index) in task_ids for repetition in range(1, repetitions + 1)]
+
+        def one(job):
+            index, task, repetition = job
+            result = self.runner.run(user_id, imported, baseline["build"]["build_id"], task["input"],
+                adapter_code=adapter["content"], timeout_seconds=min(300, limits["max_runtime_seconds"]),
+                max_calls=limits["max_model_calls"], max_spend_usd=limits["max_spend_usd"], memory_mb=1024, pids=128,
+                internet=self.runner.settings.runner_internet, overlay=overlay,
+                labels={"kind": "candidate", **(labels or {}), "task_id": str(index), "repetition": repetition})
+            return {**measured(result, True, None), **score_task(result["output"], task, contract, result["stop_reason"]),
+                    "repetition": repetition, "output": result["output"], "trace": result.get("trace"),
+                    "stderr_tail": result.get("stderr_tail", "")[-1500:], "candidate_sha256": result.get("candidate_sha256")}
+
+        # Independent runs overlap, up to the runner's own limit; results come back in task order.
+        with ThreadPoolExecutor(max_workers=self.runner.settings.runner_parallel) as pool:
+            results = list(pool.map(one, jobs))
+        tasks, grouped = [], {}
+        for (index, task, _), run in zip(jobs, results):
+            grouped.setdefault(index, (task, []))[1].append(run)
+        for index, (task, runs) in grouped.items():
             report = {"task_id": str(index), "name": task["name"], **combine(runs)}
             report["runs"] = runs
             tasks.append(report)

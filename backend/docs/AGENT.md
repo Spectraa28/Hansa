@@ -6,7 +6,7 @@ Status: onboarding and read-only baseline investigation are implemented. On Octo
 
 Most agents do not read a task from stdin and print JSON, so the runner cannot execute them as imported. Onboarding closes that gap. The agent reads the repository, works out how the target is started, writes a small adapter file, runs it in the sandbox, reads the failure, and corrects the adapter until a run completes or it reports a specific blocker.
 
-The model decides what to read, what to write and how to respond to a failed run. Controller code in [`backend/app/agent/service.py`](backend/app/agent/service.py) decides what it may touch.
+The model decides what to read, what to write and how to respond to a failed run. Controller code in [`backend/app/agent/service.py`](../app/agent/service.py) decides what it may touch.
 
 | Tool | Effect |
 | --- | --- |
@@ -27,7 +27,7 @@ Investigation shares this loop, metered gateway path, 4096-output-token request 
 
 `POST /github/imports/{id}/investigation` accepts `{}` for the latest baseline or `{"baseline_id":"...","max_spend_usd":1.0}` for a particular report and lower threshold. It requires a completed, owner-scoped baseline, confirmed current configuration, and the same fixed SHA/source digest. A stale report fails before model calls. It returns `202`; status, findings, usage, and events use the existing `agent-jobs` endpoints.
 
-The user's long investigation system prompt lives in [`backend/app/agent/investigation_prompt.md`](backend/app/agent/investigation_prompt.md) and is loaded unchanged at startup. Finishing now requires all eight categories exactly once: Context, Memory, Orchestration, Model choice, Output, Tools, Latency and Wasted work. Every coverage entry records `finding` or `checked, nothing found`, an observation, already-read run IDs and source lines. Finding entries reference saved finding IDs; every saved finding must be covered. The controller validates provenance, not the truth or exhaustiveness of a negative conclusion. Coverage is persisted and emits a `coverage` event. Historical investigations are not retroactively marked covered.
+The user's long investigation system prompt lives in [`backend/app/agent/investigation_prompt.md`](../app/agent/investigation_prompt.md) and is loaded unchanged at startup. Finishing now requires all eight categories exactly once: Context, Memory, Orchestration, Model choice, Output, Tools, Latency and Wasted work. Every coverage entry records `finding` or `checked, nothing found`, an observation, already-read run IDs and source lines. Finding entries reference saved finding IDs; every saved finding must be covered. The controller validates provenance, not the truth or exhaustiveness of a negative conclusion. Coverage is persisted and emits a `coverage` event. Historical investigations are not retroactively marked covered.
 
 The agent starts with per-task numbers, then inspects the expensive runs and reads the responsible code. Its read-only tools are:
 
@@ -88,7 +88,7 @@ All require the owner's session; the mutation uses the existing CSRF check and r
 
 Live run, reproducible with `AGENT_MODEL=claude-haiku uv run python -m scripts.prove_onboarding`:
 
-- Target: [`examples/web_lookup`](examples/web_lookup), a labelled fixture written for this test: an interactive terminal chat with one live web-fetch tool, using the OpenAI SDK. It is not an agent we did not write.
+- Target: [`examples/web_lookup`](../examples/web_lookup), a labelled fixture written for this test: an interactive terminal chat with one live web-fetch tool, using the OpenAI SDK. It is not an agent we did not write.
 - The agent read six files, wrote a 33-line adapter and its first smoke run completed. It used 5 model calls (16,156 input and 1,148 output tokens, $0.024 recorded); the target's smoke run cost $0.0008.
 - The stored adapter was then run on a question requiring the web tool: 2 model calls, one connection to `example.com` through the egress sidecar, correct page title returned.
 
@@ -118,7 +118,7 @@ Status: implemented, and run live twice on the Swarm airline example on October 
 
 `POST /github/imports/{id}/optimization` starts a third job kind. It takes either a saved finding (`investigation_job_id` and `finding_id`) or a `goal` in the user's words, and works against the completed contract baseline that finding was measured on.
 
-The agent edits a private copy of the snapshot. The imported source on disk is never written to. Its tools, defined in [`backend/app/agent/optimization.py`](backend/app/agent/optimization.py):
+The agent edits a private copy of the snapshot. The imported source on disk is never written to. Its tools, defined in [`backend/app/agent/optimization.py`](../app/agent/optimization.py):
 
 | Tool | Effect |
 | --- | --- |
@@ -131,7 +131,7 @@ The agent edits a private copy of the snapshot. The imported source on disk is n
 
 A candidate may change at most ten text files and cannot touch dependency manifests, hidden files or anything outside the snapshot. It runs with the baseline's adapter, dependency image, model, task inputs and scoring; only the source differs.
 
-The comparison and the accept decision are controller code in [`backend/app/runner/baseline.py`](backend/app/runner/baseline.py) (`compare`):
+The comparison and the accept decision are controller code in [`backend/app/runner/baseline.py`](../app/runner/baseline.py) (`compare`):
 
 - A task **regressed** if its automatic checks passed in the baseline and do not pass now. A task that failed before and fails the same way is not a regression.
 - A metric **improved** only if the candidate's total is lower than the sum of each task's best baseline repetition, so a saving has to exceed the variation the baseline itself showed. With one baseline repetition no variation was measured, and the result says so.

@@ -17,6 +17,10 @@ from .providers import provider_client, provider_identity
 router = APIRouter(prefix="/auth", tags=["OAuth"])
 
 
+def failed(request: Request, code: str):
+    return RedirectResponse(f"{request.app.state.settings.frontend_origin.rstrip('/')}/sign-in?error={code}", status_code=303)
+
+
 @router.get("/{provider}/login")
 async def oauth_login(provider: Literal["google", "github"], request: Request):
     client = provider_client(request, provider)
@@ -24,7 +28,8 @@ async def oauth_login(provider: Literal["google", "github"], request: Request):
     request.session.clear()
     redirect_uri = f"{request.app.state.settings.app_url}/auth/{provider}/callback"
     try:
-        return await client.authorize_redirect(request, redirect_uri)
+        # Ask which account every time; otherwise signing out and back in silently reuses the last one.
+        return await client.authorize_redirect(request, redirect_uri, prompt="select_account")
     except (OAuthError, httpx.HTTPError):
         request.session.clear()
         raise HTTPException(502, "Could not contact the sign-in provider. Try again.") from None
@@ -43,13 +48,14 @@ async def oauth_callback(provider: Literal["google", "github"], request: Request
         response = RedirectResponse(f"{request.app.state.settings.frontend_origin.rstrip('/')}/app", status_code=303)
         await run_in_threadpool(establish_session, request, user, response)
         return response
+    # A browser lands here, so failures go back to the sign-in page as a fixed code it can explain.
     except (OAuthError, JoseError):
-        raise HTTPException(400, "Sign-in was cancelled, expired, or invalid. Start sign-in again.") from None
+        return failed(request, "cancelled")
     except httpx.HTTPError:
-        raise HTTPException(502, "Could not verify your identity with the provider. Try again.") from None
+        return failed(request, "provider")
     except (ValidationError, ValueError, KeyError, TypeError):
-        raise HTTPException(502, "The provider returned an invalid identity.") from None
+        return failed(request, "identity")
     except EmailInUse:
-        raise HTTPException(409, "This email already has an account. Use its existing sign-in method; account linking is not enabled yet.") from None
+        return failed(request, "email_in_use")
     finally:
         request.session.clear()

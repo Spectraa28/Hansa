@@ -8,13 +8,13 @@ from fastapi import HTTPException
 
 import pytest
 
-from backend.app.runner.baseline import score, combine, score_task, field_reason, equal_json
-from backend.app.contracts.schemas import ContractInput, ConfirmInput
-from backend.app.agent.service import JOB_LOCK
-from backend.tests.test_contracts import content
-from backend.app.runner import airline_adapter
-from backend.tests.test_runner import configured_runner
-from backend.tests.test_inspection import imported_client
+from app.runner.baseline import score, combine, score_task, field_reason, equal_json
+from app.contracts.schemas import ContractInput, ConfirmInput
+from app.agent.service import JOB_LOCK
+from tests.test_contracts import content
+from app.runner import airline_adapter
+from tests.test_runner import configured_runner
+from tests.test_inspection import imported_client
 
 
 @pytest.mark.parametrize("output, expected, passed, actual", [
@@ -265,7 +265,7 @@ def test_baseline_failure_keeps_partial_results_and_releases_lock(contract_basel
 
 def test_live_fixture_contract_is_complete_and_bounded():
     from scripts.prove_baseline import fixture_contract
-    from backend.app.contracts.schemas import missing_requirements
+    from app.contracts.schemas import missing_requirements
     contract = ContractInput.model_validate(fixture_contract("a" * 32)).model_dump(mode="json")
     assert not missing_requirements(contract)
     assert len(contract["tasks"]) == 3 and contract["limits"]["max_spend_usd"] == 0.12

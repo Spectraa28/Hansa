@@ -42,7 +42,7 @@ def connect(request: Request, user: dict = Depends(require_csrf)):
 def callback(request: Request, state: Annotated[str, Query(min_length=1, max_length=128)],
              code: Annotated[str | None, Query(max_length=512)] = None, user: dict = Depends(current_session)):
     request.app.state.github.complete_connection(user["id"], request.cookies[SESSION_COOKIE], state, code)
-    return RedirectResponse(f"{request.app.state.settings.app_url}/github/connection", status_code=303)
+    return RedirectResponse(f"{request.app.state.settings.frontend_origin.rstrip('/')}/app/new", status_code=303)
 
 
 @router.get("/installations")

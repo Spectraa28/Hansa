@@ -2,8 +2,8 @@
 import argparse
 import json
 
-from backend.app.main import create_app
-from backend.app.config import Settings
+from app.main import create_app
+from app.config import Settings
 
 
 def main():

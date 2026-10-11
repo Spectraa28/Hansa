@@ -2,11 +2,11 @@
 
 Prepared: October 10, 2026. Working product description; final branding is undecided.
 
-Status: the prior 37 authentication/import tests passed after user authorization on October 10, 2026. Local authentication startup and real GitHub sign-in succeeded. The App key was saved and validated; live App authorization and fixed-commit imports remain unverified. Repository inspection and a testing UI are now written, with new tests unrun pending authorization. See [README.md](README.md), [GITHUB_IMPORT.md](GITHUB_IMPORT.md), and [REPOSITORY_INSPECTION.md](REPOSITORY_INSPECTION.md). Google sign-in, optimizer, agent sandbox, hosted execution, measured improvement, and customer validation remain unimplemented or unverified. Read [hackathon.md](hackathon.md) for event rules and submission requirements.
+Status: the prior 37 authentication/import tests passed after user authorization on October 10, 2026. Local authentication startup and real GitHub sign-in succeeded. The App key was saved and validated; live App authorization and fixed-commit imports remain unverified. Repository inspection and a testing UI are now written, with new tests unrun pending authorization. See [README.md](README.md), [GITHUB_IMPORT.md](backend/docs/GITHUB_IMPORT.md), and [REPOSITORY_INSPECTION.md](backend/docs/REPOSITORY_INSPECTION.md). Google sign-in, optimizer, agent sandbox, hosted execution, measured improvement, and customer validation remain unimplemented or unverified. Read [hackathon.md](hackathon.md) for event rules and submission requirements.
 
-Build preparation: the user has requested implementation and will supply paid model API access later. Authentication and import code exist; bounded static inspection and configuration confirmation with a simple testing UI are now written. This step is untested pending user authorization; see [REPOSITORY_INSPECTION.md](REPOSITORY_INSPECTION.md). The saved App key was validated and the connector enabled, but live connection/import testing is deferred. Read [SPONSORS.md](SPONSORS.md) for the initial integration plan. Agent execution and sponsor outputs remain unverified.
+Build preparation: the user has requested implementation and will supply paid model API access later. Authentication and import code exist; bounded static inspection and configuration confirmation with a simple testing UI are now written. This step is untested pending user authorization; see [REPOSITORY_INSPECTION.md](backend/docs/REPOSITORY_INSPECTION.md). The saved App key was validated and the connector enabled, but live connection/import testing is deferred. Read [SPONSORS.md](SPONSORS.md) for the initial integration plan. Agent execution and sponsor outputs remain unverified.
 
-Architecture discussion: [ARCHITECTURE.md](ARCHITECTURE.md) records the proposed Python/FastAPI backend, separate worker, execution boundaries, durable accounting, automatic setup journey, and later React/TypeScript frontend. It is a discussion draft; dependency versions and runtime behavior remain unverified.
+Architecture discussion: [ARCHITECTURE.md](backend/docs/ARCHITECTURE.md) records the proposed Python/FastAPI backend, separate worker, execution boundaries, durable accounting, automatic setup journey, and later React/TypeScript frontend. It is a discussion draft; dependency versions and runtime behavior remain unverified.
 
 ## 1. Product definition
 
@@ -55,7 +55,7 @@ If the implementation only displays expensive calls, recommends shorter prompts 
 
 ## 4. Inputs and onboarding
 
-Implemented task-contract stage: [TASK_CONTRACT.md](TASK_CONTRACT.md) defines development tasks, correctness criteria, saved resource limits, version history, and configuration staleness. All 56 backend tests passed; contract browser interactions and agent execution remain unverified. Requirements are saved declarations, not measured correctness or enforced execution guarantees.
+Implemented task-contract stage: [TASK_CONTRACT.md](backend/docs/TASK_CONTRACT.md) defines development tasks, correctness criteria, saved resource limits, version history, and configuration staleness. All 56 backend tests passed; contract browser interactions and agent execution remain unverified. Requirements are saved declarations, not measured correctness or enforced execution guarantees.
 
 Code access alone is insufficient. A supported workflow must provide:
 

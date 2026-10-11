@@ -55,6 +55,16 @@ def test_logout_requires_csrf_and_revokes_the_session(client):
     assert client.get("/auth/me").status_code == 401
 
 
+def test_delete_account_requires_csrf_and_removes_the_user(client):
+    response = register(client)
+    assert client.delete("/auth/me").status_code == 403
+    assert client.delete("/auth/me", headers={"X-CSRF-Token": response.json()["csrf_token"]}).status_code == 204
+    assert client.get("/auth/me").status_code == 401
+    with client.app.app.state.database.connect() as db:
+        assert db.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0
+        assert db.execute("SELECT COUNT(*) FROM sessions").fetchone()[0] == 0
+
+
 def test_login_rotates_the_session_and_rejects_bad_passwords(client):
     register(client)
     old_session = client.cookies["ouro_session"]
@@ -132,8 +142,8 @@ def test_github_requests_identity_scopes_and_rejects_invalid_oauth_state(tmp_pat
         assert set(query["scope"][0].split()) == {"read:user", "user:email"}
         assert query["code_challenge_method"] == ["S256"]
         assert "state" in query
-        response = client.get("/auth/github/callback?state=incorrect&code=test-code")
-        assert response.status_code == 400
+        response = client.get("/auth/github/callback?state=incorrect&code=test-code", follow_redirects=False)
+        assert response.status_code == 303 and response.headers["location"].endswith("/sign-in?error=cancelled")
         assert client.get("/auth/me").status_code == 401
 
 

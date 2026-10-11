@@ -3,14 +3,14 @@ import json
 
 import pytest
 
-from backend.app.config import ROOT
-from backend.app.contracts.schemas import ContractInput, missing_requirements
-from backend.app.runner.baseline import score_task
+from app.config import BACKEND
+from app.contracts.schemas import ContractInput, missing_requirements
+from app.runner.baseline import score_task
 from scripts.prove_airline_conversations import stage_cost
 
 
 def test_six_airline_conversations_score_executed_sequence_and_outcome():
-    raw = json.loads((ROOT / 'examples/contracts/swarm_airline.json').read_text())
+    raw = json.loads((BACKEND / 'examples/contracts/swarm_airline.json').read_text())
     content = ContractInput.model_validate({**raw, 'configuration_revision': 'a' * 32}).model_dump()
     assert len(content['tasks']) == 6 and not missing_requirements(content)
     for task in content['tasks']:

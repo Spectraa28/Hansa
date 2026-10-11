@@ -7,10 +7,10 @@ from fastapi.testclient import TestClient
 import httpx
 import pytest
 
-from backend.app.config import Settings
-from backend.app.gateway.service import MAX_BODY_BYTES, DEFAULT_OUTPUT_TOKENS
-from backend.app.main import create_app
-from backend.app.sessions import token_hash
+from app.config import Settings
+from app.gateway.service import MAX_BODY_BYTES, DEFAULT_OUTPUT_TOKENS
+from app.main import create_app
+from app.sessions import token_hash
 
 
 REAL_KEY = "server-secret-never-expose"
@@ -56,7 +56,7 @@ def gateway(tmp_path, monkeypatch):
     def mocked_client(**kwargs):
         return original(transport=httpx.MockTransport(respond), **kwargs)
 
-    monkeypatch.setattr("backend.app.gateway.service.httpx.AsyncClient", mocked_client)
+    monkeypatch.setattr("app.gateway.service.httpx.AsyncClient", mocked_client)
     with TestClient(create_app(settings)) as client:
         service = client.app.app.state.gateway
         key = service.mint_key("test-run", max_calls=5, max_spend_usd=1, expires_at=int(time.time()) + 3600)

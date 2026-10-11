@@ -9,9 +9,9 @@ import time
 
 import httpx
 
-from backend.app.config import ROOT, Settings
-from backend.app.database import Database
-from backend.app.sessions import SESSION_COOKIE, create_session, delete_session
+from app.config import BACKEND, ROOT, Settings
+from app.database import Database
+from app.sessions import SESSION_COOKIE, create_session, delete_session
 
 SHA = '6af0b4caf37dca4526dfd98e9fbd8ce36e7eeb22'
 TOOLS = ['transfer_to_flight_modification', 'transfer_to_lost_baggage', 'transfer_to_flight_cancel',
@@ -70,7 +70,7 @@ def main():
                     'python_version': '>=3.10', 'dependency_manifests': ['setup.cfg'], 'entrypoint': 'python examples/airline/main.py',
                     'model_provider': 'openai', 'model_id': 'gpt-4o', 'litellm_model': selected, 'approved_tools': TOOLS})
                 previous = api('GET', '/contract')
-                body = json.loads((ROOT / 'examples/contracts/swarm_airline.json').read_text())
+                body = json.loads((BACKEND / 'examples/contracts/swarm_airline.json').read_text())
                 body.update(configuration_revision=config['configuration_revision'], base_version=previous['version'])
                 contract = api('POST', '/contract', body)
                 contract = api('POST', '/contract/confirm', {'version': contract['version'], 'configuration_revision': config['configuration_revision']})

@@ -81,14 +81,14 @@ Job-wide sharing across optimizer/target keys, model permission scopes, tool acc
 
 ## One real call
 
-After configuring the server-only LiteLLM settings and starting the API per [README.md](README.md), run this from the repository root in your own terminal. The command reads server configuration locally, captures the one-time throwaway key without printing it, and mints a one-call key expiring in ten minutes. It uses the same configured database as the API. Never put the real LiteLLM key in curl. This example maps the agent's `gpt-4o` request to the user-reported `nova-micro` route; this is an instruction, not a verified live call.
+After configuring the server-only LiteLLM settings and starting the API per [README.md](../../README.md), run this from the repository root in your own terminal. The command reads server configuration locally, captures the one-time throwaway key without printing it, and mints a one-call key expiring in ten minutes. It uses the same configured database as the API. Never put the real LiteLLM key in curl. This example maps the agent's `gpt-4o` request to the user-reported `nova-micro` route; this is an instruction, not a verified live call.
 
 ```sh
 GATEWAY_KEY="$(uv run python - <<'PY'
 import time
-from backend.app.config import Settings
-from backend.app.database import Database
-from backend.app.gateway.service import GatewayService
+from app.config import Settings
+from app.database import Database
+from app.gateway.service import GatewayService
 settings = Settings.from_env()
 database = Database(settings.database_path)
 database.initialize()

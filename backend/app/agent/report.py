@@ -46,6 +46,56 @@ def payback(job, baseline):
                     "the investigation and compute. A pass is every contract task run once."}
 
 
+def handoff(job, repository):
+    """A brief the owner can paste into their own coding agent. Built only from stored results; no model call."""
+    result = job["result"]
+    accepted = result.get("decision") == "accept" and bool(result.get("patch"))
+    tried = [e for e in result.get("experiments", []) if e.get("patch")]
+    patch = result["patch"] if accepted else tried[-1]["patch"] if tried else None
+    if patch is None:
+        return None
+    comparison = result.get("comparison") or (tried[-1]["comparison"] if tried else {})
+    finding = result.get("finding") or {}
+    lines = [f"# Change for {repository}", ""]
+    if accepted:
+        lines += ["Hansa tested this change against the project's task baseline and accepted it. Apply it exactly as written.", ""]
+    else:
+        lines += [f"**This change was NOT accepted (decision: {result.get('decision') or 'none'}).** It is included for review only. "
+                  "Do not apply it as it stands. Read the reason below and resolve it first.", ""]
+    lines += ["## Why", "", str(finding.get("waste") or "No finding text was recorded."), ""]
+    if result.get("summary"):
+        lines += ["## What was measured", "", result["summary"], ""]
+    totals = comparison.get("totals") or {}
+    rows = [(label, totals.get(key) or {}) for label, key in (("Model calls", "model_calls"), ("Input tokens", "tokens_in"),
+                                                               ("Cost (USD)", "cost_usd"), ("Wall time (s)", "wall_time_seconds"))]
+    if any(row.get("baseline") is not None for _, row in rows):
+        lines += ["| Per pass of the task set | Baseline | Candidate | Change |", "| --- | --- | --- | --- |"]
+        for label, row in rows:
+            if row.get("baseline") is not None:
+                lines.append(f"| {label} | {row['baseline']:.4g} | {row['candidate']:.4g} | {row['change_percent']}% |")
+        lines.append("")
+    regressed = comparison.get("regressed_tasks") or []
+    if regressed:
+        names = {row["task_id"]: row.get("name") for row in comparison.get("tasks", [])}
+        lines += ["Tasks whose automatic checks passed before and failed with this change: "
+                  + ", ".join(f"{task_id} ({names.get(task_id)})" for task_id in regressed) + ".", ""]
+    review = comparison.get("needs_review") or []
+    if review:
+        lines += [f"Tasks {', '.join(review)} were compared on automatic checks only. A person still has to confirm their answers.", ""]
+    lines += ["## The change", "", "```diff", patch.rstrip("\n"), "```", "", "## Instructions", ""]
+    if accepted:
+        lines += ["1. Apply the diff above to the repository at the commit it was made against. Change nothing else.",
+                  "2. Do not refactor, rename or reformat surrounding code.",
+                  "3. Run the project's own tests and the task set the baseline used.",
+                  "4. If any task that passed before now fails, stop and report it instead of adjusting the task or its checks."]
+    else:
+        lines += ["1. Do not apply the diff unchanged.",
+                  "2. Reproduce the failing task above with and without the change, several times each, to see whether the change causes it.",
+                  "3. Only if the unchanged code fails the same way should the change be reconsidered, and then it must be measured again."]
+    lines += ["", "Figures are provider-reported costs for the listed tasks at one commit and model. They are not a guarantee for other inputs."]
+    return "\n".join(lines) + "\n"
+
+
 def next_step(adapter, baseline, investigation, optimizations, jobs):
     """What the owner can usefully do now. Advice for the interface; it starts nothing."""
     if any(job["status"] == "running" for job in jobs) or (baseline and baseline["status"] == "running"):
@@ -65,6 +115,15 @@ def next_step(adapter, baseline, investigation, optimizations, jobs):
         return {"action": "optimize", "endpoint": "optimization", "finding_ids": untried,
                 "reason": "Findings that have not been tested yet."}
     return {"action": "review", "reason": "Every saved finding has been tested. Review the results."}
+
+
+def active(baseline, jobs):
+    running = [job for job in jobs if job["status"] == "running"]
+    if running:
+        return {"kind": running[-1]["kind"], "job_id": running[-1]["job_id"], "events": f"agent-jobs/{running[-1]['job_id']}/events"}
+    if baseline and baseline["status"] == "running":
+        return {"kind": "baseline", "job_id": baseline["baseline_id"], "events": f"baseline-jobs/{baseline['baseline_id']}/events"}
+    return None
 
 
 def build(service, baselines, user_id, import_id):
@@ -126,6 +185,9 @@ def build(service, baselines, user_id, import_id):
         "stages": {"onboarded": adapter is not None, "baseline": bool(baseline and baseline["status"] == "completed"),
                    "investigated": investigation is not None, "optimized": bool(optimizations)},
         "next": next_step(adapter, baseline, investigation, optimizations, jobs),
+        # Lets the interface reattach to a live event feed after a reload.
+        "jobs": [{"job_id": job["job_id"], "kind": job["kind"], "status": job["status"], "created_at": job["created_at"]} for job in jobs],
+        "active": active(baseline, jobs),
         "limits": ["Results hold for the listed tasks at this commit, model and repetition count only.",
                    "Tasks marked needs_review have not had their answers confirmed by a person.",
                    "A candidate is compared on automatic checks; it is not a protected, held-out evaluation.",

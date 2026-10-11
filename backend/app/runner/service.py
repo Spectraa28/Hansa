@@ -361,6 +361,9 @@ class RunnerService:
         self.settings, self.database = settings, database
         self.inspection, self.gateway = inspection, gateway
         self.tracer = None
+        # Each run has its own containers, network, gateway key and temp directory, so runs of one job
+        # can overlap. The limit is what one small host and one model key can carry at once.
+        self.slots = threading.BoundedSemaphore(settings.runner_parallel)
 
     def configuration(self, user_id, import_id):
         result = self.inspection.get(user_id, import_id)
@@ -450,7 +453,7 @@ class RunnerService:
                 or type(cpus) not in {int, float} or not math.isfinite(cpus) or not 0.1 <= cpus <= 4
                 or type(pids) is not int or not 8 <= pids <= 256):
             raise ValueError("Invalid runner resource limits.")
-        with RUN_LOCK, tempfile.TemporaryDirectory(prefix="ouro-run-") as temporary:
+        with self.slots, tempfile.TemporaryDirectory(prefix="ouro-run-") as temporary:
             root = Path(temporary)
             config, digest = self.stage(user_id, import_id, root)
             if adapter == "stored":

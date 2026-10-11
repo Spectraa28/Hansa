@@ -16,10 +16,10 @@ from fastapi.testclient import TestClient
 import httpx
 import pytest
 
-from backend.app.config import Settings
-from backend.app.github.archive import extract_archive
-from backend.app.github.client import GitHubAPI, GitHubFailure, archive_redirect, branch_name
-from backend.app.main import create_app
+from app.config import Settings
+from app.github.archive import extract_archive
+from app.github.client import GitHubAPI, GitHubFailure, archive_redirect, branch_name
+from app.main import create_app
 
 
 SHA = "a" * 40
@@ -106,7 +106,7 @@ def github_client(tmp_path, monkeypatch):
             await asyncio.sleep(0.01)
 
     monkeypatch.setattr(GitHubAPI, "__init__", mocked_api)
-    monkeypatch.setattr("backend.app.main.import_worker", deferred_worker)
+    monkeypatch.setattr("app.main.import_worker", deferred_worker)
     with TestClient(create_app(settings)) as client:
         signup = client.post("/auth/register", json={"email": "google-or-email@example.com", "name": "Person",
                                                      "password": "a-long-test-password"})

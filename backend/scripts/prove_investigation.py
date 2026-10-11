@@ -7,8 +7,8 @@ import argparse
 import json
 import time
 
-from backend.app.config import ROOT, Settings
-from backend.app.main import create_app
+from app.config import ROOT, Settings
+from app.main import create_app
 
 
 def main():

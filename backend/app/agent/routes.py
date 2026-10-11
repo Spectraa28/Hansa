@@ -59,6 +59,21 @@ def patch(import_id: uuid.UUID, job_id: str, request: Request, user: dict = Depe
                                       "X-Hansa-Decision": str(result.get("decision") or "none")})
 
 
+@router.get("/{import_id}/agent-jobs/{job_id}/handoff")
+def handoff(import_id: uuid.UUID, job_id: str, request: Request, user: dict = Depends(current_session)):
+    """A Markdown brief for the owner's own coding agent: the reason, the measurements and the exact diff."""
+    from .report import handoff as build_handoff
+    agent = request.app.state.agent
+    job = agent.job(user["id"], str(import_id), job_id)
+    with agent.database.connect() as db:
+        repository = agent.owned(db, user["id"], str(import_id))["repository_name"]
+    text = build_handoff(job, repository) if job["kind"] == "optimization" else None
+    if text is None:
+        raise HTTPException(404, "This job has no change to hand off.")
+    return PlainTextResponse(text, media_type="text/markdown; charset=utf-8",
+                             headers={"X-Hansa-Decision": str(job["result"].get("decision") or "none")})
+
+
 @router.post("/{import_id}/onboarding", status_code=202)
 def start_onboarding(import_id: uuid.UUID, request: Request, body: StageInput | None = None, user: dict = Depends(require_csrf)):
     rate_limit(request)

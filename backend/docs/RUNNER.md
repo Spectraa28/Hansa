@@ -48,7 +48,7 @@ The key is revoked and both containers removed before a result is marked `cleanu
 
 `runner.run(..., internet=True)` lets an agent's tools reach the public web. It is off by default for direct runner calls; baselines follow `RUNNER_INTERNET` (default `true`).
 
-The execution container still has no external route. Each run gets its own internal Docker network created with `gateway_mode_ipv4=isolated`, so there is no host gateway address on it. A trusted sidecar running [`backend/app/runner/egress.py`](backend/app/runner/egress.py) is the only container also attached to the public bridge. The agent receives `HTTP_PROXY`/`HTTPS_PROXY` pointing at the sidecar and `NO_PROXY` for the loopback gateway.
+The execution container still has no external route. Each run gets its own internal Docker network created with `gateway_mode_ipv4=isolated`, so there is no host gateway address on it. A trusted sidecar running [`backend/app/runner/egress.py`](../app/runner/egress.py) is the only container also attached to the public bridge. The agent receives `HTTP_PROXY`/`HTTPS_PROXY` pointing at the sidecar and `NO_PROXY` for the loopback gateway.
 
 The sidecar accepts `CONNECT host:443`, `CONNECT host:80` and absolute `http://` requests on port 80. It resolves every destination itself (IPv4), refuses the request unless all resolved addresses are public, and connects to the address it checked. Private, loopback, link-local (including the cloud metadata address), carrier-grade NAT, multicast and reserved ranges are refused with `403`. Plain HTTP is one request per connection so each destination is re-checked.
 

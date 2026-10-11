@@ -5,14 +5,14 @@ import json
 from fastapi import HTTPException
 import pytest
 
-from backend.app.agent.optimization import OptimizationTools
-from backend.app.config import Settings
-from backend.app.runner.baseline import compare
-from backend.app.runner.service import apply_overlay
-from backend.tests.test_agent import call, finished
-from backend.tests.test_inspection import imported_client
-from backend.tests.test_investigation import scripted
-from backend.tests.test_runner import configured_runner
+from app.agent.optimization import OptimizationTools
+from app.config import Settings
+from app.runner.baseline import compare
+from app.runner.service import apply_overlay
+from tests.test_agent import call, finished
+from tests.test_inspection import imported_client
+from tests.test_investigation import scripted
+from tests.test_runner import configured_runner
 
 
 def task(task_id, status="passed", cost=0.10, calls=6, tokens=8000, wall=18.0, spread=None):
@@ -232,6 +232,11 @@ def test_scripted_job_revises_after_a_regression_then_delivers_patch_report_and_
     patch = client.get(f"/github/imports/{imported}/agent-jobs/{job['job_id']}/patch")
     assert patch.status_code == 200 and '+        "max_tokens": 16' in patch.text.replace("                         ", "        ") or '"max_tokens": 16' in patch.text
     assert "attachment" in patch.headers["content-disposition"]
+    brief = client.get(f"/github/imports/{imported}/agent-jobs/{job['job_id']}/handoff")
+    assert brief.status_code == 200 and brief.headers["content-type"].startswith("text/markdown") and brief.headers["x-hansa-decision"] == "accept"
+    assert "accepted it. Apply it exactly as written" in brief.text and "```diff" in brief.text and '"max_tokens": 16' in brief.text
+    assert "| Cost (USD) | 0.2 | 0.14 | -30.0% |" in brief.text and "Tasks 2 were compared on automatic checks only" in brief.text
+    assert "NOT accepted" not in brief.text
     report = client.get(f"/github/imports/{imported}/report").json()
     assert report["stages"] == {"onboarded": False, "baseline": True, "investigated": False, "optimized": True}
     assert report["baseline"]["per_pass"]["cost_usd"] == pytest.approx(0.2) and report["accepted"] == [job["job_id"]]
@@ -259,7 +264,7 @@ def test_optimization_needs_a_goal_or_a_real_finding_and_stops_safely(optimizabl
     with pytest.raises(ValueError):
         state.agent.start_optimization(owner, imported, goal="Cap the output length.", max_target_spend_usd=9)
     # An agent that edits and runs but never decides: nothing is accepted, measurements are kept.
-    monkeypatch.setattr("backend.app.agent.service.MAX_TURNS", 3)
+    monkeypatch.setattr("app.agent.service.MAX_TURNS", 3)
     monkeypatch.setattr(state.baselines, "evaluate", lambda *a, **k: [task("1", cost=0.07), task("2", status="needs_review", cost=0.07)])
     scripted(state.agent, monkeypatch, [call("edit_file", path="agent.py", old_text='"max_tokens": 32', new_text='"max_tokens": 16'),
                                         call("run_candidate"), call("show_diff")])
@@ -267,9 +272,13 @@ def test_optimization_needs_a_goal_or_a_real_finding_and_stops_safely(optimizabl
     assert job["status"] == "ready" and job["result"]["decision"] == "reject" and job["result"]["incomplete"]
     assert len(job["result"]["experiments"]) == 1 and job["result"]["accepted_experiment"] is None
     # Nothing was accepted, but what was tried stays reviewable and is labelled as not accepted.
-    from backend.app.agent.report import build
+    from app.agent.report import build
     item = build(state.agent, state.baselines, owner, imported)["optimizations"][0]
     assert item["patch_available"] is True and item["comparison_is_of"] == "last candidate tried" and item["payback"] is None
+    from app.agent.report import handoff
+    brief = handoff(job, "owner/repo")
+    assert "NOT accepted (decision: reject)" in brief and "Do not apply the diff unchanged" in brief and "```diff" in brief
+    assert handoff({"result": {"decision": "reject", "experiments": []}}, "owner/repo") is None
 
 
 def test_unstable_baseline_task_is_measured_and_no_longer_counts_as_a_regression(candidate):
@@ -278,7 +287,7 @@ def test_unstable_baseline_task_is_measured_and_no_longer_counts_as_a_regression
     tools, service = make([flaky])
     saved = []
     def extend(user_id, baseline, task_id, runs):
-        from backend.app.runner.baseline import combine
+        from app.runner.baseline import combine
         item = next(t for t in baseline["tasks"] if t["task_id"] == task_id)
         item["runs"] += runs
         kept = item["runs"]

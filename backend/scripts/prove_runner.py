@@ -7,14 +7,14 @@ import shutil
 import time
 import uuid
 
-from backend.app.config import Settings, ROOT
-from backend.app.database import Database
-from backend.app.github.service import GitHubService
-from backend.app.inspection.service import InspectionService
-from backend.app.inspection.schemas import ConfirmInput
-from backend.app.gateway.service import GatewayService
-from backend.app.runner.service import RunnerService
-from backend.app.tracing.service import TraceService
+from app.config import Settings, ROOT, BACKEND
+from app.database import Database
+from app.github.service import GitHubService
+from app.inspection.service import InspectionService
+from app.inspection.schemas import ConfirmInput
+from app.gateway.service import GatewayService
+from app.runner.service import RunnerService
+from app.tracing.service import TraceService
 
 
 def main():
@@ -31,7 +31,7 @@ def main():
     runner = RunnerService(settings, database, inspection, gateway)
     runner.tracer = TraceService(settings, database, inspection)
     owner, import_id = str(uuid.uuid4()), str(uuid.uuid4())
-    source = ROOT / "examples/one_call"
+    source = BACKEND / "examples/one_call"
     sha = hashlib.sha1(b"".join(p.read_bytes() for p in sorted(source.iterdir()) if p.is_file())).hexdigest()
     snapshot = github.source_path(owner, import_id)
     snapshot.parent.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -9,11 +9,11 @@ from contextlib import contextmanager
 from fastapi import HTTPException
 import pytest
 
-from backend.app.config import Settings, ROOT
-from backend.app.runner.service import command, copy_snapshot, requirements, limits, finite_float
-from backend.app.runner.service import egress_log
-from backend.app.runner.egress import parse_target, public_address
-from backend.tests.test_inspection import imported_client, configuration
+from app.config import Settings, BACKEND
+from app.runner.service import command, copy_snapshot, requirements, limits, finite_float
+from app.runner.service import egress_log
+from app.runner.egress import parse_target, public_address
+from tests.test_inspection import imported_client, configuration
 
 
 @pytest.fixture
@@ -24,7 +24,7 @@ def configured_runner(imported_client):
         owner = db.execute("SELECT user_id FROM repository_imports WHERE id=?", (import_id,)).fetchone()[0]
     snapshot = state.github.source_path(owner, import_id)
     shutil.rmtree(snapshot)
-    shutil.copytree(ROOT / "examples/one_call", snapshot, ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copytree(BACKEND / "examples/one_call", snapshot, ignore=shutil.ignore_patterns("__pycache__"))
     findings = state.inspection.inspect(owner, import_id)
     body = configuration(findings)
     body.update(entrypoint="python agent.py", dependency_manifests=["requirements.txt"], litellm_model="claude-haiku")
@@ -106,7 +106,7 @@ def test_python_constraint_accepts_312(configured_runner, constraint, accepted):
 
 
 def test_resolver_has_no_source_secrets_or_build_backend_and_cleans_timeout(tmp_path, monkeypatch):
-    from backend.app.runner.service import resolve_wheels
+    from app.runner.service import resolve_wheels
     (tmp_path / "wheels").mkdir()
     (tmp_path / "requirements.txt").write_text("httpx>=0.28")
     calls = []
@@ -115,7 +115,7 @@ def test_resolver_has_no_source_secrets_or_build_backend_and_cleans_timeout(tmp_
         if args[0] == "start":
             raise RuntimeError("timeout")
         return ""
-    monkeypatch.setattr("backend.app.runner.service.docker", fake)
+    monkeypatch.setattr("app.runner.service.docker", fake)
     with pytest.raises(RuntimeError):
         resolve_wheels(tmp_path)
     create = calls[0]
@@ -171,8 +171,8 @@ def test_startup_failure_is_recorded_and_key_revoked(configured_runner, monkeypa
     def fail(*args, **kwargs):
         raise RuntimeError("private error must not escape")
 
-    monkeypatch.setattr("backend.app.runner.service.gateway_socket", broker)
-    monkeypatch.setattr("backend.app.runner.service.docker", fail)
+    monkeypatch.setattr("app.runner.service.gateway_socket", broker)
+    monkeypatch.setattr("app.runner.service.docker", fail)
     result = state.runner.run(owner, imported, "build", {}, max_calls=0)
     assert result["stop_reason"] == "infrastructure_error" and result["cleanup_complete"]
     assert "private error" not in json.dumps(result)
@@ -209,7 +209,7 @@ def test_real_docker_lifecycle_and_isolation(configured_runner):
     (snapshot / "requirements.txt").write_text("runner_fixture_dep==1.0\n")
     (snapshot / "agent.py").write_text("import json,runner_fixture_dep; print(json.dumps({'dependency':runner_fixture_dep.VALUE}))")
     findings = state.inspection.inspect(owner, imported)
-    from backend.app.inspection.schemas import ConfirmInput
+    from app.inspection.schemas import ConfirmInput
     body = configuration(findings)
     body.update(entrypoint="python agent.py", dependency_manifests=["requirements.txt"], litellm_model="claude-haiku")
     state.inspection.confirm(owner, imported, ConfirmInput(**body))
@@ -232,7 +232,7 @@ def test_real_binary_resolution_and_offline_install(configured_runner):
     (snapshot / "requirements.txt").write_text("httpx>=0.28,<1\n")
     (snapshot / "agent.py").write_text("import json,httpx; print(json.dumps({'version':httpx.__version__}))")
     findings = state.inspection.inspect(owner, imported)
-    from backend.app.inspection.schemas import ConfirmInput
+    from app.inspection.schemas import ConfirmInput
     body = configuration(findings)
     body.update(entrypoint="python agent.py", dependency_manifests=["requirements.txt"], litellm_model="claude-haiku")
     state.inspection.confirm(owner, imported, ConfirmInput(**body))

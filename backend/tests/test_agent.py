@@ -5,10 +5,10 @@ import json
 from fastapi import HTTPException
 import pytest
 
-from backend.app.agent import service as agent_service
-from backend.app.agent.tools import SnapshotTools
-from backend.tests.test_inspection import imported_client
-from backend.tests.test_runner import configured_runner
+from app.agent import service as agent_service
+from app.agent.tools import SnapshotTools
+from tests.test_inspection import imported_client
+from tests.test_runner import configured_runner
 
 GOOD = "import json, sys\nprint(json.dumps({'ok': True}))\n"
 FIXED = "import json, sys\ntask = json.load(sys.stdin)\nprint(json.dumps({'answer': task['question']}))\n"

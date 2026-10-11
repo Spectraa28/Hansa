@@ -3,8 +3,8 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from backend.app.contracts.schemas import ContractInput
-from backend.tests.test_inspection import imported_client, configuration
+from app.contracts.schemas import ContractInput
+from tests.test_inspection import imported_client, configuration
 
 
 def human(description="Preserve the declared behavior."):

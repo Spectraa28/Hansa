@@ -8,9 +8,9 @@ import json
 import time
 from fastapi import HTTPException
 
-from backend.app.config import ROOT, Settings
-from backend.app.contracts.schemas import ContractInput, ConfirmInput
-from backend.app.main import create_app
+from app.config import ROOT, Settings
+from app.contracts.schemas import ContractInput, ConfirmInput
+from app.main import create_app
 
 
 def fixture_contract(revision, base_version=None):

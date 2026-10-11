@@ -6,12 +6,12 @@ from fastapi import HTTPException
 import httpx
 import pytest
 
-from backend.app.gateway.shape import redact, repeated_prefix, request_shape, response_shape
-from backend.app.sessions import token_hash
-from backend.app.tracing.neatlogs import NeatlogsClient, NeatlogsError
-from backend.app.tracing.service import TraceService, marker
-from backend.tests.test_inspection import imported_client
-from backend.tests.test_runner import configured_runner
+from app.gateway.shape import redact, repeated_prefix, request_shape, response_shape
+from app.sessions import token_hash
+from app.tracing.neatlogs import NeatlogsClient, NeatlogsError
+from app.tracing.service import TraceService, marker
+from tests.test_inspection import imported_client
+from tests.test_runner import configured_runner
 
 
 def test_shapes_measure_repeated_context_without_keeping_the_conversation():
@@ -174,7 +174,7 @@ def test_job_trace_orders_model_calls_and_tools(traced):
 
 
 def settings_with_key(tmp_path):
-    from backend.app.config import Settings
+    from app.config import Settings
     return Settings(database_path=tmp_path / "db", secret_key="test-only-" * 4, neatlogs_api_key="project-key")
 
 
@@ -218,7 +218,7 @@ def test_client_refuses_unused_tools_bad_keys_and_tool_errors(tmp_path):
     with pytest.raises(NeatlogsError) as exc:
         rejected.call("ping", {})
     assert "project-key" not in str(exc.value) and "rejected" in str(exc.value)
-    from backend.app.config import Settings
+    from app.config import Settings
     with pytest.raises(NeatlogsError, match="not configured"):
         NeatlogsClient(Settings(database_path=tmp_path / "db", secret_key="test-only-" * 4)).call("ping", {})
     with pytest.raises(ValueError, match="HTTPS"):
@@ -309,7 +309,7 @@ def test_readback_cannot_confirm_a_different_trace(traced):
 
 
 def test_long_traces_are_sent_in_parts_under_the_endpoint_limit(traced):
-    from backend.app.tracing.service import MODEL_SPANS_PER_TRACE, parts
+    from app.tracing.service import MODEL_SPANS_PER_TRACE, parts
     state, service, owner, imported, calls = traced
     def span(index, kind, parent=None):
         return {"span_id": f"{kind}-{index}", "name": kind, "kind": kind, "attributes": {}, **({"parent_span_id": parent} if parent else {})}

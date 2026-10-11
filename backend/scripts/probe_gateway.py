@@ -6,11 +6,11 @@ import time
 
 import httpx
 
-from backend.app.config import Settings
-from backend.app.database import Database
-from backend.app.main import create_app
-from backend.app.gateway.service import GatewayService
-from backend.app.sessions import token_hash
+from app.config import Settings
+from app.database import Database
+from app.main import create_app
+from app.gateway.service import GatewayService
+from app.sessions import token_hash
 
 
 async def main(call_only=False):

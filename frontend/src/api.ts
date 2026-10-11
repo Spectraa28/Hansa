@@ -1,4 +1,4 @@
-export type Session = { user: { id: string; name: string; email: string | null }; csrf_token: string }
+export type Session = { user: { id: string; name: string; email: string | null; avatar_url?: string | null }; csrf_token: string }
 export type Providers = { google: boolean; github: boolean; email: boolean }
 export type ImportItem = {
   id: string
@@ -42,4 +42,10 @@ export async function currentSession(signal: AbortSignal): Promise<Session | nul
     if (error instanceof ApiError && error.status === 401) return null
     throw error
   }
+}
+
+// A JSON mutation with the session's CSRF token.
+export async function send<T>(path: string, csrf: string, body?: unknown, method = 'POST'): Promise<T> {
+  const response = await request(path, { method, headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf }, body: body === undefined ? undefined : JSON.stringify(body) })
+  return response.status === 204 ? null as T : response.json()
 }
