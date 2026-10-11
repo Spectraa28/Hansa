@@ -11,6 +11,7 @@ import httpx
 from starlette.concurrency import run_in_threadpool
 
 from ..sessions import token_hash
+from .shape import request_shape, response_shape
 from .models import LITELLM_MODELS
 
 
@@ -190,18 +191,21 @@ class GatewayService:
                 raise HTTPException(429, "Gateway recorded spend limit reached.")
             upstream_model = key["litellm_model"] or json.loads(key["model_map"]).get(body["model"], body["model"])
             cursor = db.execute("""INSERT INTO model_calls
-                (key_hash, model, upstream_model, reserved_cost_usd, lease_expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?)""",
-                                (hashed, body["model"], upstream_model, 0, now + CALL_LEASE_SECONDS, now))
+                (key_hash, model, upstream_model, reserved_cost_usd, lease_expires_at, created_at, started_at_ms, request_shape)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                                (hashed, body["model"], upstream_model, 0, now + CALL_LEASE_SECONDS, now,
+                                 int(time.time() * 1000), json.dumps(request_shape(body, self.settings.trace_content))))
             return cursor.lastrowid, upstream_model
 
     def finish(self, call_id, status, latency, payload, cost):
         prompt, completion = usage_tokens(payload)
         with self.database.connect() as db:
             db.execute("""UPDATE model_calls SET prompt_tokens=?, completion_tokens=?, latency_ms=?,
-                http_status=?, estimated_cost_usd=?, cost_source=?, lease_expires_at=NULL,
+                http_status=?, estimated_cost_usd=?, cost_source=?, lease_expires_at=NULL, response_shape=?,
                 reserved_cost_usd=CASE WHEN ? THEN 0 ELSE reserved_cost_usd END
                 WHERE id=?""", (prompt, completion, latency, status, cost,
                                 "litellm_response_header" if cost is not None else None,
+                                json.dumps(response_shape(payload, self.settings.trace_content)),
                                 cost is not None or status in REJECTED_STATUSES, call_id))
 
     async def forward(self, raw_key, body):

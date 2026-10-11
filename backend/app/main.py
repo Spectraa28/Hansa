@@ -29,6 +29,10 @@ from .gateway.service import GatewayService
 from .runner.service import RunnerService
 from .runner.baseline import BaselineService
 from .runner.routes import router as runner_router
+from .agent.routes import router as agent_router
+from .agent.service import AgentService
+from .tracing.routes import router as tracing_router
+from .tracing.service import TraceService
 from .ui.routes import router as ui_router
 from .oauth.providers import oauth_clients
 from .oauth.routes import router as oauth_router
@@ -46,6 +50,8 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     async def lifespan(app):
         await run_in_threadpool(database.initialize)
         await run_in_threadpool(app.state.gateway.recover, restart=True)
+        await run_in_threadpool(app.state.agent.recover)
+        await run_in_threadpool(app.state.baselines.recover)
         app.state.dummy_password_hash = await run_in_threadpool(password_hasher.hash, secrets.token_urlsafe(32))
         worker = None
         if settings.github_app_enabled:
@@ -68,6 +74,9 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.state.gateway = GatewayService(settings, database, app.state.inspection)
     app.state.runner = RunnerService(settings, database, app.state.inspection, app.state.gateway)
     app.state.baselines = BaselineService(app.state.runner)
+    app.state.agent = AgentService(settings, database, app.state.runner, app.state.gateway)
+    app.state.traces = TraceService(settings, database, app.state.inspection)
+    app.state.runner.tracer = app.state.agent.tracer = app.state.traces
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key,
                        session_cookie="ouro_oauth", max_age=600,
                        same_site="lax", https_only=settings.cookie_secure)
@@ -78,6 +87,8 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.include_router(contracts_router)
     app.include_router(gateway_router)
     app.include_router(runner_router)
+    app.include_router(agent_router)
+    app.include_router(tracing_router)
     app.include_router(ui_router)
 
     @app.middleware("http")

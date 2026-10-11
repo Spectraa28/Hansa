@@ -1,6 +1,6 @@
 # Docker runner
 
-The service executes one JSON task against a ready, owner-scoped Python snapshot. It never imports or executes repository Python in the API/worker process. There is no browser execution endpoint. Configuration/contract confirmation still does not start a run or establish correctness.
+The service executes one JSON task against a ready, owner-scoped Python snapshot. It never imports or executes repository Python in the API/worker process. Authenticated onboarding and [baseline jobs](BASELINE.md) dispatch work in the background. Configuration/contract confirmation still does not start a run or establish correctness.
 
 ## Prerequisites and interface
 
@@ -18,7 +18,7 @@ result = runner.run(
 saved = runner.get(user_id, import_id, result["run_id"])
 ```
 
-The entrypoint must already consume JSON from stdin and emit exactly one JSON value on stdout. Supported invocations are `python relative_file.py`, `python -m module`, and `module:function`; module functions are invoked without arguments and must implement that stdin/stdout protocol themselves. Logs belong on stderr. No automatic framework adapter is generated.
+The entrypoint must already consume JSON from stdin and emit exactly one JSON value on stdout. Supported invocations are `python relative_file.py`, `python -m module`, and `module:function`; module functions are invoked without arguments and must implement that stdin/stdout protocol themselves. Logs belong on stderr. For interactive agents, [onboarding](AGENT.md) writes and stores an adapter; `adapter="stored"` uses it. Contract baselines freeze that stored code and pass it as `adapter_code` so replacing the adapter cannot change a running baseline.
 
 Task JSON uses the existing data-only bounds (16 KiB, finite numbers, depth/node limits, no credential/executable fields). Runtime accepts 0.1–300 seconds, 64–4096 MiB, 0.1–4 CPUs, and 8–256 PIDs. A fresh key binds all requests to the confirmed model and enforces the supplied call/spend/expiry limits. Dollar-budget admission defaults on; `max_spend_usd=None` explicitly disables dollar admission while call/expiry enforcement remains active. Saved contract token/tool limits and semantic correctness are not enforced by this runner.
 
@@ -86,4 +86,4 @@ On October 10, the labelled `examples/one_call` fixture verified real Docker →
 
 Docker shares the host kernel; this is a local reviewed-workflow runner, not a hardened arbitrary-code hosting platform. Hard termination depends on the controller and Docker daemon remaining available; controller-crash recovery and an independent watchdog are not implemented. A terminated container does not cancel an already-dispatched remote model request: the gateway drains in-flight requests (up to roughly 70 seconds) before completing teardown, and preserves unknown costs/reservations when usage cannot be resolved. Cleanup failure is raised rather than reported as success.
 
-Neatlogs export/readback, a full tool/orchestration trace, optimizer logic, protected evaluation, public execution endpoints, and deployment remain unimplemented.
+Neatlogs export and owner-scoped readback are implemented; see [TRACING.md](TRACING.md) for measured model calls, outside connections and inferred gaps. Full local-tool instrumentation, optimizer logic, protected evaluation, public execution and deployment remain unimplemented.

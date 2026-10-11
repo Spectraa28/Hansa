@@ -14,6 +14,7 @@ from backend.app.inspection.service import InspectionService
 from backend.app.inspection.schemas import ConfirmInput
 from backend.app.gateway.service import GatewayService
 from backend.app.runner.service import RunnerService
+from backend.app.tracing.service import TraceService
 
 
 def main():
@@ -28,6 +29,7 @@ def main():
     inspection = InspectionService(database, github)
     gateway = GatewayService(settings, database, inspection)
     runner = RunnerService(settings, database, inspection, gateway)
+    runner.tracer = TraceService(settings, database, inspection)
     owner, import_id = str(uuid.uuid4()), str(uuid.uuid4())
     source = ROOT / "examples/one_call"
     sha = hashlib.sha1(b"".join(p.read_bytes() for p in sorted(source.iterdir()) if p.is_file())).hexdigest()

@@ -33,6 +33,8 @@ BASE_IMAGE = "python:3.12-slim"
 HERE = Path(__file__).parent
 MAX_OUTPUT = 1024 * 1024
 STDERR_TAIL = 16384
+MAX_ADAPTER = 32768
+ENV_TEMPLATES = {".env.example", ".env.sample", ".env.template", ".env.dist"}
 RUN_LOCK = threading.Lock()
 
 
@@ -60,6 +62,9 @@ def copy_snapshot(source, destination, settings):
         for name in dirs + files:
             path = Path(root) / name
             relative = path.relative_to(source)
+            if name in ENV_TEMPLATES:
+                # Variable-name templates carry no values; omit them rather than refuse the repository.
+                continue
             if (name in {".git", ".aws", ".ssh", ".env"} or name.startswith(".env.")
                     or name.endswith((".pem", ".key"))):
                 raise ValueError("Snapshot contains a credential/configuration path; remove it before execution.")
@@ -329,6 +334,7 @@ class RunnerService:
     def __init__(self, settings, database, inspection, gateway):
         self.settings, self.database = settings, database
         self.inspection, self.gateway = inspection, gateway
+        self.tracer = None
 
     def configuration(self, user_id, import_id):
         result = self.inspection.get(user_id, import_id)
@@ -401,9 +407,15 @@ class RunnerService:
                     "dependencies": pins, "resolved_dependencies": resolved}
 
     def run(self, user_id, import_id, build_id, task, *, timeout_seconds=60, max_calls=10,
-            max_spend_usd=0.01, memory_mb=256, cpus=1.0, pids=64, adapter=None, internet=False):
-        if adapter not in {None, "swarm_airline"}:
-            raise ValueError("Unsupported trusted adapter.")
+            max_spend_usd=0.01, memory_mb=256, cpus=1.0, pids=64, adapter=None, adapter_code=None,
+            internet=False, labels=None):
+        # adapter: "swarm_airline" (reviewed file), "stored" (this import's saved adapter) or None.
+        # adapter_code: an unsaved draft to try, used by onboarding before anything is stored.
+        if adapter not in {None, "swarm_airline", "stored"}:
+            raise ValueError("Unsupported adapter.")
+        if adapter_code is not None and (adapter is not None or not isinstance(adapter_code, str)
+                                         or not 0 < len(adapter_code.encode()) <= MAX_ADAPTER):
+            raise ValueError("A draft adapter must be bounded text and cannot be combined with a named adapter.")
         if type(internet) is not bool:
             raise ValueError("internet must be a boolean.")
         bounded_data(task, 16384)
@@ -415,7 +427,18 @@ class RunnerService:
         with RUN_LOCK, tempfile.TemporaryDirectory(prefix="ouro-run-") as temporary:
             root = Path(temporary)
             config, digest = self.stage(user_id, import_id, root)
-            if adapter and not {"transfer_to_flight_modification", "transfer_to_lost_baggage",
+            if adapter == "stored":
+                with self.database.connect() as db:
+                    stored = db.execute("SELECT content FROM import_adapters WHERE import_id=?", (import_id,)).fetchone()
+                if stored is None:
+                    raise HTTPException(409, "No adapter is stored for this import. Run onboarding first.")
+                adapter_code = stored["content"]
+            adapter_file = HERE / "airline_adapter.py" if adapter == "swarm_airline" else None
+            if adapter_code is not None:
+                adapter_file = root / "adapter.py"
+                adapter_file.write_text(adapter_code)
+                adapter_file.chmod(0o444)
+            if adapter == "swarm_airline" and not {"transfer_to_flight_modification", "transfer_to_lost_baggage",
                                 "transfer_to_flight_cancel", "transfer_to_flight_change"}.issubset(
                                     config["configuration"].get("approved_tools", [])):
                 raise HTTPException(422, "Approve the four airline routing tools before running its evals.")
@@ -467,8 +490,8 @@ class RunnerService:
                     docker("start", relay)
                     docker("exec", relay, "/usr/local/bin/python", "-c",
                            "import socket,time\nfor _ in range(100):\n try:\n  s=socket.create_connection(('127.0.0.1',8000),.1); s.close(); break\n except OSError: time.sleep(.02)\nelse: raise RuntimeError('relay unavailable')")
-                    adapter_mount = (["--mount", f"type=bind,src={HERE / 'airline_adapter.py'},dst=/adapter.py,readonly"]
-                                     if adapter else [])
+                    adapter_mount = (["--mount", f"type=bind,src={adapter_file},dst=/adapter.py,readonly"]
+                                     if adapter_file else [])
                     docker("create", "--name", container, "--interactive", "--network", "container:" + relay,
                            *limits(memory_mb, cpus, pids), "--workdir", "/snapshot",
                            "--tmpfs", "/scratch:rw,noexec,nosuid,nodev,size=64m,mode=1777",
@@ -479,7 +502,7 @@ class RunnerService:
                            "OPENAI_BASE_URL=http://127.0.0.1:8000/gateway/v1", "OPENAI_API_KEY=" + key,
                            *proxy_environment,
                            *(["/usr/local/bin/python", "-u", "-B", "/adapter.py"]
-                             if adapter else command(config["configuration"]["entrypoint"])))
+                             if adapter_file else command(config["configuration"]["entrypoint"])))
                     created = True
                     result = collect(container, json.dumps(task, allow_nan=False).encode() + b"\n", timeout_seconds)
                     state = json.loads(docker("inspect", container))[0]
@@ -519,7 +542,12 @@ class RunnerService:
             result = json.loads(encoded)
             result.update({"run_id": run_id, "import_id": import_id, "commit_sha": config["commit_sha"],
                            "configuration_revision": config["configuration_revision"], "build_id": build_id,
-                           "adapter": adapter, "gateway": self.gateway.summarize_key(key), "cleanup_complete": True})
+                           "adapter": adapter or ("draft" if adapter_file else None),
+                           "adapter_sha256": hashlib.sha256(adapter_file.read_bytes()).hexdigest() if adapter_file else None,
+                           "gateway": self.gateway.summarize_key(key), "cleanup_complete": True})
+            if self.tracer is not None:
+                # Evidence only: a tracing failure is recorded here and never changes the run.
+                result["trace"] = self.tracer.log_run(import_id, token_hash(key), result, task, labels)
             with self.inspection.github.lock, self.database.connect() as db:
                 self.inspection.ready(db, user_id, import_id)
                 db.execute("INSERT INTO runner_runs VALUES (?,?,?,?,?)", (run_id, import_id, build_id,

@@ -142,12 +142,45 @@ class Database:
                     build_id TEXT PRIMARY KEY REFERENCES runner_builds(id) ON DELETE CASCADE,
                     resolved TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS import_adapters (
+                    import_id TEXT PRIMARY KEY REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    content TEXT NOT NULL,
+                    sha256 TEXT NOT NULL,
+                    example_task TEXT NOT NULL,
+                    job_id TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS agent_jobs (
+                    id TEXT PRIMARY KEY,
+                    import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL CHECK(kind IN ('onboarding','investigation')),
+                    status TEXT NOT NULL CHECK(status IN ('running','ready','blocked','failed')),
+                    result TEXT NOT NULL DEFAULT '{}',
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE TABLE IF NOT EXISTS agent_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES agent_jobs(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS agent_events_job ON agent_events(job_id, id);
                 CREATE TABLE IF NOT EXISTS baselines (
                     id TEXT PRIMARY KEY,
                     import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
                     result TEXT NOT NULL,
                     created_at INTEGER NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS baseline_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    baseline_id TEXT NOT NULL REFERENCES baselines(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS baseline_events_job ON baseline_events(baseline_id,id);
                 CREATE TABLE IF NOT EXISTS gateway_keys (
                     key_hash TEXT PRIMARY KEY,
                     run_label TEXT NOT NULL,
@@ -172,10 +205,60 @@ class Database:
                     cost_source TEXT,
                     reserved_cost_usd REAL NOT NULL DEFAULT 0,
                     lease_expires_at INTEGER,
-                    created_at INTEGER NOT NULL
+                    created_at INTEGER NOT NULL,
+                    started_at_ms INTEGER,
+                    request_shape TEXT,
+                    response_shape TEXT
                 );
+                CREATE TABLE IF NOT EXISTS traces (
+                    trace_id TEXT PRIMARY KEY,
+                    import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL,
+                    run_id TEXT,
+                    job_id TEXT,
+                    summary TEXT NOT NULL,
+                    created_at INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'queued',
+                    checked_at INTEGER,
+                    confirmed_at INTEGER,
+                    last_error TEXT
+                );
+                CREATE INDEX IF NOT EXISTS traces_import ON traces(import_id, created_at);
                 CREATE INDEX IF NOT EXISTS model_calls_key ON model_calls(key_hash);
             """)
+            # SQLite cannot widen a CHECK constraint in place; copy both tables with their IDs intact.
+            schema = db.execute("SELECT sql FROM sqlite_master WHERE name='agent_jobs'").fetchone()[0]
+            if "'investigation'" not in schema:
+                db.executescript("""
+                    BEGIN IMMEDIATE;
+                    CREATE TABLE agent_jobs_new (
+                        id TEXT PRIMARY KEY,
+                        import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                        kind TEXT NOT NULL CHECK(kind IN ('onboarding','investigation')),
+                        status TEXT NOT NULL CHECK(status IN ('running','ready','blocked','failed')),
+                        result TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
+                    );
+                    INSERT INTO agent_jobs_new SELECT * FROM agent_jobs;
+                    CREATE TABLE agent_events_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        job_id TEXT NOT NULL REFERENCES agent_jobs_new(id) ON DELETE CASCADE,
+                        kind TEXT NOT NULL, data TEXT NOT NULL, created_at INTEGER NOT NULL
+                    );
+                    INSERT INTO agent_events_new SELECT * FROM agent_events;
+                    UPDATE sqlite_sequence SET seq=MAX(seq,COALESCE(
+                        (SELECT seq FROM sqlite_sequence WHERE name='agent_events'),0)) WHERE name='agent_events_new';
+                    DROP TABLE agent_events;
+                    DROP TABLE agent_jobs;
+                    ALTER TABLE agent_jobs_new RENAME TO agent_jobs;
+                    ALTER TABLE agent_events_new RENAME TO agent_events;
+                    CREATE INDEX agent_events_job ON agent_events(job_id, id);
+                    COMMIT;
+                """)
+            trace_columns = {row["name"] for row in db.execute("PRAGMA table_info(traces)")}
+            for column, kind in (("status", "TEXT NOT NULL DEFAULT 'queued'"), ("checked_at", "INTEGER"),
+                                 ("confirmed_at", "INTEGER"), ("last_error", "TEXT")):
+                if column not in trace_columns:
+                    db.execute(f"ALTER TABLE traces ADD COLUMN {column} {kind}")
             key_columns = {row["name"] for row in db.execute("PRAGMA table_info(gateway_keys)")}
             if "model_map" not in key_columns:
                 db.execute("ALTER TABLE gateway_keys ADD COLUMN model_map TEXT NOT NULL DEFAULT '{}'")
@@ -192,6 +275,9 @@ class Database:
             if "lease_expires_at" not in call_columns:
                 db.execute("ALTER TABLE model_calls ADD COLUMN lease_expires_at INTEGER")
                 db.execute("UPDATE model_calls SET lease_expires_at=created_at+120 WHERE http_status IS NULL")
+            for column, kind in (("started_at_ms", "INTEGER"), ("request_shape", "TEXT"), ("response_shape", "TEXT")):
+                if column not in call_columns:
+                    db.execute(f"ALTER TABLE model_calls ADD COLUMN {column} {kind}")
             columns = {row["name"] for row in db.execute("PRAGMA table_info(repository_inspections)")}
             if "configuration_revision" not in columns:
                 db.execute("ALTER TABLE repository_inspections ADD COLUMN configuration_revision TEXT")

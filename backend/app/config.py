@@ -34,9 +34,15 @@ class Settings:
     import_timeout_seconds: int = 120
     litellm_base_url: str = ""
     runner_internet: bool = True
+    agent_model: str = "claude-sonnet-4.6"
+    neatlogs_mcp_url: str = "https://ingest.neatlogs.com/mcp"
+    neatlogs_api_key: str = field(default="", repr=False)
+    trace_content: bool = True
     litellm_api_key: str = field(default="", repr=False)
 
     def __post_init__(self):
+        if not self.neatlogs_mcp_url.startswith("https://"):
+            raise ValueError("NEATLOGS_MCP_URL must be HTTPS.")
         if self.litellm_base_url:
             parsed = urlsplit(self.litellm_base_url)
             if (parsed.scheme not in {"http", "https"} or not parsed.hostname
@@ -116,5 +122,9 @@ class Settings:
             import_timeout_seconds=config("IMPORT_TIMEOUT_SECONDS", cast=int, default=120),
             litellm_base_url=config("LITELLM_BASE_URL", default="").rstrip("/"),
             runner_internet=config("RUNNER_INTERNET", cast=bool, default=True),
+            agent_model=config("AGENT_MODEL", default="claude-sonnet-4.6"),
+            neatlogs_mcp_url=config("NEATLOGS_MCP_URL", default="https://ingest.neatlogs.com/mcp"),
+            neatlogs_api_key=config("NEATLOGS_API_KEY", default=""),
+            trace_content=config("TRACE_CONTENT", cast=bool, default=True),
             litellm_api_key=config("LITELLM_API_KEY", default=""),
         )
