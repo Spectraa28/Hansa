@@ -1,5 +1,18 @@
 # Hansa design
 
+> **Superseded on October 11.** The built interface follows the "Receipts" direction below. The older sections are kept for reference; where they disagree with this note, this note and `src/styles.css` are current.
+
+## Current direction: receipts
+
+The product finds overspending, so the interface looks like a receipt: warm paper, printer ink, one hot orange.
+
+- **Palette:** paper `#F3EEE3`, surface `#FFFDF8`, ink `#11141B`, orange `#FF4A12`, green `#0B8F5F` only for passes. Orange marks waste, rejection and the main button.
+- **Shapes:** 2–3px ink outlines, hard offset shadows with no blur, mono tab labels on containers (`.slab`, `.slab-tab`, `.chip` in `src/styles.css`).
+- **Type:** Bricolage Grotesque at weight 780–800 and very large sizes; Geist for text; Geist Mono for figures and labels.
+- **Landing page (`src/Landing.tsx`, `src/landing.css`):** receipt hero printed from the saved Swarm run, a ticker, four stacking step cards, the rejected-fix section, what you get, a closing call to action. Each fact appears once.
+- **App:** a six-step strip across the top with done/current/next states, number tiles, one square per model call, finding cards with the estimated saving, and a full-width verdict banner.
+- **Motion:** Motion for entrances, the stamp, stacking-card scale and bar draws; NumberFlow for counters; a CSS ticker. All of it respects reduced motion.
+
 The plan for the product interface and landing page. The landing hero, pinned How it works, saved real run, sign-in, imports list, import report/result, stage starts and polling run feed are implemented, along with the nav, logo, colour tokens, fonts and grid-paper background; editable setup and other landing sections are planned. The fonts and the mark are in `public/`.
 
 ## Direction

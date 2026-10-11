@@ -16,7 +16,9 @@ export type Finding = {
   saving_scope: string | null
   source: SourceReference[]
   run_ids: string[]
+  category?: string | null
 }
+export type Coverage = { category: string; status: string; observation: string; finding_ids: string[] }
 export type MetricComparison = { baseline: number | null; candidate: number | null; change_percent: number | null }
 export type Comparison = {
   verdict: string
@@ -48,7 +50,7 @@ export type ImportReport = {
     tasks: (Measurements & { task_id: string | null; name: string | null; status: string | null; reason: string | null })[]
     note: string
   } | null
-  investigation: { job_id?: string; status: string; summary: string | null; incomplete: boolean; nothing_worth_changing: boolean | null; findings: Finding[]; note: string } | null
+  investigation: { job_id?: string; status: string; summary: string | null; incomplete: boolean; nothing_worth_changing: boolean | null; findings: Finding[]; coverage?: Coverage[]; note: string } | null
   optimizations: Optimization[]
   accepted: string[]
   stages: { onboarded: boolean; baseline: boolean; investigated: boolean; optimized: boolean }
