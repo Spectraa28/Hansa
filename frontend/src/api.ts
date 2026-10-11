@@ -8,6 +8,7 @@ export type ImportItem = {
   status: string
   failure_reason: string | null
   created_at: number
+  folder?: string | null
 }
 export type ImportsPage = { imports: ImportItem[]; page: number; has_next: boolean }
 

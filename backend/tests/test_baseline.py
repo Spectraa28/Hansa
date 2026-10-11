@@ -294,3 +294,30 @@ def test_proof_keeps_result_and_retries_trace_readback_without_execution(tmp_pat
     assert evidence["result"] == report
     assert len(calls) == (4 if unavailable else 2)
     assert ("error" in evidence["trace_readback"][0]) == unavailable
+
+
+def test_xray_reads_repeats_tool_share_and_duplicates_from_the_ledger(tmp_path):
+    import json as _json
+    from app.database import Database
+    from app.runner.xray import anatomy
+    database = Database(tmp_path / "x.sqlite3")
+    database.initialize()
+    def shape(hashes, sizes, tools):
+        return _json.dumps({"prompt_chars": sum(sizes), "chars_by_role": {"system": sizes[0], "user": sum(sizes[1:])},
+                            "message_chars": sizes, "message_hashes": hashes, "tool_schema_chars": tools})
+    calls = [(shape(["s", "u1"], [600, 100], 300), _json.dumps({"output_chars": 0, "tool_calls": ["transfer"]})),
+             (shape(["s", "u1", "a1"], [600, 100, 100], 300), _json.dumps({"output_chars": 40, "tool_calls": []})),
+             (shape(["s", "u1", "a1"], [600, 100, 100], 300), _json.dumps({"output_chars": 40, "tool_calls": []}))]
+    with database.connect() as db:
+        db.execute("INSERT INTO gateway_keys (key_hash,run_label,max_calls,max_spend_usd,expires_at,created_at) VALUES ('k','run1',9,1,9999999999,1)")
+        for index, (request, response) in enumerate(calls):
+            db.execute("INSERT INTO model_calls (key_hash,model,upstream_model,prompt_tokens,completion_tokens,latency_ms,http_status,estimated_cost_usd,"
+                       "created_at,started_at_ms,request_shape,response_shape) VALUES ('k','m','m',1000,20,1000,200,0.01,1,?,?,?)", (index, request, response))
+    result = anatomy(database, {"tasks": [{"runs": [{"run_id": "run1", "wall_time_seconds": 5.0}, {"run_id": "missing"}]}]})
+    assert result["runs"] == 1 and result["model_calls"] == 3 and result["duplicate_calls"]["count"] == 1
+    assert result["handoff_calls"]["count"] == 1
+    # sent: (700+300) + (800+300) + (800+300) = 3200; repeated: 0 + (700+300) + (800+300) = 2100
+    assert result["input"]["sent_before_percent"] == 65.6 and result["input"]["tool_schema_percent"] == 28.1
+    assert result["time"]["outside_model_percent"] == 40.0
+    assert {r["area"] for r in result["readings"]} >= {"Context", "Tools", "Wasted work", "Latency"}
+    assert anatomy(database, {"tasks": [{"runs": [{"run_id": "missing"}]}]}) is None

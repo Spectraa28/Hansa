@@ -90,7 +90,9 @@ code, pre, .tabular { font-variant-numeric: tabular-nums; }
 
 @layer components {
   .page { @apply mx-auto w-full max-w-[1240px] px-5 pt-10 pb-24 sm:px-8; }
-  .page-title { @apply font-display text-[44px] leading-none font-[780] tracking-[-.04em] sm:text-[64px]; }
+  .page-title { @apply font-display text-[40px] leading-[.95] font-[780] tracking-[-.04em] sm:text-[64px]; }
+  /* A text link sized for a thumb. */
+  .back-link { @apply -ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-control px-2 font-mono text-[13px] font-medium hover:underline; }
   .report-prose { @apply max-w-[65ch] text-[14px] leading-relaxed; }
 
   .button-primary,
@@ -114,10 +116,10 @@ code, pre, .tabular { font-variant-numeric: tabular-nums; }
   /* A slab: the app's one container. Ink outline, hard shadow, mono tab on top. */
   .slab { @apply relative rounded-card border-2 border-ink bg-surface; box-shadow: var(--hard); }
   .slab-tab {
-    @apply absolute -top-[14px] left-5 rounded-[6px] border-2 border-ink bg-ink px-2.5 py-0.5 font-mono text-[11px] font-medium uppercase tracking-[.08em] text-paper;
+    @apply absolute -top-[14px] left-5 rounded-[6px] border-2 border-ink bg-ink px-2.5 py-0.5 font-mono text-[12px] font-medium uppercase tracking-[.06em] text-paper;
   }
   .label { @apply font-mono text-[12px] uppercase tracking-[.08em] text-muted; }
-  .chip { @apply inline-flex shrink-0 items-center gap-1.5 rounded-full whitespace-nowrap border-2 border-ink px-2.5 py-0.5 font-mono text-[12px] font-medium; }
+  .chip { @apply inline-flex shrink-0 items-center gap-1.5 justify-self-start rounded-full whitespace-nowrap border-2 border-ink px-2.5 py-0.5 font-mono text-[12px] font-medium; }
   .chip-waste { @apply bg-waste text-ink; }
   .chip-ok { @apply bg-ok-soft text-ink; }
   .chip-quiet { @apply border-line bg-wash text-muted; }

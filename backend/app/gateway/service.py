@@ -127,6 +127,8 @@ class GatewayService:
                        COALESCE(SUM(estimated_cost_usd IS NULL), 0) AS unknown_cost_calls,
                        COALESCE(SUM(estimated_cost_usd IS NULL AND
                            (http_status IS NULL OR http_status NOT IN ({REJECTED_SQL}))), 0) AS unresolved_cost_calls,
+                       -- An answer we received and could not price. A failed upstream attempt is not one.
+                       COALESCE(SUM(estimated_cost_usd IS NULL AND http_status = 200), 0) AS unpriced_answer_calls,
                        COALESCE(SUM(http_status IS NULL), 0) AS pending_calls,
                        COALESCE(SUM(cost_source = 'legacy_price_table'), 0) AS legacy_cost_calls
                 FROM model_calls WHERE key_hash=?

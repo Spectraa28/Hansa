@@ -19,11 +19,13 @@ class BoundedReader:
         return data
 
 
-def extract_archive(archive_path, destination, settings, check_active) -> dict:
+def extract_archive(archive_path, destination, settings, check_active, folder=None) -> dict:
     destination.mkdir(mode=0o700)
     total, count, files, root = 0, 0, 0, None
     seen = set()
     warnings = set()
+    # Importing one folder of a repository: everything outside it is read past and never written.
+    inside = PurePosixPath(folder).parts if folder else ()
     # Count decompressed headers and padding too, including oversized PAX metadata.
     expanded_limit = settings.import_extracted_bytes + settings.import_file_count * 2048 + 1024 * 1024
     try:
@@ -55,6 +57,10 @@ def extract_archive(archive_path, destination, settings, check_active) -> dict:
                     if relative in seen or relative.parts[0] == ".git":
                         raise GitHubFailure("unsafe_archive", "Archive contains duplicate paths or Git metadata.")
                     seen.add(relative)
+                    if inside:
+                        if relative.parts[:len(inside)] != inside or len(relative.parts) == len(inside):
+                            continue
+                        relative = PurePosixPath(*relative.parts[len(inside):])
                     target = destination.joinpath(*relative.parts)
                     if not target.resolve().is_relative_to(destination.resolve()):
                         raise GitHubFailure("unsafe_archive", "Archive path escapes the source workspace.")
@@ -97,6 +103,8 @@ def extract_archive(archive_path, destination, settings, check_active) -> dict:
                                 previous = chunk[-16:]
         if root is None:
             raise GitHubFailure("empty_repository", "Repository archive is empty.", 409)
+        if inside and files == 0:
+            raise GitHubFailure("empty_folder", "That folder has no files on this branch. Check the folder name.", 409)
         return {"file_count": files,
                 "extracted_bytes": total, "warnings": sorted(warnings)}
     except (tarfile.TarError, EOFError, gzip.BadGzipFile):

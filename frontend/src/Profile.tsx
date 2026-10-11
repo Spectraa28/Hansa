@@ -37,7 +37,7 @@ export default function Profile({ session }: { session: UseQueryResult<Session |
   }
 
   return <main className="page max-w-3xl">
-    <Link to="/app" className="font-mono text-[13px] font-medium hover:underline">← your agents</Link>
+    <Link to="/app" className="back-link">← your agents</Link>
     <h1 className="page-title mt-2">Profile.</h1>
 
     <section className="slab mt-10 flex flex-wrap items-center gap-5 p-6 pt-8 sm:p-8 sm:pt-9"><span className="slab-tab">you</span>

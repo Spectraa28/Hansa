@@ -21,7 +21,7 @@ from fastapi import FastAPI, HTTPException
 import uvicorn
 from packaging.requirements import Requirement, InvalidRequirement
 from packaging.specifiers import SpecifierSet, InvalidSpecifier
-from packaging.utils import parse_wheel_filename
+from packaging.utils import canonicalize_name, parse_wheel_filename
 
 from ..contracts.schemas import bounded_data
 from ..gateway.routes import router as gateway_router
@@ -51,6 +51,24 @@ def docker(*arguments, timeout=30, input=None):
     return result.stdout.decode()
 
 
+def secret_name(name):
+    """File and folder names that conventionally hold credentials. They never enter a build or a run."""
+    return name in {".git", ".aws", ".ssh", ".env"} or (name.startswith(".env.") and name not in ENV_TEMPLATES) or name.endswith((".pem", ".key"))
+
+
+def left_out(source, limit=20):
+    """Relative paths the sandbox copy will omit, for telling the owner. Reads names only."""
+    found = []
+    for root, dirs, files in os.walk(source, followlinks=False):
+        for name in sorted(dirs + files):
+            if secret_name(name):
+                found.append(str((Path(root) / name).relative_to(source)))
+        dirs[:] = [name for name in dirs if not secret_name(name)]
+        if len(found) >= limit:
+            break
+    return sorted(found)[:limit]
+
+
 def copy_snapshot(source, destination, settings):
     if source.is_symlink() or not source.is_dir():
         raise ValueError("Snapshot must be a real directory.")
@@ -58,17 +76,15 @@ def copy_snapshot(source, destination, settings):
     count, total, digest = 0, 0, hashlib.sha256()
     deadline = time.monotonic() + 30
     for root, dirs, files in os.walk(source, followlinks=False):
-        dirs.sort()
+        dirs[:] = sorted(name for name in dirs if not secret_name(name))  # do not descend into them either
         files.sort()
         for name in dirs + files:
             path = Path(root) / name
             relative = path.relative_to(source)
-            if name in ENV_TEMPLATES:
-                # Variable-name templates carry no values; omit them rather than refuse the repository.
+            if name in ENV_TEMPLATES or secret_name(name):
+                # Never copied into the sandbox. Omitting one keeps that promise without refusing the
+                # whole repository; `left_out` tells the owner which paths were dropped.
                 continue
-            if (name in {".git", ".aws", ".ssh", ".env"} or name.startswith(".env.")
-                    or name.endswith((".pem", ".key"))):
-                raise ValueError("Snapshot contains a credential/configuration path; remove it before execution.")
             if time.monotonic() > deadline:
                 raise ValueError("Snapshot copy time limit exceeded.")
             info = path.lstat()
@@ -152,36 +168,67 @@ def requirements(snapshot, manifests):
     return sorted(set(pins))
 
 
+# Dependencies the sandbox cannot carry today, with the reason an owner can act on. Checked before any download.
+TOO_HEAVY = {
+    **dict.fromkeys(("torch", "torchvision", "torchaudio", "sentence-transformers", "langchain-huggingface", "transformers",
+                     "tensorflow", "jax", "xformers", "bitsandbytes", "accelerate"), "pulls in a deep-learning runtime of 2 GB or more"),
+    **dict.fromkeys(("playwright", "selenium", "pyppeteer"), "needs a browser installed next to it"),
+}
+
+
+def unsupported_dependencies(pins):
+    found = {}
+    for pin in pins:
+        name = canonicalize_name(Requirement(pin).name)
+        if name in TOO_HEAVY:
+            found.setdefault(TOO_HEAVY[name], []).append(name)
+    return found
+
+
 def resolve_wheels(context):
     """Only validated requirement text and an empty wheel directory enter this container."""
     name = "ouro-resolve-" + uuid.uuid4().hex
     created = False
+    scratch = context / "scratch"
+    scratch.mkdir()
     try:
         docker("create", "--name", name, "--network", "bridge", *limits(512, 1, 64),
                "--user", f"{os.getuid()}:{os.getgid()}",
                "--tmpfs", "/tmp:rw,noexec,nosuid,nodev,size=64m,mode=1777",
                "--mount", f"type=bind,src={context / 'requirements.txt'},dst=/requirements.txt,readonly",
                "--mount", f"type=bind,src={context / 'wheels'},dst=/wheels",
+               # pip stages each download in TMPDIR. On disk, not the 64 MB in-memory /tmp, or any
+               # wheel near that size fails with "no space left on device".
+               "--mount", f"type=bind,src={scratch},dst=/scratch",
                "--entrypoint", "/usr/bin/env", BASE_IMAGE, "-i", "PATH=/usr/local/bin:/usr/bin:/bin",
-               "HOME=/tmp", "TMPDIR=/tmp", "python", "-m", "pip", "--isolated", "download",
+               "HOME=/tmp", "TMPDIR=/scratch", "python", "-m", "pip", "--isolated", "download",
                "--index-url", "https://pypi.org/simple", "--only-binary=:all:", "--no-cache-dir",
                "--disable-pip-version-check", "--timeout", "20", "--retries", "0",
                "--dest", "/wheels", "-r", "/requirements.txt")
         created = True
-        docker("start", "--attach", name, timeout=300)
+        docker("start", name)
+        try:
+            docker("wait", name, timeout=300)
+        except RuntimeError:
+            raise RuntimeError("Downloading the dependencies took longer than 5 minutes.") from None
+        # `start --attach` returns pip's own exit code, which hid the reason behind a Docker error.
         state = json.loads(docker("inspect", "--format", "{{json .State}}", name))
+        if state.get("OOMKilled"):
+            raise RuntimeError("Resolving the dependencies ran out of memory. The dependency set is too large for the sandbox.")
         if state["ExitCode"] != 0:
-            raise RuntimeError("Binary-wheel resolution failed; source builds and private indexes are unsupported.")
+            raise RuntimeError("PyPI has no prebuilt Python 3.12 package for at least one dependency, or two of them conflict. "
+                               "Source builds and private indexes are unsupported.")
     finally:
         if created:
             docker("rm", "--force", name)
+        shutil.rmtree(scratch, ignore_errors=True)
     resolved, total = [], 0
     for path in sorted((context / "wheels").iterdir()):
         if path.is_symlink() or not path.is_file() or path.suffix != ".whl":
             raise ValueError("Resolver must produce regular binary wheels only.")
         total += path.stat().st_size
         if total > 500 * 1024 * 1024 or len(resolved) >= 200:
-            raise ValueError("Resolved wheels exceed dependency limits.")
+            raise ValueError("The dependencies come to more than the sandbox's limit of 500 MB or 200 packages.")
         package, version, _, _ = parse_wheel_filename(path.name)
         resolved.append(f"{package}=={version} --hash=sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}")
     (context / "requirements.txt").write_text("\n".join(resolved) + "\n")
@@ -397,6 +444,11 @@ class RunnerService:
             root = Path(temporary)
             config, digest = self.stage(user_id, import_id, root)
             pins = requirements(root / "snapshot", config["configuration"]["dependency_manifests"])
+            heavy = unsupported_dependencies(pins) if wheelhouse is None else {}
+            if heavy:
+                # Fail in a second with the names, instead of after minutes of downloading.
+                raise ValueError("This agent's dependencies are beyond the sandbox for now: " + "; ".join(
+                    f"{', '.join(names)} ({why})" for why, names in heavy.items()) + ". The sandbox holds up to 500 MB of prebuilt packages.")
             context = root / "context"
             context.mkdir()
             wheels = context / "wheels"

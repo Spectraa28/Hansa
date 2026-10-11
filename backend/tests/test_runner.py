@@ -10,7 +10,7 @@ from fastapi import HTTPException
 import pytest
 
 from app.config import Settings, BACKEND
-from app.runner.service import command, copy_snapshot, requirements, limits, finite_float
+from app.runner.service import command, copy_snapshot, left_out, requirements, limits, finite_float
 from app.runner.service import egress_log
 from app.runner.egress import parse_target, public_address
 from tests.test_inspection import imported_client, configuration
@@ -54,10 +54,21 @@ def test_snapshot_copy_rejects_links_secrets_special_files_and_caps(tmp_path):
     (source / "agent.py").write_text("print(1)")
     digest = copy_snapshot(source, tmp_path / "copy", settings)
     assert len(digest) == 64 and (tmp_path / "copy/agent.py").read_text() == "print(1)"
+    # Credential-named paths are left out of the copy; the rest of the repository still runs.
     (source / ".env").write_text("secret")
-    with pytest.raises(ValueError, match="credential"):
-        copy_snapshot(source, tmp_path / "secrets", settings)
-    (source / ".env").unlink()
+    (source / "web").mkdir()
+    (source / "web/.env.production").write_text("secret")
+    (source / "web/app.js").write_text("1")
+    (source / ".ssh").mkdir()
+    (source / ".ssh/id").write_text("secret")
+    (source / ".env.example").write_text("NAME=")
+    copy_snapshot(source, tmp_path / "secrets", settings)
+    assert sorted(str(p.relative_to(tmp_path / "secrets")) for p in (tmp_path / "secrets").rglob("*")) == ["agent.py", "web", "web/app.js"]
+    assert left_out(source) == [".env", ".ssh", "web/.env.production"]
+    for name in (".env", "web/.env.production", "web/app.js", ".ssh/id", ".env.example"):
+        (source / name).unlink()
+    (source / "web").rmdir()
+    (source / ".ssh").rmdir()
     (source / "link").symlink_to(tmp_path / "outside")
     with pytest.raises(ValueError, match="links"):
         copy_snapshot(source, tmp_path / "links", settings)
@@ -122,7 +133,8 @@ def test_resolver_has_no_source_secrets_or_build_backend_and_cleans_timeout(tmp_
     assert create[create.index("--network") + 1] == "bridge"
     assert "--only-binary=:all:" in create and "--isolated" in create and "-i" in create
     mounts = [create[i + 1] for i, arg in enumerate(create) if arg == "--mount"]
-    assert len(mounts) == 2 and all("snapshot" not in mount for mount in mounts)
+    # requirements, the wheel directory and an empty scratch directory for pip; never the source
+    assert len(mounts) == 3 and all("snapshot" not in mount for mount in mounts)
     assert not any("KEY=" in arg or "SECRET=" in arg for arg in create)
     assert calls[-1][:2] == ("rm", "--force")
 
@@ -306,3 +318,10 @@ def test_real_filtered_internet_reaches_public_web_only(configured_runner):
     assert offline["output"]["internet"]["https_public"] != 200
     names = os.popen("docker ps -a --format '{{.Names}}'; docker network ls --format '{{.Name}}'").read()
     assert "ouro-egress-" not in names and "ouro-net-" not in names and "ouro-run-" not in names
+
+
+def test_dependencies_the_sandbox_cannot_carry_are_named_before_any_download():
+    from app.runner.service import unsupported_dependencies
+    assert unsupported_dependencies(["httpx>=0.28", "fastapi"]) == {}
+    found = unsupported_dependencies(["Sentence_Transformers>=5", "torch", "playwright>=1.60", "httpx"])
+    assert sorted(sum(found.values(), [])) == ["playwright", "sentence-transformers", "torch"]

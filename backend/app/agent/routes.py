@@ -39,6 +39,12 @@ def start_optimization(import_id: uuid.UUID, body: OptimizationInput, request: R
                                                        body.goal, body.max_spend_usd, body.max_target_spend_usd)
 
 
+@router.post("/{import_id}/contract/suggest")
+def suggest_tasks(import_id: uuid.UUID, request: Request, user: dict = Depends(require_csrf)):
+    rate_limit(request)
+    return request.app.state.agent.suggest_tasks(user["id"], str(import_id))
+
+
 @router.get("/{import_id}/report")
 def report(import_id: uuid.UUID, request: Request, user: dict = Depends(current_session)):
     from .report import build

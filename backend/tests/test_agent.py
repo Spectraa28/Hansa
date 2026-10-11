@@ -266,3 +266,31 @@ def test_naive_context_mode_sends_the_transcript_unchanged(agent, monkeypatch):
     seen = script(service, monkeypatch, [call("finish", outcome="blocked", summary="Nothing to do in this test.")])
     job = finished(service, owner, imported, service.start_onboarding(owner, imported))
     assert job["status"] == "blocked" and "CONTEXT BUDGET" not in seen[0][0]["content"]
+
+
+def test_task_suggestions_are_validated_drafts_and_save_nothing(agent, monkeypatch):
+    state, service, owner, imported = agent
+    with pytest.raises(HTTPException) as missing:
+        service.suggest_tasks(owner, imported)
+    assert missing.value.status_code == 404  # no adapter yet, so no model call
+    with state.database.connect() as db:
+        db.execute("INSERT INTO import_adapters (import_id,content,sha256,example_task,job_id,created_at) VALUES (?,?,?,?,?,?)",
+                   (imported, '"""Reads question. Prints answer and done."""\n', "a" * 64, json.dumps({"task": {"question": "hi"}}), "job", 1))
+    seen = script(service, monkeypatch, [call("propose_tasks", tasks=[
+        {"name": "Greets", "description": "Answers a greeting.", "input": {"question": "hello"}, "checks": [
+            {"pointer": "/done", "field_type": "boolean", "exact_json": "true"},
+            {"pointer": "/answer", "field_type": "string", "exact_json": "not json"},  # exact value dropped, type check kept
+            {"pointer": "no-slash", "field_type": "string"}]},                       # invalid pointer dropped
+        {"name": "Has a command", "description": "x", "input": {"question": "sudo rm -rf /tmp/x"}, "checks": []}])])  # refused by the schema
+    monkeypatch.setattr(service.gateway, "summarize_key", lambda key: {"estimated_cost_usd": 0.01})
+    result = service.suggest_tasks(owner, imported)
+    assert [task["name"] for task in result["tasks"]] == ["Greets"] and result["saved"] is False
+    assert result["tasks"][0]["required_fields"] == [
+        {"pointer": "/done", "field_type": "boolean", "check_exact": True, "exact_value": True},
+        {"pointer": "/answer", "field_type": "string", "check_exact": False, "exact_value": None}]
+    assert "Reads question" in seen[0][1]["content"]
+    with state.database.connect() as db:
+        assert db.execute("SELECT count(*) FROM task_contracts WHERE import_id=?", (imported,)).fetchone()[0] == 0
+        assert db.execute("SELECT count(*) FROM gateway_keys WHERE run_label LIKE 'hansa-suggest-%' AND revoked=0").fetchone()[0] == 0
+    assert agent_service.JOB_LOCK.acquire(blocking=False)
+    agent_service.JOB_LOCK.release()

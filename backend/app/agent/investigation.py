@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..gateway.shape import repeated_prefix
+from ..runner.xray import anatomy
 from .tools import SnapshotTools
 
 SYSTEM = Path(__file__).with_name("investigation_prompt.md").read_text()
@@ -146,7 +147,18 @@ class InvestigationTools:
                 "repetitions": self.baseline.get("repetitions", 1), "tasks": tasks, "totals": totals,
                 "totals_scope": "Totals over all repetitions, not per-run means; fractions are not percentages.",
                 "limits": (self.baseline.get("contract") or {}).get("limits"),
+                # Ledger arithmetic done up front, so turns go on source evidence instead of adding up call sizes.
+                "anatomy": self.anatomy(),
                 "coverage": "Development cases; pending human reviews are not correctness passes."}
+
+    def anatomy(self):
+        try:
+            result = anatomy(self.service.database, self.baseline)
+        except Exception:  # measured context is a head start, never a reason to fail the investigation
+            return None
+        if result:
+            result["use"] = "Measured over all baseline runs. Verify against read_run and source before saving a finding that relies on it."
+        return result
 
     def run(self, run_id):
         if run_id not in self.allowed_runs:

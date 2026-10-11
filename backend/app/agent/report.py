@@ -4,6 +4,10 @@ Everything here is read from stored results. Nothing is recomputed from the mode
 """
 import json
 import math
+from pathlib import Path
+
+from ..runner.service import left_out
+from ..runner.xray import anatomy
 
 METRICS = ("model_calls", "tokens_in", "tokens_out", "cost_usd", "wall_time_seconds")
 
@@ -13,7 +17,7 @@ def total(tasks, key):
     return None if any(value is None for value in values) else sum(values)
 
 
-def baseline_section(baseline):
+def baseline_section(baseline, database=None):
     if baseline is None:
         return None
     tasks = baseline.get("tasks", [])
@@ -24,6 +28,8 @@ def baseline_section(baseline):
             "tasks": [{"task_id": task.get("task_id"), "name": task.get("name"), "status": task.get("status"), "reason": task.get("reason"),
                        **{key: task.get(key) for key in METRICS}, "spread": task.get("spread"),
                        "trace_ids": task.get("trace_ids") or [task.get("trace_id")]} for task in tasks],
+            # What the agent is made of, from the call ledger alone. Free to compute; None until a baseline completes.
+            "xray": anatomy(database, baseline) if database is not None and baseline["status"] == "completed" else None,
             "note": "per_pass is the mean cost of running every task once. Cost is LiteLLM-reported, not invoice-reconciled."}
 
 
@@ -165,9 +171,12 @@ def build(service, baselines, user_id, import_id):
     spend["candidate_runs"] = sum((job["result"].get("target_usage") or {}).get("estimated_cost_usd") or 0
                                   for job in jobs if job["kind"] == "optimization")
     return {
-        "import": {"import_id": import_id, "repository": imported["repository_name"], "branch": imported["branch"], "commit_sha": imported["commit_sha"]},
+        "import": {"import_id": import_id, "repository": imported["repository_name"], "branch": imported["branch"], "commit_sha": imported["commit_sha"],
+                   # Source references are relative to this folder when one was imported.
+                   "folder": imported["folder"] if "folder" in imported.keys() else None,
+                   "left_out": left_out(Path(imported["snapshot_path"])) if imported["snapshot_path"] else []},
         "adapter": dict(adapter) if adapter else None,
-        "baseline": baseline_section(baseline),
+        "baseline": baseline_section(baseline, service.database),
         "investigation": None if investigation is None else {
             "job_id": investigation["job_id"], "summary": investigation["result"].get("summary"),
             "incomplete": bool(investigation["result"].get("incomplete")) or investigation["status"] != "ready",

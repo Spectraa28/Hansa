@@ -7,10 +7,17 @@ import type { Session } from './api'
 import { measurement } from './report'
 import type { ActiveJob, ImportReport, StageKind, Step } from './report'
 import RunFeed, { stageLabels } from './RunFeed'
+import { advice } from './advice'
 
 type Contract = { status?: string; stale: boolean; missing_requirements: string[]; contract: { limits: { max_spend_usd: number } | null; tasks: unknown[] } | null }
 const kinds: Partial<Record<Step, StageKind>> = { setup: 'onboarding', baseline: 'baseline', findings: 'investigation', fix: 'optimization' }
-const buttons = { onboarding: 'Start onboarding', baseline: 'Start baseline', investigation: 'Start investigation', optimization: 'Test fix' }
+const buttons = { onboarding: 'Start onboarding', baseline: 'Run the baseline', investigation: 'Start the hunt', optimization: 'Test this fix' }
+const copy: Record<StageKind, [string, string]> = {
+  onboarding: ['Teach Hansa to run it.', 'Hansa reads the source, writes a small adapter and proves it with one real run in the sandbox.'],
+  baseline: ['Measure it.', 'Every task runs in the sandbox. Each model call is counted, timed and priced.'],
+  investigation: ['Hunt for leaks.', 'Hansa lines every call up against the source and goes through all eight areas, from prompt structure to wasted calls.'],
+  optimization: ['Test a fix.', 'Hansa changes a private copy, reruns your tasks and keeps the fix only if it is cheaper and nothing breaks.'],
+}
 
 function StageForm({ kind, data, session, preview, busy, disabled, onStarted, refresh }: { kind: StageKind; data: ImportReport; session?: Session | null; preview: boolean; busy: boolean; disabled: boolean; onStarted: (job: ActiveJob) => void; refresh: () => Promise<unknown> }) {
   const [params] = useSearchParams()
@@ -72,30 +79,36 @@ function StageForm({ kind, data, session, preview, busy, disabled, onStarted, re
     } finally { setPending(false) }
   }
 
+  const disabledFields = busy || pending || preview
+  const [title, pitch] = copy[kind]
+  const tasks = contract.data?.contract?.tasks.length
+  const terms = kind === 'baseline'
+    ? [tasks != null && `${tasks} task${tasks === 1 ? '' : 's'}`, `${repetitions} run${repetitions === '1' ? '' : 's'} each`, `stops at ${measurement(contract.data?.contract?.limits?.max_spend_usd, 'usd')}`]
+    : [`stops at ${measurement(kind === 'optimization' ? Number(cap) + Number(targetCap) : Number(cap), 'usd')}`, kind === 'investigation' ? 'reads only, runs nothing' : 'runs in the sandbox']
   return <section aria-label="Start a stage" className="slab mb-9 p-6 pt-8 md:p-8">
-    <span className="slab-tab">start</span><h2 className="font-display text-[28px] font-[760] tracking-[-.03em]">{stageLabels[kind]}</h2>
-    <p className="mt-2 text-[13px] text-muted">Review the spend cap before starting. This launches model calls{kind === 'investigation' ? '.' : ' and isolated task runs.'}</p>
+    <span className="slab-tab">{stageLabels[kind]}</span><h2 className="font-display text-[32px] leading-none font-[780] tracking-[-.04em]">{title}</h2>
+    <p className="mt-3 max-w-[60ch] text-[15px] text-muted">{pitch}</p>
     <form onSubmit={event => void start(event)} className="mt-5">
-      {kind === 'baseline' ? <>
-        <p className="text-[13px]">Confirmed contract spend cap: <strong className="font-mono">{measurement(contract.data?.contract?.limits?.max_spend_usd, 'usd')}</strong></p>
-        <p className="mt-1 text-[13px] text-muted">Applies across the entire baseline, including all repetitions. Change it in the task contract, then confirm that contract again.</p>
-        <label htmlFor="run-repetitions" className="mt-4 block text-[13px] font-medium">Repetitions</label><select id="run-repetitions" className="field mt-2 max-w-xs text-[13px]" value={repetitions} disabled={busy || pending || preview} onChange={event => setRepetitions(event.target.value)}>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value}</option>)}</select>
-        {contract.isError && <div className="mt-4"><p role="alert" className="text-[13px]">Could not load the confirmed spend cap.</p><button type="button" className="button-secondary mt-3" onClick={() => void contract.refetch()}>Reload spend cap</button></div>}
-      </> : <div className="grid gap-4 sm:grid-cols-2">
-        <div><label htmlFor="run-cap" className="block text-[13px] font-medium">{kind === 'optimization' ? 'Optimizer spend cap (USD)' : 'Stage spend cap (USD)'}</label><input id="run-cap" className="field mt-2 font-mono text-[13px]" type="number" min="0.01" max="1.5" step="0.01" required value={cap} disabled={busy || pending || preview} onChange={event => setCap(event.target.value)} /></div>
-        {kind === 'optimization' && <div><label htmlFor="target-cap" className="block text-[13px] font-medium">Candidate-run spend cap (USD)</label><input id="target-cap" className="field mt-2 font-mono text-[13px]" type="number" min="0.01" max="3" step="0.01" required value={targetCap} disabled={busy || pending || preview} onChange={event => setTargetCap(event.target.value)} /></div>}
-      </div>}
       {kind === 'optimization' && <>
-        <p className="mt-3 text-[13px]">Combined spend caps: <strong className="font-mono">{measurement(Number(cap) + Number(targetCap), 'usd')}</strong></p>
-        <label htmlFor="run-finding" className="mt-4 block text-[13px] font-medium">Finding to test</label><select id="run-finding" className="field mt-2 text-[13px]" value={finding} disabled={busy || pending || preview} onChange={event => setFinding(event.target.value)}><option value="">Custom goal</option>{data.investigation?.job_id && data.investigation.findings.map(item => <option key={item.finding_id} value={item.finding_id}>Finding {item.finding_id} · {item.waste?.slice(0, 100)}</option>)}</select>
-        {!finding && <><label htmlFor="run-goal" className="mt-4 block text-[13px] font-medium">Optimization goal</label><textarea id="run-goal" className="field mt-2 min-h-24 text-[13px]" minLength={10} maxLength={2000} required value={goal} disabled={busy || pending || preview} onChange={event => setGoal(event.target.value)} /></>}
+        <label htmlFor="run-finding" className="block text-[13px] font-medium">What to fix</label><select id="run-finding" className="field mt-2" value={finding} disabled={disabledFields} onChange={event => setFinding(event.target.value)}>{data.investigation?.job_id && data.investigation.findings.map((item, index) => <option key={item.finding_id} value={item.finding_id}>Leak {String(index + 1).padStart(2, '0')} · {item.waste?.slice(0, 90)}</option>)}<option value="">Something else (describe it)</option></select>
+        {!finding && <><label htmlFor="run-goal" className="mt-4 block text-[13px] font-medium">Describe the change to try</label><textarea id="run-goal" className="field mt-2 min-h-24" minLength={10} maxLength={2000} required value={goal} disabled={disabledFields} onChange={event => setGoal(event.target.value)} /></>}
       </>}
-      <p className="report-prose mt-4 text-muted">Spend caps stop further work against recorded costs. A call or batch already running can take spend above the cap. Missing cost is reported as unknown.</p>
-      {preview && <p className="mt-4 text-[13px]">Starting stages is disabled in this saved preview.</p>}
-      {busy && <p role="status" className="mt-4 text-[13px]">A job is already running. Reattached to its live feed.</p>}
-      {!preview && prerequisite && <p className="mt-4 text-[13px]">{prerequisite}</p>}
-      {error && <p role="alert" className="report-prose mt-4">{error}</p>}
-      {uncertain ? <button type="button" disabled={pending} className="button-secondary mt-5" onClick={() => void checkStatus()}>Check run status</button> : <button className="button-primary mt-5" disabled={locked}>{pending ? 'Starting…' : buttons[kind]}</button>}
+      {error && <div role="alert" className="mt-4 max-w-[65ch] rounded-control border-2 border-ink bg-waste px-4 py-3 text-[14px]"><p className="font-semibold">{error}</p>{advice(error) && <p className="mt-1">{advice(error)}</p>}</div>}
+      {!preview && prerequisite && <p className="mt-4 rounded-control border-2 border-dashed border-ink px-4 py-3 text-[14px]">{prerequisite}</p>}
+      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+        {uncertain ? <button type="button" disabled={pending} className="button-secondary" onClick={() => void checkStatus()}>Check run status</button> : <button className="button-primary min-h-12 px-7 text-[16px]" disabled={locked}>{pending ? 'Starting…' : buttons[kind]}</button>}
+        <p className="font-mono text-[13px] text-muted">{terms.filter(Boolean).join(' · ')}</p>
+      </div>
+      <details className="mt-5 text-[13px]"><summary className="cursor-pointer font-mono text-muted underline decoration-line decoration-2 underline-offset-4">change options</summary>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          {kind === 'baseline' ? <div><label htmlFor="run-repetitions" className="block font-medium">Runs per task</label><select id="run-repetitions" className="field mt-2" value={repetitions} disabled={disabledFields} onChange={event => setRepetitions(event.target.value)}>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value}{value === 1 ? ' (quick)' : value === 2 ? ' (shows variation)' : ''}</option>)}</select>
+            <p className="mt-2 text-muted">The spend cap comes from your tasks in Setup.</p></div>
+          : <div><label htmlFor="run-cap" className="block font-medium">{kind === 'optimization' ? 'Cap for Hansa\'s own thinking (USD)' : 'Spend cap (USD)'}</label><input id="run-cap" className="field mt-2 font-mono" type="number" min="0.01" max="1.5" step="0.01" required value={cap} disabled={disabledFields} onChange={event => setCap(event.target.value)} /></div>}
+          {kind === 'optimization' && <div><label htmlFor="target-cap" className="block font-medium">Cap for rerunning your tasks (USD)</label><input id="target-cap" className="field mt-2 font-mono" type="number" min="0.01" max="3" step="0.01" required value={targetCap} disabled={disabledFields} onChange={event => setTargetCap(event.target.value)} /></div>}
+        </div>
+        <p className="mt-3 max-w-[65ch] text-muted">A cap stops new work once recorded cost reaches it. A call already in flight can finish past it.</p>
+        {contract.isError && <div className="mt-3"><p role="alert">Could not load the spend cap.</p><button type="button" className="button-secondary mt-2" onClick={() => void contract.refetch()}>Reload</button></div>}
+      </details>
     </form>
   </section>
 }
@@ -110,7 +123,7 @@ export default function StageRunner({ data, step, session, preview, disabled, re
   const busy = Boolean(job) && !finished
   return <>
     {busy && <p role="status" className="mb-4 flex items-center gap-2 font-mono text-[13px]"><span className="live-dot" /> A job is running. Live feed below.</p>}
-    {kind && !busy && <StageForm key={`${kind}:${step === 'fix' ? data.investigation?.job_id || '' : ''}`} kind={kind} data={data} session={session} preview={preview} busy={busy} disabled={disabled} onStarted={onStarted} refresh={refresh} />}
+    {kind && !busy && !preview && <StageForm key={`${kind}:${step === 'fix' ? data.investigation?.job_id || '' : ''}`} kind={kind} data={data} session={session} preview={preview} busy={busy} disabled={disabled} onStarted={onStarted} refresh={refresh} />}
     {job && session && !preview && <RunFeed key={job.job_id} job={job} importId={data.import.import_id} ownerId={session.user.id} onFinished={onFinished} />}
   </>
 }

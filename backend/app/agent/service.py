@@ -193,6 +193,34 @@ class AgentService:
         return {"import_id": import_id, "content": row["content"], "sha256": row["sha256"],
                 "example_task": json.loads(row["example_task"]), "job_id": row["job_id"], "created_at": row["created_at"]}
 
+    def suggest_tasks(self, user_id, import_id):
+        """One metered call that drafts tasks from the stored adapter. Returns drafts; saves nothing."""
+        from . import suggest
+        if not self.settings.litellm_base_url or not self.settings.litellm_api_key:
+            raise HTTPException(503, "Model gateway is not configured.")
+        adapter = self.adapter(user_id, import_id)
+        tools = self.runner.configuration(user_id, import_id)["configuration"].get("approved_tools") or []
+        if not JOB_LOCK.acquire(blocking=False):
+            raise HTTPException(409, "Another agent job is running. Try again when it finishes.")
+        key = None
+        try:
+            key = self.gateway.mint_key("hansa-suggest-" + uuid.uuid4().hex, max_calls=2, max_spend_usd=0.25, expires_at=int(time.time()) + 300)
+            try:
+                reply = self.complete(key, suggest.messages(adapter, tools), [suggest.TOOL])
+            except AgentFailure as exc:
+                raise HTTPException(502, str(exc)) from None
+            usage = self.gateway.summarize_key(key)
+            tasks = suggest.drafts(reply)
+            if not tasks:
+                raise HTTPException(502, "Hansa could not draft usable tasks from this agent. Write one by hand.")
+            return {"tasks": tasks, "saved": False, "estimated_cost_usd": usage["estimated_cost_usd"],
+                    "note": "Drafted by a model from the adapter and its example. Check every input and expected value before confirming."}
+        finally:
+            if key:
+                with self.database.connect() as db:
+                    db.execute("UPDATE gateway_keys SET revoked=1 WHERE key_hash=?", (token_hash(key),))
+            JOB_LOCK.release()
+
     # -- lifecycle ---------------------------------------------------------------------------
 
     def start_onboarding(self, user_id, import_id, max_spend_usd=1.5):
@@ -399,7 +427,9 @@ class AgentService:
                         "Stop exploring. Save what you have established and call finish."})
                     self.event(job_id, "context", {"warning": "turns or budget nearly used", "turns_left": MAX_TURNS - turn,
                                                    "spent_usd": round(spent, 4)})
-            if usage["unknown_cost_calls"]:
+            # Stop only when an answer arrived without a price. A timed-out attempt that was retried has no
+            # cost either, and ending the job over it throws away everything found so far.
+            if usage["unpriced_answer_calls"]:
                 raise AgentFailure("Unknown agent cost; no further calls admitted.")
             if "max_spend_usd" in state and (usage["estimated_cost_usd"] or 0) + state["target_cost_usd"] >= state["max_spend_usd"]:
                 raise AgentFailure("Onboarding stage budget exhausted; no further calls admitted.")
@@ -540,7 +570,7 @@ class AgentService:
         bounded_data(task, 16384)
         agent_usage = self.gateway.summarize_key(state["key"])
         remaining = state["max_spend_usd"] - state["target_cost_usd"] - (agent_usage["estimated_cost_usd"] or 0)
-        if agent_usage["unknown_cost_calls"] or remaining <= 0:
+        if agent_usage["unpriced_answer_calls"] or remaining <= 0:
             raise AgentFailure("Onboarding stage budget exhausted or cost unknown; no smoke run admitted.")
         state["smoke_runs"] += 1
         try:

@@ -649,3 +649,22 @@ def test_sdk_bookkeeping_rejected_with_actionable_non_echoing_message(gateway):
         json={"model": "claude-sonnet-4.6", "messages": [{"role": "assistant", "content": None, "function_call": None, "refusal": None}]})
     assert response.status_code == 400 and "Remove ALL other SDK message fields" in response.json()["error"]["message"]
     assert not state["requests"]
+
+
+def test_a_failed_upstream_attempt_is_not_an_unpriced_answer(tmp_path):
+    from app.database import Database
+    from app.gateway.service import GatewayService
+    from app.sessions import token_hash
+    database = Database(tmp_path / "g.sqlite3")
+    database.initialize()
+    gateway = GatewayService.__new__(GatewayService)
+    gateway.database, gateway.recover = database, lambda: None
+    with database.connect() as db:
+        db.execute("INSERT INTO gateway_keys (key_hash,run_label,max_calls,max_spend_usd,expires_at,created_at) VALUES (?,?,9,1,9999999999,1)", (token_hash("k"), "job"))
+        for status, cost in ((200, 0.01), (504, None)):
+            db.execute("INSERT INTO model_calls (key_hash,model,http_status,estimated_cost_usd,created_at) VALUES (?,?,?,?,1)", (token_hash("k"), "m", status, cost))
+    usage = gateway.summarize_key("k")
+    assert usage["unknown_cost_calls"] == 1 and usage["unpriced_answer_calls"] == 0  # still reported, no longer fatal
+    with database.connect() as db:
+        db.execute("INSERT INTO model_calls (key_hash,model,http_status,estimated_cost_usd,created_at) VALUES (?,?,200,NULL,1)", (token_hash("k"), "m"))
+    assert gateway.summarize_key("k")["unpriced_answer_calls"] == 1

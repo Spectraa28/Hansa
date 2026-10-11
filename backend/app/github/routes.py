@@ -25,6 +25,8 @@ class ImportInput(BaseModel):
     installation_id: int = Field(gt=0)
     repository_id: int = Field(gt=0)
     branch: str | None = Field(default=None, min_length=1, max_length=255)
+    # One folder of the repository, for monorepos where the agent is not at the root.
+    folder: str | None = Field(default=None, min_length=1, max_length=200, pattern=r"^[A-Za-z0-9_][A-Za-z0-9._ -]*(/[A-Za-z0-9_][A-Za-z0-9._ -]*)*$")
 
 
 @router.get("/connection")
@@ -60,6 +62,12 @@ def repositories(request: Request, installation_id: PositiveID, page: Page = 1, 
 def branches(request: Request, installation_id: PositiveID, repository_id: PositiveID,
              page: Page = 1, per_page: PerPage = 30, user: dict = Depends(current_session)):
     return request.app.state.github.branches(user["id"], installation_id, repository_id, page, per_page)
+
+
+@router.get("/folders")
+def folders(request: Request, installation_id: PositiveID, repository_id: PositiveID,
+            branch: Annotated[str, Query(min_length=1, max_length=255)], user: dict = Depends(current_session)):
+    return request.app.state.github.folders(user["id"], installation_id, repository_id, branch)
 
 
 @router.post("/imports", status_code=202)

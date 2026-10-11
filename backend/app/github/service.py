@@ -238,6 +238,14 @@ class GitHubService:
             return {"repository": self.repo_result(repo), "branches": [{"name": b["name"],
                     "commit_sha": b["commit"]["sha"]} for b in result], "page": page, "has_next": api.has_next}
 
+    def folders(self, user_id, installation_id, repository_id, branch):
+        """Top-level folders on a branch, for choosing where the agent lives. Names only."""
+        with GitHubAPI() as api:
+            token, repo = self.checked_repo(api, user_id, installation_id, repository_id)
+            listing = api.request("GET", f"/repos/{repo['full_name']}/contents", token, params={"ref": branch_name(branch)})
+        names = [item["name"] for item in listing if isinstance(item, dict) and item.get("type") == "dir" and isinstance(item.get("name"), str)]
+        return {"folders": sorted(name for name in names if not name.startswith("."))[:200]}
+
     def queue_import(self, user_id, body):
         with GitHubAPI(self.settings.import_timeout_seconds) as api:
             token, repo = self.checked_repo(api, user_id, body.installation_id, body.repository_id)
@@ -259,9 +267,9 @@ class GitHubService:
             if count >= 5 or queued >= 100:
                 raise GitHubFailure("queue_limit", "Import limit reached. Delete an existing source or try later.", 429)
             db.execute("""INSERT INTO repository_imports
-                (id,user_id,connection_generation,installation_id,repository_id,repository_name,branch,commit_sha,status,created_at,updated_at)
-                VALUES (?,?,?,?,?,?,?,?,'queued',?,?)""", (import_id, user_id, connection["generation"],
-                body.installation_id, body.repository_id, repo["full_name"], branch, sha, now, now))
+                (id,user_id,connection_generation,installation_id,repository_id,repository_name,branch,commit_sha,status,created_at,updated_at,folder)
+                VALUES (?,?,?,?,?,?,?,?,'queued',?,?,?)""", (import_id, user_id, connection["generation"],
+                body.installation_id, body.repository_id, repo["full_name"], branch, sha, now, now, getattr(body, "folder", None)))
         return self.import_result(user_id, import_id)
 
     def import_result(self, user_id, import_id):
@@ -271,7 +279,7 @@ class GitHubService:
             raise GitHubFailure("not_found", "Import not found.", 404)
         # Internal filesystem paths and credentials never leave the backend.
         return {key: row[key] for key in ("id", "repository_id", "repository_name", "installation_id", "branch",
-                "commit_sha", "status", "file_count", "extracted_bytes", "failure_code", "failure_reason", "created_at", "updated_at")} | {
+                "commit_sha", "status", "file_count", "extracted_bytes", "failure_code", "failure_reason", "created_at", "updated_at", "folder")} | {
                 "warnings": json.loads(row["warnings"]), "source_available": row["status"] == "ready"}
 
     def imports(self, user_id, page, per_page):
@@ -382,7 +390,7 @@ class GitHubService:
                 token = api.installation_token(self.jwt(), item["installation_id"], item["repository_id"])
                 archive = staging / "source.tar.gz"
                 api.download(token, name, item["commit_sha"], archive, self.settings.import_download_bytes, check_active)
-                result = extract_archive(archive, staging / "source", self.settings, check_active)
+                result = extract_archive(archive, staging / "source", self.settings, check_active, item["folder"])
                 if has_submodules and "submodules_not_imported" not in result["warnings"]:
                     result["warnings"].append("submodules_not_imported")
                 # Recheck the user's intersection of permissions immediately before publishing source.

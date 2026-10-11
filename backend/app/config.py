@@ -36,7 +36,8 @@ class Settings:
     import_timeout_seconds: int = 120
     litellm_base_url: str = ""
     runner_internet: bool = True
-    runner_parallel: int = 3
+    # One run at a time is the tested path: limits are rechecked before every run. Raise it to trade that for speed.
+    runner_parallel: int = 1
     agent_model: str = "claude-sonnet-4.6"
     agent_context: str = "managed"
     neatlogs_mcp_url: str = "https://ingest.neatlogs.com/mcp"
@@ -130,7 +131,7 @@ class Settings:
             import_timeout_seconds=config("IMPORT_TIMEOUT_SECONDS", cast=int, default=120),
             litellm_base_url=config("LITELLM_BASE_URL", default="").rstrip("/"),
             runner_internet=config("RUNNER_INTERNET", cast=bool, default=True),
-            runner_parallel=config("RUNNER_PARALLEL", cast=int, default=3),
+            runner_parallel=config("RUNNER_PARALLEL", cast=int, default=1),
             agent_model=config("AGENT_MODEL", default="claude-sonnet-4.6"),
             agent_context=config("AGENT_CONTEXT", default="managed"),
             neatlogs_mcp_url=config("NEATLOGS_MCP_URL", default="https://ingest.neatlogs.com/mcp"),

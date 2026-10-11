@@ -259,6 +259,8 @@ class Database:
                                  ("confirmed_at", "INTEGER"), ("last_error", "TEXT")):
                 if column not in trace_columns:
                     db.execute(f"ALTER TABLE traces ADD COLUMN {column} {kind}")
+            if "folder" not in {row["name"] for row in db.execute("PRAGMA table_info(repository_imports)")}:
+                db.execute("ALTER TABLE repository_imports ADD COLUMN folder TEXT")
             key_columns = {row["name"] for row in db.execute("PRAGMA table_info(gateway_keys)")}
             if "model_map" not in key_columns:
                 db.execute("ALTER TABLE gateway_keys ADD COLUMN model_map TEXT NOT NULL DEFAULT '{}'")

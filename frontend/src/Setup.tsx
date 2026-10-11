@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, Lightbulb, Plus, Trash2 } from 'lucide-react'
+import { Check, Lightbulb, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { api, ApiError, send } from './api'
 import type { Session } from './api'
 
@@ -18,6 +18,20 @@ type Limits = { max_runtime_seconds: number; max_model_calls: number; max_tool_c
 type Contract = { tasks: Task[]; acceptable_failures: Record<string, Requirement | null>; protected_behavior: Record<string, Requirement | null>; limits: Limits | null }
 type Adapter = { content: string; example_task: { task?: unknown; description?: string } | null }
 type ContractRecord = { version: number | null; status?: string; stale: boolean; can_confirm: boolean; missing_requirements: string[]; contract: Contract | null }
+
+// Hansa's sandbox runs Python 3.12. Mirrors the server's rule closely enough to warn before saving.
+export function allowsSandboxPython(value: string): boolean {
+  const target = [3, 12]
+  const number = (text: string) => text.split('.').slice(0, 2).map(part => Number(part.replace('*', 'NaN')))
+  return (/^[<>=!~]/.test(value.trim()) ? value : `==${value}`).split(',').every(part => {
+    const match = part.trim().match(/^(~=|==|!=|>=|<=|>|<)\s*([\d.*]+)$/)
+    if (!match) return false
+    const [major, minor] = number(match[2]), wild = match[2].endsWith('*') || match[2].split('.').length < 2
+    const same = major === target[0] && (wild || Number.isNaN(minor) || minor === target[1]) && (match[2].split('.').length <= 2 || wild)
+    const order = target[0] !== major ? target[0] - major : target[1] - (Number.isNaN(minor) ? target[1] : minor)
+    return { '==': same, '!=': !same, '>=': order >= 0, '<=': order <= 0 || same, '>': order > 0, '<': order < 0, '~=': major === target[0] && order >= 0 }[match[1]]!
+  })
+}
 
 const message = (error: unknown) => error instanceof ApiError ? error.message : 'Could not reach Hansa. Check your connection and try again.'
 const providers = ['openai', 'anthropic', 'google', 'aws_bedrock', 'litellm']
@@ -49,6 +63,7 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const done = inspection.status === 'confirmed'
+  const pythonFits = allowsSandboxPython(form.python_version)
   const toggle = (list: string[], set: (next: string[]) => void, value: string) => set(list.includes(value) ? list.filter(item => item !== value) : [...list, value])
   // Everything the scan saw for a field, most frequent first, with one place it was seen.
   const seen = (kind: string) => {
@@ -63,7 +78,7 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
   const suggestions = (key: keyof typeof form, kind: string = key) => { const options = seen(kind)
     return options.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1.5"><span className="font-mono text-[12px] text-muted">found in your code:</span>
       {options.map(option => <button type="button" key={option.value} aria-pressed={form[key] === option.value} title={`Seen in ${option.where}${option.count > 1 ? ` and ${option.count - 1} more place${option.count > 2 ? 's' : ''}` : ''}`}
-        onClick={() => setForm({ ...form, [key]: option.value })} className={`chip shrink max-w-full py-1 whitespace-normal [overflow-wrap:anywhere] text-left ${form[key] === option.value ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}>
+        onClick={() => setForm({ ...form, [key]: option.value })} className={`chip shrink max-w-full min-h-9 py-1 whitespace-normal [overflow-wrap:anywhere] text-left ${form[key] === option.value ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}>
         {option.value}<span className="opacity-60">{option.where}</span></button>)}</div> }
   const field = (key: keyof typeof form, label: string, hint: string) => <div><label htmlFor={`setup-${key}`} className="block text-[13px] font-medium">{label}</label>
     <input id={`setup-${key}`} className="field mt-2 font-mono" required value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} />
@@ -81,7 +96,8 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
       {done && <span className="chip chip-ok"><Check size={13} strokeWidth={3} aria-hidden="true" /> saved</span>}</div>
     <div className="mt-6 grid gap-5 sm:grid-cols-2">
       {field('entrypoint', 'Entrypoint', 'The command that starts the agent.')}
-      {field('python_version', 'Python version', 'Used to build the sandbox image.')}
+      <div>{field('python_version', 'Python version', 'Hansa\'s sandbox runs Python 3.12, so this has to allow 3.12.')}
+        {!pythonFits && <p role="alert" className="mt-2 rounded-control border-2 border-ink bg-waste px-3 py-2 text-[13px] font-medium">"{form.python_version}" rules out 3.12, so the agent can't be run. <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '3.12' })}>Use 3.12</button> or a range like <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '>=3.10' })}>{'>=3.10'}</button>.</p>}</div>
       <div><label className="block text-[13px] font-medium">Provider the code calls<select className="field mt-2" value={form.model_provider} onChange={event => setForm({ ...form, model_provider: event.target.value })}>{providers.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">What the source is written against.</span></label>{suggestions('model_provider')}</div>
       {field('model_id', 'Model the code asks for', 'Recorded next to the model actually used.')}
       <label className="block text-[13px] font-medium sm:col-span-2">Model Hansa runs it on<select className="field mt-2 font-mono" value={form.litellm_model} onChange={event => setForm({ ...form, litellm_model: event.target.value })}>{inspection.litellm_models.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">Every call from your agent is routed to this model and metered.</span></label>
@@ -92,7 +108,7 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
           return <label key={value} className={`chip cursor-pointer py-1.5 ${on ? 'bg-ink text-paper' : 'bg-surface'}`}><input type="checkbox" className="sr-only" checked={on} onChange={() => toggle(list as string[], set as (next: string[]) => void, value)} />{on && <Check size={13} strokeWidth={3} aria-hidden="true" />}{value}</label> })}</div>
           : <p className="mt-2 text-[13px] text-muted">{empty as string}</p>}</fieldset>)}
     {error && <p role="alert" className="mt-5 font-medium">{error}</p>}
-    <button className="button-primary mt-7" disabled={busy}>{busy ? 'Saving…' : done ? 'Save changes' : 'Looks right, save'}</button>
+    <button className="button-primary mt-7" disabled={busy || !pythonFits}>{busy ? 'Saving…' : done ? 'Save changes' : 'Looks right, save'}</button>
     {done && <p className="mt-3 text-[13px] text-muted">Changing these means the tasks below need confirming again.</p>}
   </form>
 }
@@ -102,7 +118,7 @@ const blank = (): Draft => ({ name: '', description: '', input: '{\n  "message":
 const draftOf = (task: Task): Draft => ({ name: task.name, description: task.description, input: JSON.stringify(task.input, null, 2), source: task,
   checks: task.required_fields.map(rule => ({ pointer: rule.pointer, field_type: rule.field_type, exact: rule.check_exact ? JSON.stringify(rule.exact_value) : '' })) })
 
-function Tasks({ base, session, revision, record, adapter, onSaved }: { base: string; session: Session; revision: string; record: ContractRecord; adapter: Adapter | null; onSaved: (next: ContractRecord) => void }) {
+function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { base: string; session: Session; revision: string; record: ContractRecord; adapter: Adapter | null; tools: string[]; onSaved: (next: ContractRecord) => void }) {
   const existing = record.contract
   const [tasks, setTasks] = useState<Draft[]>(existing?.tasks.length ? existing.tasks.map(draftOf) : [blank()])
   const [rules, setRules] = useState<Record<string, string>>(Object.fromEntries(guards.map(([group, key, , fallback]) => [key, existing?.[group][key]?.description || fallback])))
@@ -114,6 +130,19 @@ function Tasks({ base, session, revision, record, adapter, onSaved }: { base: st
   // What Hansa's own agent learned about this agent while writing the adapter.
   const example = adapter?.example_task?.task !== undefined ? adapter.example_task : null
   const returns = adapter?.content.match(/"""([\s\S]*?)"""/)?.[1].trim()
+  const [drafting, setDrafting] = useState(false)
+  const [drafted, setDrafted] = useState('')
+  // One model call writes whole tasks; they land here as unsaved drafts to edit.
+  async function draft() {
+    setDrafting(true); setError(''); setDrafted('')
+    try {
+      const result = await send<{ tasks: Task[]; estimated_cost_usd: number | null }>(`${base}/contract/suggest`, session.csrf_token)
+      const fresh = result.tasks.filter(task => !tasks.some(have => have.name.toLowerCase() === task.name.toLowerCase())).map(task => ({ ...draftOf(task), source: undefined }))
+      const kept = tasks.filter(task => task.name || task.source)
+      setTasks([...kept, ...fresh].slice(0, 20)); setDirty(true)
+      setDrafted(`${fresh.length} task${fresh.length === 1 ? '' : 's'} drafted${result.estimated_cost_usd != null ? ` for $${result.estimated_cost_usd.toFixed(3)}` : ''}. They're guesses from your code: check each input and expected value, then save.`)
+    } catch (caught) { setError(message(caught)) } finally { setDrafting(false) }
+  }
   function useExample() {
     const draft: Draft = { ...blank(), name: 'Example from your code', description: (example!.description || '').slice(0, 300), input: JSON.stringify(example!.task, null, 2) }
     setDirty(true); setTasks(tasks.length === 1 && !tasks[0].name && !tasks[0].source ? [draft] : [...tasks, draft])
@@ -157,11 +186,24 @@ function Tasks({ base, session, revision, record, adapter, onSaved }: { base: st
       <p className="mt-2 max-w-[60ch] text-muted">Hansa runs these to measure your agent, then again to prove a fix didn't break it. Three is plenty to start.</p></div>
       {confirmed ? <span className="chip chip-ok"><Check size={13} strokeWidth={3} aria-hidden="true" /> confirmed · v{record.version}</span> : record.version ? <span className="chip chip-waste">{record.stale ? 'needs confirming again' : 'not confirmed'}</span> : null}</div>
 
+    {!example && <aside className="mt-6 rounded-control border-2 border-dashed border-ink p-5">
+      <p className="flex items-center gap-2 font-display text-[19px] font-[760] tracking-[-.02em]"><Lightbulb size={18} aria-hidden="true" /> Not sure what to write?</p>
+      <p className="mt-2 max-w-[70ch] text-[14px]">{adapter ? 'Write one task per thing your agent is for, or let Hansa draft them.' : 'Run step 2 first. While Hansa learns to run your agent it works out the input it takes, and offers it here as a ready-made task.'}</p>
+      {adapter && <button type="button" className="button-primary mt-4" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing tasks…' : 'Write 3 tasks for me'}</button>}
+      {drafted && <p role="status" className="mt-3 text-[14px] font-medium">{drafted}</p>}
+      {tools.length > 0 && <><p className="mt-4 font-mono text-[12px] text-muted">ideas from the tools you allowed, one task each:</p>
+        <div className="mt-2 flex flex-wrap gap-1.5">{tools.slice(0, 8).map(tool => { const name = `Ends in ${tool}`, used = tasks.some(task => task.name === name)
+          return <button type="button" key={tool} disabled={used} className={`chip py-1 ${used ? 'chip-quiet' : 'bg-surface hover:bg-waste'}`} onClick={() => { const draft = { ...blank(), name, description: `A request that should make the agent call ${tool}.` }
+            setDirty(true); setTasks(tasks.length === 1 && !tasks[0].name && !tasks[0].source ? [draft] : [...tasks, draft]) }}><Plus size={12} aria-hidden="true" />{tool}</button> })}</div></>}
+    </aside>}
     {example && <aside className="mt-6 rounded-control border-2 border-ink bg-waste-soft p-5">
       <p className="flex items-center gap-2 font-display text-[19px] font-[760] tracking-[-.02em]"><Lightbulb size={18} aria-hidden="true" /> Suggested from your code</p>
       <p className="mt-2 max-w-[70ch] text-[14px]">{example.description || 'Hansa worked out the input this agent takes while writing its adapter.'}</p>
       <pre className="mt-3 max-h-44 overflow-auto rounded-control bg-ink p-4 font-mono text-[12.5px] leading-relaxed text-paper">{JSON.stringify(example.task, null, 2)}</pre>
-      <button type="button" className="button-secondary mt-4" onClick={useExample}><Plus size={16} aria-hidden="true" /> Use as a task</button>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" className="button-primary" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing tasks…' : 'Write 3 tasks for me'}</button>
+        <button type="button" className="button-secondary" onClick={useExample}><Plus size={16} aria-hidden="true" /> Use just this example</button>
+        <span className="font-mono text-[12px] text-muted">one model call, a few cents</span></div>
+      {drafted && <p role="status" className="mt-3 text-[14px] font-medium">{drafted}</p>}
       {returns && <details className="mt-4 text-[13px]"><summary className="cursor-pointer font-semibold">What the agent returns, for writing checks</summary><pre className="mt-2 max-h-64 overflow-auto font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">{returns}</pre></details>}
     </aside>}
     <ol className="mt-7 grid grid-cols-[minmax(0,1fr)] gap-6">{tasks.map((task, index) => <li key={index} className="min-w-0 rounded-control border-2 border-ink"><details open={!task.source} className="group p-5">
@@ -202,7 +244,7 @@ function Tasks({ base, session, revision, record, adapter, onSaved }: { base: st
   </form>
 }
 
-export default function Setup({ importId, session, hasAdapter, onChanged, children }: { importId: string; session: Session; hasAdapter: boolean; onChanged: () => void; children: ReactNode }) {
+export default function Setup({ importId, session, hasAdapter, onChanged, children, next }: { importId: string; session: Session; hasAdapter: boolean; onChanged: () => void; children: ReactNode; next: ReactNode }) {
   const queryClient = useQueryClient()
   const base = `/github/imports/${encodeURIComponent(importId)}`
   const inspectionKey = ['inspection', session.user.id, importId], contractKey = ['contract', session.user.id, importId]
@@ -224,6 +266,15 @@ export default function Setup({ importId, session, hasAdapter, onChanged, childr
     {!ready ? <p className="mt-9 rounded-card border-2 border-dashed border-ink p-8 text-muted">Save the settings above, then add the tasks.</p>
       : contract.isPending ? <p role="status" className="slab mt-9 p-8">Loading tasks…</p>
       : contract.isError ? <div role="alert" className="slab mt-9 p-8"><p>{message(contract.error)}</p><button className="button-secondary mt-4" onClick={() => void contract.refetch()}>Try again</button></div>
-      : <Tasks key={`${contract.data.version}:${inspection.data.configuration_revision}:${Boolean(adapter.data)}`} base={base} session={session} revision={inspection.data.configuration_revision!} record={contract.data} adapter={adapter.data || null} onSaved={next => { queryClient.setQueryData(contractKey, next); void queryClient.invalidateQueries({ queryKey: ['run-contract'] }); onChanged() }} />}
+      : <Tasks key={`${contract.data.version}:${inspection.data.configuration_revision}:${Boolean(adapter.data)}`} base={base} session={session} revision={inspection.data.configuration_revision!} record={contract.data} adapter={adapter.data || null} tools={inspection.data.configuration?.approved_tools || []} onSaved={next => { queryClient.setQueryData(contractKey, next); void queryClient.invalidateQueries({ queryKey: ['run-contract'] }); onChanged() }} />}
+    {/* One line that always says what is still missing and what comes after. */}
+    <aside className="mt-9 rounded-card border-2 border-ink bg-ink p-6 text-paper sm:p-8"><p className="font-mono text-[12px] uppercase tracking-[.08em] text-paper/70">what's next</p>
+      {(() => { const tasksDone = contract.data?.status === 'confirmed' && !contract.data.stale
+        const fits = allowsSandboxPython(inspection.data.configuration?.python_version || '')
+        const todo = !ready ? 'Save the settings in step 1.' : !fits ? 'Fix the Python version in step 1: it has to allow 3.12.' : !hasAdapter ? 'Start onboarding in step 2 so Hansa can run your agent.' : !tasksDone ? 'Save and confirm at least one task in step 3.' : null
+        return <><ul className="mt-3 flex flex-wrap gap-2">{[['settings', ready && fits], ['adapter', hasAdapter], ['tasks', tasksDone]].map(([label, ok]) =>
+          <li key={label as string} className={`chip ${ok ? 'border-paper bg-ok-soft text-ink' : 'border-dashed border-paper/60 text-paper/80'}`}>{ok && <Check size={13} strokeWidth={3} aria-hidden="true" />}{label as string}</li>)}</ul>
+          <p className="mt-4 font-display text-[24px] leading-tight font-[760] tracking-[-.03em]">{todo || 'Setup is done. Measure what the agent costs today.'}</p>{!todo && <div className="mt-5">{next}</div>}</> })()}
+    </aside>
   </>
 }

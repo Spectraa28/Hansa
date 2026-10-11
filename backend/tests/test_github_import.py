@@ -349,3 +349,23 @@ def test_archive_redirect_is_bound_to_github_repository_and_sha(url):
 def test_branch_cannot_change_the_requested_endpoint(branch):
     with pytest.raises(GitHubFailure):
         branch_name(branch)
+
+
+def test_folder_import_keeps_only_that_folder(tmp_path):
+    import io, tarfile, types
+    from app.github.archive import extract_archive
+    from app.github.client import GitHubFailure
+    archive = tmp_path / "source.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        for name, body in (("repo-abc/Backend/main.py", b"print(1)"), ("repo-abc/Backend/pkg/tool.py", b"x = 1"),
+                           ("repo-abc/frontend/.env.production", b"SECRET=1"), ("repo-abc/README.md", b"hi")):
+            info = tarfile.TarInfo(name)
+            info.size = len(body)
+            tar.addfile(info, io.BytesIO(body))
+    settings = types.SimpleNamespace(import_extracted_bytes=10_000, import_file_count=100)
+    result = extract_archive(archive, tmp_path / "out", settings, lambda: None, "Backend")
+    assert result["file_count"] == 2
+    assert sorted(str(p.relative_to(tmp_path / "out")) for p in (tmp_path / "out").rglob("*") if p.is_file()) == ["main.py", "pkg/tool.py"]
+    with pytest.raises(GitHubFailure) as missing:
+        extract_archive(archive, tmp_path / "none", settings, lambda: None, "nope")
+    assert missing.value.code == "empty_folder"

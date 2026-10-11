@@ -12,6 +12,7 @@ import './landing.css'
 // Everything on this page is read from one saved run of OpenAI's Swarm airline example.
 const report = savedReport as unknown as ImportReport
 const baseline = report.baseline!
+const xray = baseline.xray
 const findings = report.investigation!.findings
 const attempt = report.optimizations.at(-1)!
 const totals = attempt.comparison!.totals
@@ -71,8 +72,9 @@ function Hero() {
       </motion.p>
       <motion.div className="hero-actions" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1, duration: .6, ease }}>
         <Link to="/app" className="button-primary hero-cta">Import a repo <ArrowRight size={18} aria-hidden="true" /></Link>
-        <a href="#real-run" className="hero-link">See a run we rejected <ArrowRight size={16} aria-hidden="true" /></a>
+        <Link to="/demo" className="hero-link">Look around a real run <ArrowRight size={16} aria-hidden="true" /></Link>
       </motion.div>
+      <motion.p className="hero-terms" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}>no SDK · a few minutes · you set the spend cap before anything runs</motion.p>
     </div>
     <Receipt />
   </section>
@@ -174,12 +176,16 @@ function How() {
 }
 
 function Looks() {
-  return <section className="looks">
+  return <section id="what-it-checks" className="looks">
     <p className="eyebrow">What it looks at</p>
     <h2>Eight places<br />an agent leaks.</h2>
     <p className="looks-sub">Cost is the symptom. Hansa goes through what the agent is made of, one area at a time, and tells you which are clean.</p>
     <ol className="looks-grid">{areas.map((area, index) => <motion.li key={area.key} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .4 }} transition={{ duration: .45, ease, delay: (index % 4) * .06 }}>
       <span>{String(index + 1).padStart(2, '0')}</span><h3>{area.name}</h3><p>{area.covers}</p></motion.li>)}</ol>
+    {xray && <Reveal className="looks-xray"><p className="looks-xray-title">Measured on Swarm's airline agent before any AI looked at it</p>
+      <dl>{[[xray.input.sent_before_percent, 'of every request had already been sent on the call before'], [xray.input.system_percent, 'of each request was the system prompt'], [xray.input.tool_schema_percent, 'of each request was tool definitions']].map(([value, label]) =>
+        <div key={label as string}><dt><Counter value={Math.round(value as number)} suffix="%" /></dt><dd>{label}</dd></div>)}</dl>
+      <Link to="/demo?step=baseline" className="hero-link">See the full x-ray <ArrowRight size={16} aria-hidden="true" /></Link></Reveal>}
   </section>
 }
 
@@ -200,6 +206,7 @@ function RealRun() {
           <span>{task.task_id.padStart(2, '0')}</span><b>{task.regressed ? 'broke' : task.fixed ? 'fixed' : 'same'}</b></li>)}</ul>
         <p>Two failing tasks started passing. One passing task broke. Hansa doesn't trade a working answer for a cheaper bill, so the patch was reverted and marked for review.</p>
         <p className="real-punch">A cheaper agent that breaks isn't cheaper.</p>
+        <div className="real-actions"><Link to="/demo?step=result" className="button-primary">Open this run <ArrowRight size={16} aria-hidden="true" /></Link><Link to="/app" className="hero-link">Try it on your agent <ArrowRight size={16} aria-hidden="true" /></Link></div>
         <p className="real-small">{baseline.tasks.length} tasks × {baseline.repetitions} runs on {baseline.model} at commit {sha}. Automatic checks, provider-reported cost. Good for these tasks, not a promise for every input.</p>
       </div>
     </div>
@@ -249,5 +256,11 @@ function Closer() {
 }
 
 export default function Landing() {
+  // Arriving with a section in the address (from the nav on another page) lands on that section.
+  useEffect(() => {
+    const jump = () => { if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView() }
+    jump(); window.addEventListener('hashchange', jump)
+    return () => window.removeEventListener('hashchange', jump)
+  }, [])
   return <MotionConfig reducedMotion="user"><main className="landing"><Hero /><Ticker /><How /><Looks /><RealRun /><Get /><Closer /></main></MotionConfig>
 }
