@@ -490,9 +490,9 @@ class RunnerService:
     def run(self, user_id, import_id, build_id, task, *, timeout_seconds=60, max_calls=10,
             max_spend_usd=0.01, memory_mb=256, cpus=1.0, pids=64, adapter=None, adapter_code=None,
             internet=False, labels=None, overlay=None):
-        # adapter: "swarm_airline" (reviewed file), "stored" (this import's saved adapter) or None.
+        # adapter: "stored" (this import's saved adapter) or None.
         # adapter_code: an unsaved draft to try, used by onboarding before anything is stored.
-        if adapter not in {None, "swarm_airline", "stored"}:
+        if adapter not in {None, "stored"}:
             raise ValueError("Unsupported adapter.")
         if adapter_code is not None and (adapter is not None or not isinstance(adapter_code, str)
                                          or not 0 < len(adapter_code.encode()) <= MAX_ADAPTER):
@@ -514,15 +514,11 @@ class RunnerService:
                 if stored is None:
                     raise HTTPException(409, "No adapter is stored for this import. Run onboarding first.")
                 adapter_code = stored["content"]
-            adapter_file = HERE / "airline_adapter.py" if adapter == "swarm_airline" else None
+            adapter_file = None
             if adapter_code is not None:
                 adapter_file = root / "adapter.py"
                 adapter_file.write_text(adapter_code)
                 adapter_file.chmod(0o444)
-            if adapter == "swarm_airline" and not {"transfer_to_flight_modification", "transfer_to_lost_baggage",
-                                "transfer_to_flight_cancel", "transfer_to_flight_change"}.issubset(
-                                    config["configuration"].get("approved_tools", [])):
-                raise HTTPException(422, "Approve the four airline routing tools before running its evals.")
             with self.database.connect() as db:
                 build = db.execute("SELECT * FROM runner_builds WHERE id=? AND import_id=?", (build_id, import_id)).fetchone()
             if (not build or build["commit_sha"] != config["commit_sha"]

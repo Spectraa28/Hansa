@@ -80,7 +80,7 @@ class FakeService:
         self.events, self.updates, self.calls = [], [], []
         outer = self
         class Baselines:
-            def evaluate(self, user_id, baseline, overlay, task_ids, repetitions, labels):
+            def evaluate(self, user_id, baseline, overlay, task_ids, repetitions, labels, progress=None):
                 outer.calls.append((dict(overlay), task_ids, repetitions))
                 return results.pop(0)
         self.baselines = Baselines()
@@ -203,7 +203,7 @@ def test_scripted_job_revises_after_a_regression_then_delivers_patch_report_and_
     outcomes = [[task("1", status="failed", cost=0.05), task("2", status="needs_review", cost=0.05)],
                 [task("1", cost=0.07, tokens=5000), task("2", status="needs_review", cost=0.07, tokens=5000)]]
     evaluated = []
-    def evaluate(user_id, report, overlay, task_ids=None, repetitions=1, labels=None):
+    def evaluate(user_id, report, overlay, task_ids=None, repetitions=1, labels=None, progress=None):
         evaluated.append((overlay, labels))
         return outcomes.pop(0)
     monkeypatch.setattr(state.baselines, "evaluate", evaluate)
@@ -234,7 +234,7 @@ def test_scripted_job_revises_after_a_regression_then_delivers_patch_report_and_
     assert "attachment" in patch.headers["content-disposition"]
     brief = client.get(f"/github/imports/{imported}/agent-jobs/{job['job_id']}/handoff")
     assert brief.status_code == 200 and brief.headers["content-type"].startswith("text/markdown") and brief.headers["x-hansa-decision"] == "accept"
-    assert "accepted it. Apply it exactly as written" in brief.text and "```diff" in brief.text and '"max_tokens": 16' in brief.text
+    assert "**Status: accepted.**" in brief.text and "Apply the diff exactly" in brief.text and "## How strong the proof is" in brief.text and "## Report back" in brief.text and "```diff" in brief.text and '"max_tokens": 16' in brief.text
     assert "| Cost (USD) | 0.2 | 0.14 | -30.0% |" in brief.text and "Tasks 2 were compared on automatic checks only" in brief.text
     assert "NOT accepted" not in brief.text
     report = client.get(f"/github/imports/{imported}/report").json()
@@ -277,7 +277,7 @@ def test_optimization_needs_a_goal_or_a_real_finding_and_stops_safely(optimizabl
     assert item["patch_available"] is True and item["comparison_is_of"] == "last candidate tried" and item["payback"] is None
     from app.agent.report import handoff
     brief = handoff(job, "owner/repo")
-    assert "NOT accepted (decision: reject)" in brief and "Do not apply the diff unchanged" in brief and "```diff" in brief
+    assert "NOT accepted (decision: reject)" in brief and "Do not apply it as it stands" in brief and "Do not commit the diff" in brief and "```diff" in brief
     assert handoff({"result": {"decision": "reject", "experiments": []}}, "owner/repo") is None
 
 
@@ -297,7 +297,7 @@ def test_unstable_baseline_task_is_measured_and_no_longer_counts_as_a_regression
     service.baselines.extend = extend
     reruns = [[task("1", status="failed", cost=0.1)["runs"][0], task("1", cost=0.1)["runs"][0]]]
     original = service.baselines.evaluate
-    def evaluate(user_id, baseline, overlay, task_ids, repetitions, labels):
+    def evaluate(user_id, baseline, overlay, task_ids, repetitions, labels, progress=None):
         if overlay is None:
             assert labels["kind"] == "baseline-stability" and task_ids == ["1"]
             return [{"task_id": "1", "runs": reruns.pop(0)}]
@@ -322,7 +322,7 @@ def test_unstable_baseline_task_is_measured_and_no_longer_counts_as_a_regression
     tools.measure_baseline("2", repetitions=1) if False else None
     for _ in range(1):
         reruns.append([task("2")["runs"][0]])
-        service.baselines.evaluate = lambda u, b, overlay, ids, reps, labels: [{"task_id": "2", "runs": reruns.pop(0)}]
+        service.baselines.evaluate = lambda u, b, overlay, ids, reps, labels, progress=None: [{"task_id": "2", "runs": reruns.pop(0)}]
         stable = tools.measure_baseline("2", repetitions=1)
         assert "still counts as a regression" in stable["meaning"]
     with pytest.raises(ValueError, match="No baseline stability checks remain"):

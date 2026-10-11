@@ -44,10 +44,18 @@ exist in the sandbox.
 addresses are refused.
 - stdout must contain only the final JSON value. Send everything the agent prints to stderr by redirecting \
 stdout while it runs. stdin is one JSON object; never prompt for input.
-- The gateway accepts standard Chat Completions message fields: role, content, name, tool_calls, tool_call_id.
-  Use this exact allowlist for outgoing API messages: SDK model dumps also include function_call, refusal,
-  audio and other fields, even when null. Preserve local history and the returned transcript. This is
-  transport glue. tool_choice and parallel_tool_calls ARE supported; preserve the repository's values.
+- The gateway drops fields it does not forward: SDK bookkeeping on messages (null refusal, audio, function_call, \
+a framework's own keys) and request options it does not know. You do not need to filter those, and you must not \
+patch the agent's client to do so. It refuses, with a message naming the cause: non-text message content, a \
+legacy function_call, and provider-hosted tools. tool_choice and parallel_tool_calls are supported; preserve \
+the repository's values. If a call is refused, read the gateway's message in stderr and act on what it names.
+- Some agent frameworks default to a different OpenAI API or phone home. Switch those in the adapter with the \
+framework's own settings before running the agent; that is transport glue, not a change to the agent. If the \
+framework uses the Responses API by default, select Chat Completions (in the OpenAI Agents SDK: \
+`set_default_openai_api("chat_completions")`). If it exports traces or telemetry to a hosted service, turn that \
+off (in the OpenAI Agents SDK: `set_tracing_disabled(True)`). Use a non-streaming run call when the framework \
+offers both. Tools hosted by the provider (web search, file search, code interpreter) do not exist here; an \
+agent that depends on one is blocked.
 
 How you work:
 - Start from the confirmed entrypoint and follow it to the function that actually runs the agent. Search before \
@@ -200,17 +208,26 @@ class AgentService:
             raise HTTPException(503, "Model gateway is not configured.")
         adapter = self.adapter(user_id, import_id)
         tools = self.runner.configuration(user_id, import_id)["configuration"].get("approved_tools") or []
+        # What this agent really printed the last time it ran. Checks are drafted against it, not imagined.
+        sample = None
+        with self.database.connect() as db:
+            for row in db.execute("SELECT result FROM runner_runs WHERE import_id=? ORDER BY created_at DESC, rowid DESC LIMIT 5", (import_id,)):
+                result = json.loads(row["result"])
+                if result.get("exit_code") == 0 and isinstance(result.get("output"), (dict, list)):
+                    sample = result["output"]
+                    break
         if not JOB_LOCK.acquire(blocking=False):
             raise HTTPException(409, "Another agent job is running. Try again when it finishes.")
         key = None
         try:
             key = self.gateway.mint_key("hansa-suggest-" + uuid.uuid4().hex, max_calls=2, max_spend_usd=0.25, expires_at=int(time.time()) + 300)
             try:
-                reply = self.complete(key, suggest.messages(adapter, tools), [suggest.TOOL])
+                reply = self.complete(key, suggest.messages(adapter, tools, sample), [suggest.TOOL])
             except AgentFailure as exc:
                 raise HTTPException(502, str(exc)) from None
             usage = self.gateway.summarize_key(key)
-            tasks = suggest.drafts(reply)
+            # The stored example is the input the adapter was proven on; only its values are known.
+            tasks = suggest.drafts(reply, sample, (adapter.get("example_task") or {}).get("task"))
             if not tasks:
                 raise HTTPException(502, "Hansa could not draft usable tasks from this agent. Write one by hand.")
             return {"tasks": tasks, "saved": False, "estimated_cost_usd": usage["estimated_cost_usd"],

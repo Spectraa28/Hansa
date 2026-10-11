@@ -19,6 +19,7 @@ INTEGRATIONS = {"requests", "httpx", "sqlite3", "sqlalchemy", "playwright", "sel
 MANIFESTS = {"pyproject.toml", "setup.cfg", "setup.py", "Pipfile", "environment.yml"}
 LOCKFILES = {"uv.lock", "poetry.lock", "Pipfile.lock", "pdm.lock", "requirements.lock"}
 SKIP = {".git", ".venv", "venv", "node_modules", "__pycache__", "dist", "build"}
+LATER = {"tests", "test", "testing", "integration_tests", "docs", "doc", "benchmarks", "scripts", "site", "notebooks"}
 SAFE_PATH = re.compile(r"[A-Za-z0-9_./-]{1,240}\Z")
 VERSION = re.compile(r"(?:[<>=!~^]{0,2}\d+(?:\.\d+){0,2}(?:\.\*)?|\*)(?:\s*(?:,|\|\|)\s*(?:[<>=!~^]{0,2}\d+(?:\.\d+){0,2}(?:\.\*)?|\*))*\Z")
 IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_.]{0,100}\Z")
@@ -202,7 +203,11 @@ def scan(root):
     def walk(directory, prefix="", depth=0):
         nonlocal entries
         with os.scandir(directory) as iterator:
-            for item in iterator:
+            # The scan has a file budget, so order decides what a large repository gets read for. Files in a
+            # folder come before its subfolders (the root's dependency file is read first), and folders that
+            # rarely hold the agent itself come last.
+            items = sorted(iterator, key=lambda item: (item.is_dir(follow_symlinks=False), item.name.lower() in LATER, item.name))
+            for item in items:
                 entries += 1
                 if entries > MAX_ENTRIES or result["scanned_files"] >= MAX_FILES or time.monotonic() > deadline:
                     result["partial"] = True

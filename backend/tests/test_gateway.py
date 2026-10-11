@@ -1,4 +1,5 @@
 import json
+import json
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -643,12 +644,26 @@ def test_fixed_model_and_map_are_mutually_exclusive(gateway):
                          model_map={'gpt-4o': 'nova-pro'})
 
 
-def test_sdk_bookkeeping_rejected_with_actionable_non_echoing_message(gateway):
+def test_sdk_bookkeeping_is_dropped_before_forwarding_and_real_limits_are_named(gateway):
     client, service, key, state = gateway
-    response = client.post("/gateway/v1/chat/completions", headers={"Authorization": "Bearer " + key},
-        json={"model": "claude-sonnet-4.6", "messages": [{"role": "assistant", "content": None, "function_call": None, "refusal": None}]})
-    assert response.status_code == 400 and "Remove ALL other SDK message fields" in response.json()["error"]["message"]
-    assert not state["requests"]
+    headers = {"Authorization": "Bearer " + key}
+    response = client.post("/gateway/v1/chat/completions", headers=headers, json={
+        "model": "claude-sonnet-4.6", "reasoning_effort": "low", "prompt_cache_key": "x", "tools": None,
+        "messages": [{"role": "user", "content": "hi", "sender": "Triage"},
+                     {"role": "assistant", "content": "hello", "function_call": None, "refusal": None, "audio": None}]})
+    assert response.status_code == 200
+    sent = json.loads(state["requests"][-1].content)
+    assert "reasoning_effort" not in sent and "prompt_cache_key" not in sent and "tools" not in sent
+    assert [sorted(message) for message in sent["messages"]] == [["content", "role"], ["content", "role"]]
+    before = len(state["requests"])
+    hosted = client.post("/gateway/v1/chat/completions", headers=headers, json={
+        "model": "claude-sonnet-4.6", "messages": [{"role": "user", "content": "hi"}], "tools": [{"type": "web_search"}]})
+    assert hosted.status_code == 400 and "web_search" in hosted.json()["error"]["message"]
+    legacy = client.post("/gateway/v1/chat/completions", headers=headers, json={
+        "model": "claude-sonnet-4.6", "messages": [{"role": "assistant", "content": None, "function_call": {"name": "f", "arguments": "{}"}}]})
+    assert legacy.status_code == 400 and "function_call" in legacy.json()["error"]["message"]
+    assert len(state["requests"]) == before
+
 
 
 def test_a_failed_upstream_attempt_is_not_an_unpriced_answer(tmp_path):

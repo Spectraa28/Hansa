@@ -173,7 +173,8 @@ class OptimizationTools:
                                                                "task_ids": task_ids or sorted(known), "repetitions": repetitions})
         try:
             tasks = self.service.baselines.evaluate(self.user_id, self.baseline, self.overlay(), task_ids, repetitions,
-                                                    {"job_id": self.job_id, "experiment": number})
+                                                    {"job_id": self.job_id, "experiment": number},
+                                                    progress=lambda data: self.service.event(self.job_id, "candidate_run", {"experiment": number, **data}))
         except HTTPException as exc:
             raise ValueError(str(exc.detail)) from None
         runs = [run for task in tasks for run in task["runs"]]
@@ -217,7 +218,8 @@ class OptimizationTools:
         before = [sum(bool(run.get("automatic_passed")) for run in task["runs"]), len(task["runs"])]
         try:
             runs = self.service.baselines.evaluate(self.user_id, self.baseline, None, [task_id], repetitions,
-                                                   {"kind": "baseline-stability", "job_id": self.job_id})[0]["runs"]
+                                                   {"kind": "baseline-stability", "job_id": self.job_id},
+                                                   progress=lambda data: self.service.event(self.job_id, "candidate_run", {"unchanged_agent": True, **data}))[0]["runs"]
         except HTTPException as exc:
             raise ValueError(str(exc.detail)) from None
         cost = sum(run["cost_usd"] or 0 for run in runs)

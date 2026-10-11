@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseQueryResult } from '@tanstack/react-query'
-import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom'
-import { api, ApiError } from './api'
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { api, ApiError, send } from './api'
 import type { Session } from './api'
-import { ArrowLeft, ArrowRight, Check, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, RefreshCw, Trash2 } from 'lucide-react'
 import { measurement, recommendedStep, sourceUrl, stepNames, steps } from './report'
 import type { Coverage, Finding, ImportReport, Step } from './report'
 import { areas } from './areas'
@@ -11,6 +12,7 @@ import Result from './Result'
 import StageRunner from './StageRunner'
 import Setup from './Setup'
 import Xray from './Xray'
+import Suggestions from './Suggestions'
 import { TraceLinks, TracePanel } from './Trace'
 import type { ImportItem } from './api'
 
@@ -95,6 +97,7 @@ export default function ImportReportPage({ session, preview = false }: { session
   const { id = '' } = useParams()
   const [params] = useSearchParams()
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   // A fresh import is copied in the background; the report only exists once the copy is ready.
   const source = useQuery({ queryKey: ['import', session.data?.user.id, id], enabled: !preview && Boolean(session.data),
     queryFn: ({ signal }) => api<ImportItem>(`/github/imports/${encodeURIComponent(id)}`, { signal }),
@@ -113,6 +116,14 @@ export default function ImportReportPage({ session, preview = false }: { session
     },
   })
 
+  // On phones the steps are a sideways strip. Bring the current one into view by moving the strip only,
+  // and only when the step changes: scrolling the page on every re-render yanked it back to the top.
+  const strip = useRef<HTMLOListElement>(null)
+  const current = params.get('step')
+  useEffect(() => {
+    const list = strip.current, active = list?.querySelector<HTMLElement>('[aria-current="step"]')
+    if (list && active && list.scrollWidth > list.clientWidth) list.scrollLeft = active.offsetLeft - (list.clientWidth - active.offsetWidth) / 2
+  }, [current, report.data?.import.import_id])
   if (!preview && session.isSuccess && !session.data) return <Navigate to="/sign-in" replace />
   const requestedStep = params.get('step')
   const next = report.data ? recommendedStep(report.data) : 'import'
@@ -142,7 +153,7 @@ export default function ImportReportPage({ session, preview = false }: { session
   const investigation = data.investigation
 
   const done: Record<Step, boolean> = { import: true, setup: Boolean(data.adapter), baseline: data.stages.baseline, findings: data.stages.investigated, fix: data.stages.optimized, result: data.stages.optimized }
-  const nextLabel: Record<string, string> = { onboard: 'Set up the adapter', baseline: 'Measure the baseline', investigate: 'Hunt for leaks in the latest baseline', optimize: 'Test a fix', review: 'Review the result', wait: 'A job is running' }
+  const nextLabel: Record<string, string> = { onboard: 'Set up the adapter', baseline: 'Measure the baseline', investigate: 'See what to fix', optimize: 'Test a fix', review: 'Review the result', wait: 'A job is running' }
 
   const runner = <StageRunner key={`${data.import.import_id}:${session.data?.user.id || 'preview'}`} data={data} step={step} session={session.data} preview={preview} disabled={report.isFetching || report.isError} refresh={report.refetch} />
   const adapter = <section className="slab mt-9 p-8"><span className="slab-tab">2 · adapter</span>
@@ -165,7 +176,7 @@ export default function ImportReportPage({ session, preview = false }: { session
     {report.isError && <div className="mt-5"><p role="alert">{report.error instanceof ApiError ? report.error.message : 'Could not refresh the report. Check your connection.'}</p><button className="button-secondary mt-3" onClick={() => void report.refetch()}>Try again</button></div>}
 
     <nav aria-label="Import steps" className="mt-7">
-      <ol className="-mx-5 flex snap-x gap-2 overflow-x-auto px-5 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-6 md:overflow-visible md:px-0 md:pb-0">{steps.map((value, index) => <li key={value} className="shrink-0 snap-start"><Link to={`?step=${value}`} ref={step === value ? node => node?.scrollIntoView({ block: 'nearest', inline: 'center' }) : undefined} aria-current={step === value ? 'step' : undefined}
+      <ol ref={strip} className="-mx-5 flex snap-x gap-2 overflow-x-auto px-5 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-6 md:overflow-visible md:px-0 md:pb-0">{steps.map((value, index) => <li key={value} className="shrink-0 snap-start"><Link to={`?step=${value}`} aria-current={step === value ? 'step' : undefined}
         className={`flex min-h-12 items-center gap-2 rounded-control border-2 border-ink px-3.5 text-[14px] font-semibold whitespace-nowrap md:min-h-14 transition-transform hover:-translate-y-0.5 ${step === value ? 'bg-ink text-paper shadow-[4px_4px_0_var(--waste)]' : done[value] ? 'bg-surface' : 'border-dashed bg-transparent text-muted'}`}>
         <span className={`grid size-6 shrink-0 place-items-center rounded-full border-2 font-mono text-[11px] ${step === value ? 'border-paper' : done[value] ? 'border-ink bg-ok-soft' : 'border-current'}`}>{done[value] ? <Check size={13} strokeWidth={3} aria-label="done" /> : index + 1}</span>
         {stepNames[value]}{value === next && step !== value && <span className="live-dot ml-auto" aria-label="next step" />}</Link></li>)}</ol>
@@ -180,7 +191,8 @@ export default function ImportReportPage({ session, preview = false }: { session
       {step === 'import' && <section className="slab p-8"><span className="slab-tab">pinned source</span>
         <p className="font-display text-[28px] font-[740] tracking-[-.03em]">One commit, held still.</p><p className="mt-2 text-muted">Everything Hansa measures is tied to this exact commit. Nothing ran on import.</p>
         {(data.import.left_out || []).length > 0 && <p className="mt-5 rounded-control border-2 border-dashed border-ink px-4 py-3 text-[14px]"><b>Left out of the sandbox:</b> <span className="font-mono text-[13px] [overflow-wrap:anywhere]">{data.import.left_out!.join(', ')}</span>. Files that usually hold secrets are never copied in. If your agent needs a value from them, it won't have it.</p>}
-        <dl className="mt-6 grid gap-5 sm:grid-cols-3"><div><dt className="label">Repository</dt><dd className="mt-1 font-mono [overflow-wrap:anywhere]">{data.import.repository}</dd></div><div><dt className="label">Branch{data.import.folder ? ' · folder' : ''}</dt><dd className="mt-1 font-mono [overflow-wrap:anywhere]">{data.import.branch}{data.import.folder ? ` · /${data.import.folder}` : ''}</dd></div><div><dt className="label">Commit</dt><dd className="mt-1 font-mono break-all">{data.import.commit_sha}</dd></div></dl></section>}
+        <dl className="mt-6 grid gap-5 sm:grid-cols-3"><div><dt className="label">Repository</dt><dd className="mt-1 font-mono [overflow-wrap:anywhere]">{data.import.repository}</dd></div><div><dt className="label">Branch{data.import.folder ? ' · folder' : ''}</dt><dd className="mt-1 font-mono [overflow-wrap:anywhere]">{data.import.branch}{data.import.folder ? ` · /${data.import.folder}` : ''}</dd></div><div><dt className="label">Commit</dt><dd className="mt-1 font-mono break-all">{data.import.commit_sha}</dd></div></dl>
+        {session.data && !preview && <div className="mt-8 border-t-2 border-dashed border-ink pt-5"><DeleteAgent importId={data.import.import_id} name={data.import.repository} csrf={session.data.csrf_token} onDone={() => { queryClient.removeQueries({ queryKey: ['imports'] }); navigate('/app', { replace: true }) }} /><p className="mt-2 text-[13px] text-muted">Removes the source copy, the adapter, baselines, findings and results. Your GitHub repository is not touched.</p></div>}</section>}
 
       {step === 'setup' && (session.data && !preview
         ? <Setup importId={data.import.import_id} session={session.data} hasAdapter={Boolean(data.adapter)} onChanged={() => void report.refetch()} next={<Link to="?step=baseline" className="button-primary shadow-[3px_3px_0_var(--paper)]">Go to baseline <ArrowRight size={16} aria-hidden="true" /></Link>}>{adapter}<div className="mt-9">{runner}</div></Setup>
@@ -200,6 +212,10 @@ export default function ImportReportPage({ session, preview = false }: { session
         <p className="mt-5 font-mono text-[12px] text-muted">One square is one model call. Open a trace to see each call as Neatlogs recorded it. "Checks passed" means the automatic checks passed; a person hasn't confirmed the answer.</p>
       </section> : <Empty title="No baseline yet." text="Run the baseline above to see what the agent costs today." />)}
 
+      {step === 'findings' && <div className="mb-12"><h2 className="mb-6 font-display text-[34px] leading-none font-[780] tracking-[-.04em] sm:text-[48px]">What to fix.</h2>
+        <Suggestions data={data} session={session.data} preview={preview} />
+        <h2 className="mt-14 border-t-[3px] border-ink pt-8 font-display text-[26px] leading-none font-[780] tracking-[-.03em] sm:text-[34px]">Go deeper: let Hansa hunt through the code.</h2>
+        <p className="mt-2 max-w-[62ch] text-muted">An AI pass that reads the source against every recorded call. It uses model calls, so it has a spend cap. Anything it finds can be tested on a private copy.</p></div>}
       {step === 'findings' && (investigation ? <section>
         <div className="mb-8 flex flex-wrap items-end justify-between gap-3"><p className="font-display text-[34px] leading-none font-[780] tracking-[-.04em] sm:text-[48px]">{investigation.findings.length} leak{investigation.findings.length === 1 ? '' : 's'} found.</p>
           <div className="flex flex-wrap items-center gap-2">{investigation.incomplete && <span className="chip chip-quiet">investigation ended early · findings kept</span>}{!preview && <TraceLinks trace={investigation.trace} label="Hansa's trace" />}</div></div>
@@ -221,6 +237,24 @@ export default function ImportReportPage({ session, preview = false }: { session
       <details className="order-last mt-10 text-[13px]"><summary className="cursor-pointer py-2 font-mono text-muted">what these results cover</summary><ul className="mt-2 list-disc space-y-1.5 pl-5 text-muted">{data.limits.map(limit => <li key={limit}>{limit}</li>)}</ul></details>
     </div>
   </main>
+}
+
+/** Removes the agent's source copy and every result. Asks once, in place. */
+export function DeleteAgent({ importId, name, csrf, onDone, compact = false }: { importId: string; name: string; csrf: string; onDone: () => void; compact?: boolean }) {
+  const [asking, setAsking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  async function remove() {
+    setBusy(true); setError('')
+    try { await send(`/github/imports/${encodeURIComponent(importId)}`, csrf, undefined, 'DELETE'); onDone() }
+    catch (caught) { setError(caught instanceof ApiError ? caught.message : 'Could not delete. Try again.'); setBusy(false) }
+  }
+  if (!asking) return <button type="button" aria-label={`Delete ${name}`} onClick={() => setAsking(true)} className={compact ? 'grid size-11 place-items-center rounded-control border-2 border-transparent hover:border-ink hover:bg-surface' : 'button-secondary'}><Trash2 size={16} aria-hidden="true" />{!compact && ' Delete this agent'}</button>
+  return <span role="group" aria-label={`Confirm deleting ${name}`} className="inline-flex flex-wrap items-center gap-2 rounded-control border-2 border-ink bg-surface px-3 py-2 text-[13px]">
+    <span className="font-medium">Delete {name} and all its results?</span>
+    <button type="button" disabled={busy} onClick={() => void remove()} className="chip min-h-9 bg-ink text-paper">{busy ? 'deleting…' : 'yes, delete'}</button>
+    <button type="button" disabled={busy} onClick={() => { setAsking(false); setError('') }} className="chip min-h-9 bg-surface">keep</button>
+    {error && <span role="alert" className="basis-full">{error}</span>}</span>
 }
 
 function Empty({ title, text }: { title: string; text: string }) {

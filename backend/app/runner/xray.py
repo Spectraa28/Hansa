@@ -88,6 +88,8 @@ def anatomy(database, baseline):
                           "cost_usd": None if unknown else round(total["handoff_cost"], 6)},
         "duplicate_calls": {"count": total["duplicates"], "cost_usd": None if unknown else round(total["duplicate_cost"], 6)},
         "cost_usd": None if unknown else round(total["cost"], 6),
+        # How much of the bill is input, under the stated price ratio. Estimates of input savings scale by this.
+        "input_cost_percent": share(input_cost, total["cost"]),
         "prompt_caching_estimate": None if unknown else {
             "saving_usd": round(cache_saving, 6), "saving_percent": share(cache_saving, total["cost"]),
             "assumes": "A cached read costs a tenth of normal input and output tokens cost five times input. "

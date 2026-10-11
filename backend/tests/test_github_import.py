@@ -308,7 +308,16 @@ def test_signed_webhook_revokes_connection_and_is_idempotent(github_client):
     assert client.post("/github/webhook", content=body + b" ", headers=headers).status_code == 401
 
 
-@pytest.mark.parametrize("name,kind", [("../../escape", tarfile.REGTYPE), ("link", tarfile.SYMTYPE),
+def test_archive_leaves_links_out_and_never_creates_them(tmp_path):
+    path = tmp_path / "source.tar.gz"
+    path.write_bytes(source_archive([("agent.py", b"print(1)", tarfile.REGTYPE), ("CLAUDE.md", b"", tarfile.SYMTYPE), ("hard", b"", tarfile.LNKTYPE)]))
+    settings = Settings(database_path=tmp_path / "db", secret_key="test-only-" * 4)
+    result = extract_archive(path, tmp_path / "source", settings, lambda: None)
+    assert result["file_count"] == 1 and "links_not_imported" in result["warnings"]
+    assert sorted(p.name for p in (tmp_path / "source").iterdir()) == ["agent.py"]
+
+
+@pytest.mark.parametrize("name,kind", [("../../escape", tarfile.REGTYPE), ("device", tarfile.CHRTYPE),
                                       ("/absolute", tarfile.REGTYPE), ("dir\\escape", tarfile.REGTYPE)])
 def test_archive_rejects_unsafe_paths_and_links(tmp_path, name, kind):
     path = tmp_path / "source.tar.gz"

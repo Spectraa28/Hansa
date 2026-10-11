@@ -1,3 +1,4 @@
+import { DeleteAgent } from './ImportReport'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { Link, Navigate, useSearchParams } from 'react-router-dom'
@@ -39,7 +40,7 @@ export default function Imports({ session }: { session: UseQueryResult<Session |
                 {imports.data.imports.map(item => <li key={item.id} className="group relative p-6 transition-colors hover:bg-waste sm:px-8">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <h2 className="min-w-0 font-display text-[28px] leading-none font-[780] tracking-[-.04em] [overflow-wrap:anywhere] sm:text-[36px]"><Link to={`/app/imports/${encodeURIComponent(item.id)}`} className="after:absolute after:inset-0">{item.repository_name} <span aria-hidden="true" className="inline-block transition-transform group-hover:translate-x-2">→</span></Link></h2>
-                    <span className={`chip ${item.status === 'ready' ? 'chip-ok' : item.status === 'failed' ? 'bg-ink text-paper' : 'bg-surface'}`}>{item.status}</span>
+                    <span className="relative z-10 flex items-center gap-2"><span className={`chip ${item.status === 'ready' ? 'chip-ok' : item.status === 'failed' ? 'bg-ink text-paper' : 'bg-surface'}`}>{item.status}</span>{session.data && <DeleteAgent compact importId={item.id} name={item.repository_name} csrf={session.data.csrf_token} onDone={() => void imports.refetch()} />}</span>
                   </div>
                   <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 font-mono text-[13px]">
                     <div className="min-w-0"><dt className="sr-only">Branch</dt><dd className="mt-1 break-words font-mono [overflow-wrap:anywhere]">{item.branch}{item.folder ? ` · /${item.folder}` : ''}</dd></div>

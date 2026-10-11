@@ -52,8 +52,57 @@ def payback(job, baseline):
                     "the investigation and compute. A pass is every contract task run once."}
 
 
-def handoff(job, repository):
-    """A brief the owner can paste into their own coding agent. Built only from stored results; no model call."""
+def proof(comparison, baseline):
+    """How much a verdict rests on. A pass on loose checks over two tasks is not the same as one on exact checks over twenty."""
+    if not comparison:
+        return None
+    tasks = comparison.get("tasks") or []
+    contract = ((baseline or {}).get("contract") or {}).get("tasks") or []
+    by_id = {str(index): task for index, task in enumerate(contract, 1)}
+    exact = {task["task_id"]: sum(1 for rule in (by_id.get(task["task_id"]) or {}).get("required_fields", []) if rule.get("check_exact"))
+             + (1 if (by_id.get(task["task_id"]) or {}).get("expected_output") is not None else 0) for task in tasks}
+    shape_only = [task_id for task_id, count in exact.items() if not count] if contract else []
+    repetitions = (baseline or {}).get("repetitions")
+    notes = []
+    if len(tasks) < 3:
+        notes.append(f"It rests on {len(tasks)} task{'s' if len(tasks) != 1 else ''}.")
+    if not comparison.get("all_tasks"):
+        notes.append("Not every task in the set was run.")
+    if contract and len(shape_only) == len(tasks):
+        notes.append("The checks only test the shape of the answer, so they would not catch the agent doing the wrong thing.")
+    elif shape_only:
+        notes.append(f"Tasks {', '.join(shape_only)} have no exact check; they only test the shape of the answer.")
+    if not comparison.get("variation_measured"):
+        notes.append("The baseline ran each task once, so normal run-to-run variation was not measured.")
+    if comparison.get("needs_review"):
+        notes.append("A person still has to confirm the answers on the tasks marked for review.")
+    weak = len(tasks) < 3 or not comparison.get("all_tasks") or (contract and len(shape_only) == len(tasks))
+    strong = len(tasks) >= 5 and comparison.get("variation_measured") and not shape_only and comparison.get("all_tasks")
+    return {"tasks": len(tasks), "repetitions": repetitions, "tasks_with_exact_checks": len(tasks) - len(shape_only) if contract else None,
+            "variation_measured": bool(comparison.get("variation_measured")),
+            "strength": "thin" if weak else "solid" if strong else "fair", "notes": notes}
+
+
+def patch_files(patch):
+    """Paths a unified diff touches, with lines added and removed."""
+    files, current = {}, None
+    for line in (patch or "").splitlines():
+        if line.startswith("+++ "):
+            current = line[4:].removeprefix("b/")
+            files[current] = [0, 0]
+        elif current and line.startswith("+") and not line.startswith("+++"):
+            files[current][0] += 1
+        elif current and line.startswith("-") and not line.startswith("---"):
+            files[current][1] += 1
+    return files
+
+
+def handoff(job, repository, baseline=None, commit=None):
+    """A work order the owner can paste into their own coding agent. Built only from stored results; no model call.
+
+    Written for a reader that has the repository open and nothing else: what the job is, what to do in order,
+    the exact change, what must stay true, how to know it is done, and what to report back.
+    """
     result = job["result"]
     accepted = result.get("decision") == "accept" and bool(result.get("patch"))
     tried = [e for e in result.get("experiments", []) if e.get("patch")]
@@ -62,20 +111,38 @@ def handoff(job, repository):
         return None
     comparison = result.get("comparison") or (tried[-1]["comparison"] if tried else {})
     finding = result.get("finding") or {}
-    lines = [f"# Change for {repository}", ""]
+    strength = proof(comparison, baseline)
+    files = patch_files(patch)
+    at = f" at commit `{commit[:12]}`" if commit else ""
+    lines = [f"# Task: {'apply' if accepted else 'review'} a measured change to {repository}", "",
+             f"You are working in a checkout of `{repository}`{at}. A tool called Hansa ran this repository's AI agent on a fixed set of tasks, "
+             "found a way to make it cheaper or faster, changed a private copy, and measured the result. Your job is below.", ""]
     if accepted:
-        lines += ["Hansa tested this change against the project's task baseline and accepted it. Apply it exactly as written.", ""]
+        lines += ["**Status: accepted.** The change passed every automatic check that passed before, and the saving is measured.", ""]
     else:
-        lines += [f"**This change was NOT accepted (decision: {result.get('decision') or 'none'}).** It is included for review only. "
-                  "Do not apply it as it stands. Read the reason below and resolve it first.", ""]
-    lines += ["## Why", "", str(finding.get("waste") or "No finding text was recorded."), ""]
+        lines += [f"**Status: NOT accepted (decision: {result.get('decision') or 'none'}).** The change is here for review only. "
+                  "Do not apply it as it stands.", ""]
+    lines += ["## What to do", ""]
+    if accepted:
+        lines += ["1. Confirm the files below still match the diff's context lines. If the code has moved since that commit, find the same code by function or symbol name and apply the same edit there.",
+                  "2. Apply the diff exactly. Change nothing else: no refactoring, renaming or reformatting.",
+                  "3. Work through the checklist under \"Before you call it done\".",
+                  "4. Run the project's tests. If there are none for the code you touched, say so.",
+                  "5. Report back in the format at the end."]
+    else:
+        lines += ["1. Read the reason the change was not accepted, below.",
+                  "2. Reproduce the failing task with and without the change, several times each, to see whether the change causes the failure or the agent already fails that way.",
+                  "3. Only if the unchanged code fails the same way should the change be reconsidered, and then it must be measured again.",
+                  "4. Report back in the format at the end. Do not commit the diff."]
+    lines += ["", "## Why this change", "", str(finding.get("waste") or "No finding text was recorded."), ""]
     if result.get("summary"):
-        lines += ["## What was measured", "", result["summary"], ""]
+        # The agent writes its own headings; keep them under this one.
+        lines += ["## What Hansa did and saw", "", "\n".join("#" + line if line.startswith("#") else line for line in result["summary"].splitlines()), ""]
     totals = comparison.get("totals") or {}
     rows = [(label, totals.get(key) or {}) for label, key in (("Model calls", "model_calls"), ("Input tokens", "tokens_in"),
                                                                ("Cost (USD)", "cost_usd"), ("Wall time (s)", "wall_time_seconds"))]
     if any(row.get("baseline") is not None for _, row in rows):
-        lines += ["| Per pass of the task set | Baseline | Candidate | Change |", "| --- | --- | --- | --- |"]
+        lines += ["## Measured, same tasks before and after", "", "| Per pass of the task set | Before | After | Change |", "| --- | --- | --- | --- |"]
         for label, row in rows:
             if row.get("baseline") is not None:
                 lines.append(f"| {label} | {row['baseline']:.4g} | {row['candidate']:.4g} | {row['change_percent']}% |")
@@ -88,18 +155,30 @@ def handoff(job, repository):
     review = comparison.get("needs_review") or []
     if review:
         lines += [f"Tasks {', '.join(review)} were compared on automatic checks only. A person still has to confirm their answers.", ""]
-    lines += ["## The change", "", "```diff", patch.rstrip("\n"), "```", "", "## Instructions", ""]
+    if strength:
+        lines += [f"## How strong the proof is: {strength['strength']}", ""] + [f"- {note}" for note in strength["notes"]]
+        lines += ["- Nothing here limits the result." if not strength["notes"] else "", ""]
+    lines += ["## The change", "", "Files: " + ", ".join(f"`{path}` (+{added} −{removed})" for path, (added, removed) in files.items()) + ".", "",
+              "```diff", patch.rstrip("\n"), "```", ""]
     if accepted:
-        lines += ["1. Apply the diff above to the repository at the commit it was made against. Change nothing else.",
-                  "2. Do not refactor, rename or reformat surrounding code.",
-                  "3. Run the project's own tests and the task set the baseline used.",
-                  "4. If any task that passed before now fails, stop and report it instead of adjusting the task or its checks."]
-    else:
-        lines += ["1. Do not apply the diff unchanged.",
-                  "2. Reproduce the failing task above with and without the change, several times each, to see whether the change causes it.",
-                  "3. Only if the unchanged code fails the same way should the change be reconsidered, and then it must be measured again."]
-    lines += ["", "Figures are provider-reported costs for the listed tasks at one commit and model. They are not a guarantee for other inputs."]
-    return "\n".join(lines) + "\n"
+        lines += ["## Before you call it done", "",
+                  "Hansa measured this on a small task set. Check what it could not:", "",
+                  "- [ ] Read the diff as a reviewer. If it decides something by matching words in free text, make it match whole words only and confirm an input containing two intents, or none, still takes the original path.",
+                  "- [ ] If it touches a shared library or framework file rather than the agent's own code, confirm nothing else that uses that file changes behaviour, or move the edit into the agent's code.",
+                  "- [ ] If it adds anything to what the agent returns or stores, confirm downstream code and saved data tolerate it, or remove it.",
+                  "- [ ] Add a test for the changed path and one for the fallback path.",
+                  "- [ ] Try two realistic inputs the task set did not cover and compare the agent's behaviour with and without the change.", ""]
+    lines += ["## Must stay true", "",
+              "- Tool names, tool behaviour, prompt wording and the shape of the agent's output are unchanged unless the diff changes them.",
+              "- Any task that passed before still passes. If one fails, stop and report it; do not adjust the task or its checks.", "",
+              "## Report back", "",
+              "- Applied: yes or no, and the commit.",
+              "- Each file changed, with the lines.",
+              "- Checklist items you did, and any you could not do and why.",
+              "- Tests run and their result.",
+              "- Anything that behaved differently from what is described here.", "",
+              "Figures are provider-reported costs for the listed tasks at one commit and model. They are not a guarantee for other inputs."]
+    return "\n".join(line for index, line in enumerate(lines) if not (line == "" and index and lines[index - 1] == "")) + "\n"
 
 
 def next_step(adapter, baseline, investigation, optimizations, jobs):
@@ -146,6 +225,9 @@ def build(service, baselines, user_id, import_id):
                       and (job["status"] == "ready" or job["result"].get("findings"))]
     concluded = [job for job in investigations if job["status"] == "ready" and not job["result"].get("incomplete")]
     investigation = (concluded or investigations or [None])[-1]
+    # A fix is judged against the baseline it ran on, which may not be the latest one.
+    with service.database.connect() as db:
+        baselines_by_id = {row["id"]: json.loads(row["result"]) for row in db.execute("SELECT id, result FROM baselines WHERE import_id=?", (import_id,))}
     optimizations = []
     for job in jobs:
         if job["kind"] != "optimization":
@@ -161,6 +243,7 @@ def build(service, baselines, user_id, import_id):
             "comparison": result.get("comparison") or (tried[-1]["comparison"] if tried else None),
             "comparison_is_of": "accepted candidate" if result.get("decision") == "accept" else "last candidate tried" if tried else None,
             "stability_checks": result.get("stability_checks", []),
+            "proof": proof(result.get("comparison") or (tried[-1]["comparison"] if tried else None), baselines_by_id.get(result.get("baseline_id")) or baseline),
             "experiments": [{"experiment": e["experiment"], "verdict": e["comparison"]["verdict"], "all_tasks": e["comparison"]["all_tasks"],
                              "regressed_tasks": e["comparison"]["regressed_tasks"], "cost_usd": e["cost_usd"],
                              "changed_files": e["changed_files"]} for e in result.get("experiments", [])],

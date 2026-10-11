@@ -46,9 +46,13 @@ def extract_archive(archive_path, destination, settings, check_active, folder=No
                     root = root or parts[0]
                     if parts[0] != root:
                         raise GitHubFailure("unsafe_archive", "Archive has multiple source roots.")
+                    if member.issym() or member.islnk():
+                        # A link's target is attacker-controlled, so it is never created or followed. Leaving it
+                        # out, with a warning, keeps that guarantee without refusing the whole repository.
+                        warnings.add("links_not_imported")
+                        continue
                     if not member.isdir() and not member.isfile():
-                        # Reject all links and special files instead of interpreting attacker-controlled targets.
-                        raise GitHubFailure("unsafe_archive", "Archive contains a symlink, hard link, or special file.")
+                        raise GitHubFailure("unsafe_archive", "Archive contains a device or other special file.")
                     if len(parts) == 1:
                         if not member.isdir():
                             raise GitHubFailure("unsafe_archive", "Archive root must be a directory.")

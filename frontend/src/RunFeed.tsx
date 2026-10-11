@@ -20,7 +20,7 @@ const tools: Record<string, (args: Record<string, unknown>) => string> = {
   write_adapter: () => 'Writing the adapter', run_smoke: () => 'Trying a real run in the sandbox', read_baseline: () => 'Reading the baseline numbers',
   read_run: args => `Reading run ${String(args.run_id || '').slice(0, 8)} call by call`, save_finding: () => 'Saving a finding', note: () => 'Making a note',
   edit_file: args => `Editing ${args.path}`, write_file: args => `Rewriting ${args.path}`, revert: () => 'Undoing the change', show_diff: () => 'Reviewing the change',
-  run_candidate: () => 'Rerunning your tasks with the fix', measure_baseline: () => 'Rerunning the original to see how much it varies', finish: () => 'Wrapping up', block: () => 'Reporting a blocker',
+  run_candidate: () => 'Preparing to rerun your tasks with the fix', measure_baseline: () => 'Rerunning the original to see how much it varies', finish: () => 'Wrapping up', block: () => 'Reporting a blocker',
 }
 const money = (value: unknown) => typeof value === 'number' ? ` · $${value.toFixed(4)}` : ''
 
@@ -36,7 +36,9 @@ export function describe(event: RunEvent): { text: string; quiet?: boolean; tone
     case 'tool_error': return { text: `Hit a snag: ${data.error || 'a step could not complete'}`, tone: 'waste' }
     case 'finding': return { text: `Found a leak: ${String(data.waste || '').split(/(?<=[.!?])\s/)[0]}`, tone: 'waste' }
     case 'build': return { text: 'Built the sandbox image' }
-    case 'experiment_started': return { text: 'Sandbox runs started', quiet: true }
+    case 'experiment_started': { const count = (Array.isArray(data.task_ids) ? data.task_ids.length : 0) * Number(data.repetitions || 1)
+      return { text: `Rerunning your tasks with the fix: ${count || 'several'} sandbox runs, about half a minute each` } }
+    case 'candidate_run': return { text: `Run ${data.done} of ${data.of} done · ${data.name || `task ${data.task_id}`} · ${data.status === 'failed' ? 'failed its checks' : 'checks passed'}${money(data.cost_usd)}`, tone: data.status === 'failed' ? 'waste' : 'ok' }
     case 'edit': return { text: `Changed ${data.path || 'a file'}` }
     case 'revert': return { text: 'Undid the change' }
     case 'smoke': return { text: `Sandbox run finished: ${String(data.stop_reason || 'done').replaceAll('_', ' ')}${money(data.cost_usd)}`, tone: data.stop_reason === 'completed' ? 'ok' : undefined }

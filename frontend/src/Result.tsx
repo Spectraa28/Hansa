@@ -74,6 +74,11 @@ function TestedFix({ attempt, importId, preview }: { attempt: Optimization; impo
       <p className="mt-4 max-w-[58ch] text-[17px] font-medium">{accepted ? 'Cheaper, and every task still passes. The patch is yours.' : rejected ? 'It was cheaper, but a task that used to pass now fails. Hansa reverted it. The numbers are below so you can judge it yourself.' : 'No accepted patch is recorded for this attempt.'}</p>
       {attempt.incomplete && <p className="mt-2 text-[13px]">This attempt ended before completing its work.</p>}
     </section>
+    {attempt.proof && <section className={`mt-6 rounded-control border-2 border-ink p-5 ${attempt.proof.strength === 'thin' ? 'bg-waste-soft' : 'bg-surface'}`}>
+      <p className="flex flex-wrap items-center gap-2 font-display text-[20px] font-[760] tracking-[-.02em]">How strong is this proof? <span className={`chip ${attempt.proof.strength === 'solid' ? 'chip-ok' : attempt.proof.strength === 'thin' ? 'chip-waste' : 'bg-surface'}`}>{attempt.proof.strength}</span></p>
+      {attempt.proof.notes.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-[14px]">{attempt.proof.notes.map(note => <li key={note}>{note}</li>)}</ul> : <p className="mt-2 text-[14px]">Every task was run, the checks test exact values, and the saving is larger than the agent's normal variation.</p>}
+      {attempt.proof.strength === 'thin' && <p className="mt-3 text-[14px] font-medium">Treat this as a strong lead to review, not a finished change. Add tasks or exact checks in Setup and test it again to firm it up.</p>}
+    </section>}
     {comparison ? <>
       <div className="mt-9 grid gap-6 md:grid-cols-3">{metrics.map(([key, label, unit]) => <Bars key={key} label={label} unit={unit} values={comparison.totals[key]} />)}</div>
       {!preview && <p className="mt-4 flex flex-wrap items-center gap-2 font-mono text-[12px] text-muted"><span>how Hansa got here:</span><TraceLinks trace={attempt.trace} label="trace" /></p>}

@@ -19,7 +19,7 @@ A job is limited to 30 model turns. The agent's model calls go through the gatew
 
 A failed onboarding job retains every draft in its events. A later job receives the latest failed draft for review against the current source; it still must write and smoke-test its own revision. The gateway now identifies unsupported SDK message fields without echoing request data.
 
-When a current development contract exists, onboarding receives its task shapes and output requirements before writing the adapter. Conversation adapters must retain active agents, history and context across sequential user turns and report real executed tools. Onboarding chooses and writes the glue; the controller does not substitute the legacy single-turn airline adapter.
+When a current development contract exists, onboarding receives its task shapes and output requirements before writing the adapter. Conversation adapters must retain active agents, history and context across sequential user turns and report real executed tools. Onboarding chooses and writes the glue; there is no built-in adapter for any particular agent.
 
 Investigation shares this loop, metered gateway path, 4096-output-token request limit, retry policy, key expiry (30 minutes), event list, job storage, and process-local lock with onboarding and baselines. Its key is `hansa-investigation-<job>` with the same 36-call/$1.50 soft admission limits. It does not build dependencies, execute the target, or write an adapter. Keys are revoked and the lock remains held until usage, trace export, and final events are saved.
 

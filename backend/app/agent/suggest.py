@@ -20,10 +20,13 @@ Call propose_tasks once with exactly three tasks that cover different things the
 - name: a short plain label. description: one sentence on what the task tests.
 - input: a JSON object in exactly the shape the adapter reads. Reuse the example's keys. Write realistic values.
 - checks: three to five fields of the adapter's printed JSON that prove the task went right.
+  - `real_output` is what the adapter actually printed for the example task. Only check fields that exist in it, with the
+    type they have there. Do not assume the output echoes the input: look at what `real_output` really starts with.
   - pointer is a JSON pointer such as /resolution/action. field_type is the JSON type at that pointer.
-  - Give exact_json only where the value is fully determined by the input, such as a boolean or a tool or action name.
-    It must be valid JSON text, for example "\\"initiate_refund\\"" or "true". Leave it out for free text and lists that can vary.
-  - Never check wording the model writes freely.
+  - Check that a field exists with the right type. `real_output` is the answer to the example task only: a different
+    question can end at a different agent or with a different result, so do not copy its values into other tasks.
+    Give exact_json only on a task whose input is the example task itself. It must be valid JSON text, for example "true".
+  - Never check wording the model writes freely, and never check list positions inside a conversation.
 Do not include commands, code, credentials or URLs."""
 TOOL = {"type": "function", "function": {"name": "propose_tasks", "description": "Return the drafted tasks.", "parameters": {
     "type": "object", "additionalProperties": False, "required": ["tasks"], "properties": {"tasks": {
@@ -37,12 +40,58 @@ TOOL = {"type": "function", "function": {"name": "propose_tasks", "description":
                         "exact_json": {"type": "string"}}}}}}}}}}}
 
 
-def messages(adapter, tools):
-    material = {"adapter": adapter["content"][:8000], "example_task": adapter["example_task"], "tool_names": tools[:60]}
+def clip(value, depth=0):
+    """A real output cut down to its shape: long text shortened, long lists kept to their first items."""
+    if isinstance(value, dict):
+        return {key: clip(item, depth + 1) for key, item in list(value.items())[:30]} if depth < 6 else "…"
+    if isinstance(value, list):
+        return [clip(item, depth + 1) for item in value[:3]] if depth < 6 else "…"
+    return value[:160] + "…" if isinstance(value, str) and len(value) > 160 else value
+
+
+def resolve(document, pointer):
+    """The value at a JSON pointer, or a marker when the path does not exist."""
+    current = document
+    for part in pointer.split("/")[1:]:
+        part = part.replace("~1", "/").replace("~0", "~")
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+        elif isinstance(current, list) and part.isdigit() and int(part) < len(current):
+            current = current[int(part)]
+        else:
+            return MISSING
+    return current
+
+
+MISSING = object()
+TYPES = {"string": str, "boolean": bool, "object": dict, "array": list, "null": type(None)}
+
+
+def grounded(rule, sample, same_input=True):
+    """Keep a drafted check only if a real output supports it.
+
+    An exact value survives only when the real output shows it AND that output came from this very input.
+    The agent that answered one question is not a prediction of the agent that answers another.
+    """
+    if sample is None:
+        return {**rule, "check_exact": False, "exact_value": None}  # nothing to check a guess against
+    value = resolve(sample, rule["pointer"])
+    kind = rule["field_type"]
+    fits = (isinstance(value, TYPES[kind]) if kind in TYPES else type(value) is int if kind == "integer"
+            else type(value) in {int, float} if kind == "number" else False)
+    # A position in a list (the third message, the first tool call) shifts from run to run.
+    if value is MISSING or not fits or any(part.isdigit() for part in rule["pointer"].split("/")):
+        return None
+    return rule if rule["check_exact"] and same_input and value == rule["exact_value"] else {**rule, "check_exact": False, "exact_value": None}
+
+
+def messages(adapter, tools, sample=None):
+    material = {"adapter": adapter["content"][:8000], "example_task": adapter["example_task"], "tool_names": tools[:60],
+                "real_output": clip(sample) if sample is not None else "not available; check field existence and type only"}
     return [{"role": "system", "content": PROMPT}, {"role": "user", "content": json.dumps(material, ensure_ascii=False)}]
 
 
-def drafts(reply):
+def drafts(reply, sample=None, sample_input=None):
     """Keep only suggestions that pass the contract's own task schema; a bad check is dropped, not the task."""
     call = next((c for c in reply.get("tool_calls") or [] if c["function"]["name"] == "propose_tasks"), None)
     try:
@@ -68,8 +117,10 @@ def drafts(reply):
                     Task(name="x", description="x", input={}, required_fields=[candidate], case_kind="ordinary")
                 except ValidationError:
                     continue
-                fields.append(candidate)
-                pointers.add(candidate["pointer"])
+                candidate = grounded(candidate, sample, sample_input is not None and item.get("input") == sample_input)
+                if candidate:
+                    fields.append(candidate)
+                    pointers.add(candidate["pointer"])
                 break
         try:
             task = Task(name=item.get("name"), description=item.get("description"), input=item.get("input"),

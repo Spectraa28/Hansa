@@ -128,7 +128,7 @@ class InvestigationTools:
             if task_id is not None and task["task_id"] == task_id:
                 self.baseline_seen = True
                 item["runs"] = [{k: run.get(k) for k in (*metrics, "run_id", "trace_id", "stop_reason", "status", "reason", "automatic_passed", "unknown_cost_calls")} for run in runs]
-                item["rules"] = self.baseline.get("contract", {}).get("tasks", [])[index] if self.baseline.get("contract") else {"expected_function": task.get("expected_function")}
+                item["rules"] = self.baseline.get("contract", {}).get("tasks", [])[index] if self.baseline.get("contract") else {}
                 return item
             tasks.append(item)
         if task_id is not None:

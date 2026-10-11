@@ -45,6 +45,48 @@ def suggest_tasks(import_id: uuid.UUID, request: Request, user: dict = Depends(r
     return request.app.state.agent.suggest_tasks(user["id"], str(import_id))
 
 
+class BriefInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    ids: list[str] = Field(min_length=1, max_length=20)
+
+
+def suggestion_set(request: Request, user_id: str, import_id: str):
+    """Plays for an import, from its latest completed baseline and a text-only read of its source. No model call."""
+    import json
+    from ..runner.xray import anatomy
+    from . import playbook
+    agent = request.app.state.agent
+    with agent.database.connect() as db:
+        imported = agent.owned(db, user_id, import_id)
+        row = db.execute("SELECT result FROM baselines WHERE import_id=? AND json_extract(result,'$.status')='completed' "
+                         "ORDER BY created_at DESC, rowid DESC LIMIT 1", (import_id,)).fetchone()
+    xray = anatomy(agent.database, json.loads(row["result"])) if row else None
+    try:
+        entrypoint = (request.app.state.inspection.get(user_id, import_id)["configuration"] or {}).get("entrypoint")
+    except HTTPException:
+        entrypoint = None
+    found = playbook.plays(xray, playbook.scan(imported["snapshot_path"], entrypoint))
+    return imported, xray, found
+
+
+@router.get("/{import_id}/suggestions")
+def suggestions(import_id: uuid.UUID, request: Request, user: dict = Depends(current_session)):
+    _, xray, found = suggestion_set(request, user["id"], str(import_id))
+    return {"measured": xray is not None, "suggestions": found,
+            "note": "Chosen from measurements and a text-only read of the source. Savings are estimates until the tasks are rerun."}
+
+
+@router.post("/{import_id}/suggestions/brief")
+def suggestion_brief(import_id: uuid.UUID, body: BriefInput, request: Request, user: dict = Depends(require_csrf)):
+    from . import playbook
+    imported, xray, found = suggestion_set(request, user["id"], str(import_id))
+    chosen = [play for play in found if play["id"] in set(body.ids)]
+    if not chosen:
+        raise HTTPException(422, "Choose at least one current suggestion.")
+    text = playbook.brief(imported["repository_name"], imported["commit_sha"], imported["folder"] if "folder" in imported.keys() else None, xray, chosen)
+    return PlainTextResponse(text, media_type="text/markdown; charset=utf-8")
+
+
 @router.get("/{import_id}/report")
 def report(import_id: uuid.UUID, request: Request, user: dict = Depends(current_session)):
     from .report import build
@@ -71,9 +113,12 @@ def handoff(import_id: uuid.UUID, job_id: str, request: Request, user: dict = De
     from .report import handoff as build_handoff
     agent = request.app.state.agent
     job = agent.job(user["id"], str(import_id), job_id)
+    import json
     with agent.database.connect() as db:
-        repository = agent.owned(db, user["id"], str(import_id))["repository_name"]
-    text = build_handoff(job, repository) if job["kind"] == "optimization" else None
+        imported = agent.owned(db, user["id"], str(import_id))
+        row = db.execute("SELECT result FROM baselines WHERE id=? AND import_id=?", (job["result"].get("baseline_id"), str(import_id))).fetchone()
+    text = (build_handoff(job, imported["repository_name"], json.loads(row["result"]) if row else None, imported["commit_sha"])
+            if job["kind"] == "optimization" else None)
     if text is None:
         raise HTTPException(404, "This job has no change to hand off.")
     return PlainTextResponse(text, media_type="text/markdown; charset=utf-8",

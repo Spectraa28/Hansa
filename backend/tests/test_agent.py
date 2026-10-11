@@ -285,12 +285,44 @@ def test_task_suggestions_are_validated_drafts_and_save_nothing(agent, monkeypat
     monkeypatch.setattr(service.gateway, "summarize_key", lambda key: {"estimated_cost_usd": 0.01})
     result = service.suggest_tasks(owner, imported)
     assert [task["name"] for task in result["tasks"]] == ["Greets"] and result["saved"] is False
+    # No run has happened, so there is no real output to check a guessed value against: type checks only.
     assert result["tasks"][0]["required_fields"] == [
-        {"pointer": "/done", "field_type": "boolean", "check_exact": True, "exact_value": True},
+        {"pointer": "/done", "field_type": "boolean", "check_exact": False, "exact_value": None},
         {"pointer": "/answer", "field_type": "string", "check_exact": False, "exact_value": None}]
+    from app.agent.suggest import grounded
+    real = {"done": True, "answer": "hello there", "messages": [{"role": "assistant", "content": "hi"}]}
+    exact = lambda pointer, kind, value: {"pointer": pointer, "field_type": kind, "check_exact": True, "exact_value": value}
+    assert grounded(exact("/done", "boolean", True), real)["check_exact"] is True           # the real output shows it
+    assert grounded(exact("/done", "boolean", True), real, same_input=False)["check_exact"] is False  # another input: unknown
+    assert grounded(exact("/answer", "string", "hello"), real)["check_exact"] is False      # a guess: kept as a type check
+    assert grounded(exact("/messages/0/role", "string", "user"), real) is None              # never a position in a conversation
+    assert grounded(exact("/missing", "string", "x"), real) is None and grounded(exact("/done", "string", "x"), real) is None
     assert "Reads question" in seen[0][1]["content"]
     with state.database.connect() as db:
         assert db.execute("SELECT count(*) FROM task_contracts WHERE import_id=?", (imported,)).fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM gateway_keys WHERE run_label LIKE 'hansa-suggest-%' AND revoked=0").fetchone()[0] == 0
     assert agent_service.JOB_LOCK.acquire(blocking=False)
     agent_service.JOB_LOCK.release()
+
+
+def test_playbook_picks_plays_from_measurements_and_writes_a_brief(tmp_path):
+    from app.agent import playbook
+    (tmp_path / "app").mkdir()
+    (tmp_path / "lib").mkdir()
+    (tmp_path / "app/agent.py").write_text('SYSTEM_PROMPT = "You are helpful"\nstamp = datetime.now()\nreply = client.chat.completions.create(model="m")\nwhile True:\n    pass\n')
+    (tmp_path / "lib/client.py").write_text('reply = client.chat.completions.create(model="m")\n')
+    source = playbook.scan(tmp_path, "python app/agent.py")
+    assert source["model_call"][0] == {"path": "app/agent.py", "line": 3}  # the measured agent's folder comes first
+    xray = {"model_calls": 10, "runs": 2, "calls_per_run": 5.0, "cost_usd": 1.0, "input_cost_percent": 80.0,
+            "input": {"sent_before_percent": 60.0, "system_percent": 50.0, "tool_schema_percent": 25.0, "conversation_percent": 25.0},
+            "time": {"outside_model_percent": 10.0}, "handoff_calls": {"count": 0, "percent": 0, "cost_usd": 0},
+            "duplicate_calls": {"count": 0, "cost_usd": 0}, "prompt_caching_estimate": {"saving_percent": 40.0}}
+    found = playbook.plays(xray, source)
+    ids = [play["id"] for play in found]
+    assert ids[:2] == ["prompt-caching", "stable-prefix"] and {"bound-turns", "cap-output", "tool-schemas"} <= set(ids)
+    assert [play["kind"] for play in found] == sorted((play["kind"] for play in found), key=["safe", "needs_proof"].index)
+    assert playbook.combined(found[:2]) < found[0]["estimate"]["cost_percent"] + found[1]["estimate"]["cost_percent"]  # compounds, never adds
+    text = playbook.brief("me/agent", "a" * 40, "app", xray, found)
+    assert "Turn on prompt caching" in text and "`app/agent.py:3`" in text and "Changes that alter behaviour" in text
+    assert "You are helpful" not in text  # places are named; source is never quoted
+    assert playbook.plays(None, playbook.scan(tmp_path))  # still useful before any baseline

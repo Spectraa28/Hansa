@@ -70,6 +70,12 @@ def contains_secret(value, secret):
     return isinstance(value, (list, tuple)) and any(contains_secret(item, secret) for item in value)
 
 
+MESSAGE_FIELDS = {"role", "content", "name", "tool_calls", "tool_call_id"}
+BODY_FIELDS = {"model", "messages", "stream", "max_tokens", "max_completion_tokens", "temperature", "top_p", "n", "stop", "seed",
+               "presence_penalty", "frequency_penalty", "tools", "tool_choice", "parallel_tool_calls", "response_format", "user",
+               "logprobs", "top_logprobs", "logit_bias", "store", "metadata"}
+
+
 class GatewayService:
     def __init__(self, settings, database, inspection=None):
         self.settings = settings
@@ -148,17 +154,32 @@ class GatewayService:
             raise HTTPException(401, "Invalid or expired gateway key.")
         limited = key["max_spend_usd"] is not None
         if limited:
-            if any(set(message) - {"role", "content", "name", "tool_calls", "tool_call_id"}
-                   or not text_content(message.get("content")) for message in body["messages"]):
-                raise HTTPException(400, "Spend-limited messages support only role, content, name, tool_calls, tool_call_id and text content. Remove ALL other SDK message fields; null fields are still unsupported.")
-            if (set(body) - {"model", "messages", "stream", "max_tokens", "max_completion_tokens",
-                        "temperature", "top_p", "n", "stop", "seed", "presence_penalty", "frequency_penalty",
-                        "tools", "tool_choice", "parallel_tool_calls", "response_format", "user",
-                        "logprobs", "top_logprobs", "logit_bias", "store", "metadata"}
-                    or not isinstance(body.get("tools", []), list)
-                    or any(not isinstance(tool, dict) or tool.get("type") != "function"
-                           for tool in body.get("tools", []))):
-                raise HTTPException(400, "Spend-limited calls support text and local function tools only.")
+            # SDKs dump their own bookkeeping into requests: null `refusal`/`audio`/`function_call` on messages,
+            # a framework's `sender`, tuning fields a given provider does not know. Refusing those made every
+            # new agent framework fail on its first call. They are dropped here instead, before metering and
+            # forwarding, so what is priced is what is sent. Anything that would change what is billed for
+            # (non-text content, a legacy function call, a provider-hosted tool) is still refused, by name.
+            for message in body["messages"]:
+                if not isinstance(message, dict):
+                    raise HTTPException(400, "Each message must be an object.")
+                if message.get("function_call"):
+                    raise HTTPException(400, "Legacy function_call messages are not supported; use tool_calls.")
+                for field in set(message) - MESSAGE_FIELDS:
+                    del message[field]
+                if not text_content(message.get("content")):
+                    raise HTTPException(400, "Spend-limited calls support text content only; this request has non-text message content.")
+            tools = body.get("tools", [])
+            if tools is None:
+                body.pop("tools")
+                tools = []
+            hosted = sorted({str(tool.get("type") if isinstance(tool, dict) else type(tool).__name__)[:40]
+                             for tool in (tools if isinstance(tools, list) else [tools])
+                             if not isinstance(tool, dict) or tool.get("type") != "function"})
+            if not isinstance(tools, list) or hosted:
+                raise HTTPException(400, "Spend-limited calls support local function tools only; this request includes: "
+                                    + (", ".join(hosted) or "a tools value that is not a list") + ".")
+            for field in set(body) - BODY_FIELDS:
+                del body[field]
             output = body.get("max_completion_tokens", body.get("max_tokens"))
             count = body.get("n", 1)
             if ("max_tokens" in body and "max_completion_tokens" in body

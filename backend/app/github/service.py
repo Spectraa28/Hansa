@@ -18,6 +18,10 @@ from .archive import extract_archive
 from .client import GitHubAPI, GitHubFailure, app_jwt, branch_name, load_app_key, repository_name
 
 
+# Per account. Each is a source copy on disk plus its results; deleting one frees its place.
+MAX_ACTIVE_IMPORTS = 20
+
+
 class GitHubService:
     def __init__(self, settings, database):
         self.settings, self.database = settings, database
@@ -264,8 +268,8 @@ class GitHubService:
                 raise GitHubFailure("not_connected", "GitHub was disconnected. Reconnect before importing.", 409)
             count = db.execute("SELECT count(*) FROM repository_imports WHERE user_id=? AND status IN ('queued','downloading','ready')", (user_id,)).fetchone()[0]
             queued = db.execute("SELECT count(*) FROM repository_imports WHERE status IN ('queued','downloading')").fetchone()[0]
-            if count >= 5 or queued >= 100:
-                raise GitHubFailure("queue_limit", "Import limit reached. Delete an existing source or try later.", 429)
+            if count >= MAX_ACTIVE_IMPORTS or queued >= 100:
+                raise GitHubFailure("queue_limit", f"You have {MAX_ACTIVE_IMPORTS} imported agents, which is the limit. Delete one to import another.", 429)
             db.execute("""INSERT INTO repository_imports
                 (id,user_id,connection_generation,installation_id,repository_id,repository_name,branch,commit_sha,status,created_at,updated_at,folder)
                 VALUES (?,?,?,?,?,?,?,?,'queued',?,?,?)""", (import_id, user_id, connection["generation"],
@@ -284,7 +288,8 @@ class GitHubService:
 
     def imports(self, user_id, page, per_page):
         with self.database.connect() as db:
-            ids = db.execute("SELECT id FROM repository_imports WHERE user_id=? ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
+            # A deleted import keeps a row for its history; it is not something the owner can open.
+            ids = db.execute("SELECT id FROM repository_imports WHERE user_id=? AND status!='deleted' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?",
                              (user_id, per_page + 1, (page - 1) * per_page)).fetchall()
         return {"imports": [self.import_result(user_id, row["id"]) for row in ids[:per_page]],
                 "page": page, "has_next": len(ids) > per_page}
@@ -301,6 +306,10 @@ class GitHubService:
         with self.lock:
             self.import_result(user_id, import_id)
             with self.database.connect() as db:
+                running = (db.execute("SELECT 1 FROM agent_jobs WHERE import_id=? AND status='running'", (import_id,)).fetchone()
+                           or db.execute("SELECT 1 FROM baselines WHERE import_id=? AND json_extract(result,'$.status')='running'", (import_id,)).fetchone())
+                if running:
+                    raise GitHubFailure("job_running", "A job is still running on this agent. Wait for it to finish, then delete it.", 409)
                 db.execute("DELETE FROM agent_events WHERE job_id IN (SELECT id FROM agent_jobs WHERE import_id=?)", (import_id,))
                 db.execute("DELETE FROM agent_jobs WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM import_adapters WHERE import_id=?", (import_id,))
