@@ -1,0 +1,1114 @@
+{
+ "import": {
+  "import_id": "1b9cdc40-2b5f-4b5c-b198-5227a464817e",
+  "repository": "Spectraa28/swarm",
+  "branch": "main",
+  "commit_sha": "6af0b4caf37dca4526dfd98e9fbd8ce36e7eeb22"
+ },
+ "adapter": {
+  "sha256": "97adabe7c7d502f5f2e699da6fbe8d22719d719a69eacd28a17bd82b2b53aa6b",
+  "job_id": "4df0cf667b7b4f72a763279aaf2b18a7",
+  "created_at": 1791682869
+ },
+ "baseline": {
+  "baseline_id": "6121b4c5b54c4dce9969d56c16cd0588",
+  "status": "completed",
+  "model": "claude-sonnet-4.6",
+  "repetitions": 2,
+  "commit_sha": "6af0b4caf37dca4526dfd98e9fbd8ce36e7eeb22",
+  "created_at": 1791686733,
+  "passed": 0,
+  "failed": 2,
+  "needs_review": 4,
+  "per_pass": {
+   "model_calls": 40.0,
+   "tokens_in": 53886.0,
+   "tokens_out": 2820.0,
+   "cost_usd": 0.22435380000000002,
+   "wall_time_seconds": 113.8716035
+  },
+  "tasks": [
+   {
+    "task_id": "1",
+    "name": "Cancel for refund",
+    "status": "needs_review",
+    "reason": "Automatic checks passed; human review required",
+    "model_calls": 7.0,
+    "tokens_in": 9551.0,
+    "tokens_out": 449.0,
+    "cost_usd": 0.0389268,
+    "wall_time_seconds": 19.0668045,
+    "spread": {
+     "model_calls": [
+      7,
+      7
+     ],
+     "tokens_in": [
+      9497,
+      9605
+     ],
+     "tokens_out": [
+      423,
+      475
+     ],
+     "cost_usd": [
+      0.0383196,
+      0.039534
+     ],
+     "wall_time_seconds": [
+      19.065046,
+      19.068563
+     ],
+     "external_calls": [
+      0,
+      0
+     ]
+    },
+    "trace_ids": [
+     "ed9a4d04e230ca3bd362c3f9e3bba66a",
+     "5c6319b18495a96ca74effe41da9aa7d"
+    ]
+   },
+   {
+    "task_id": "2",
+    "name": "Cancel for flight credits",
+    "status": "failed",
+    "reason": "Automatic checks passed; human review required; Field /resolution/action must be string; Field /resolution/result must be string; Exact value mismatch at /resolution/closed",
+    "model_calls": 6.0,
+    "tokens_in": 7871.5,
+    "tokens_out": 399.5,
+    "cost_usd": 0.032567700000000005,
+    "wall_time_seconds": 18.5656195,
+    "spread": {
+     "model_calls": [
+      5,
+      7
+     ],
+     "tokens_in": [
+      6111,
+      9632
+     ],
+     "tokens_out": [
+      345,
+      454
+     ],
+     "cost_usd": [
+      0.0258588,
+      0.0392766
+     ],
+     "wall_time_seconds": [
+      18.016638,
+      19.114601
+     ],
+     "external_calls": [
+      0,
+      0
+     ]
+    },
+    "trace_ids": [
+     "ea81af04e48b7026bb5dc341bbc1183b",
+     "0ed46453bebe185d42eeb3114dc7e8df"
+    ]
+   },
+   {
+    "task_id": "3",
+    "name": "Recover missing baggage",
+    "status": "needs_review",
+    "reason": "Automatic checks passed; human review required",
+    "model_calls": 6.0,
+    "tokens_in": 7789.5,
+    "tokens_out": 336.5,
+    "cost_usd": 0.0312576,
+    "wall_time_seconds": 16.416133000000002,
+    "spread": {
+     "model_calls": [
+      6,
+      6
+     ],
+     "tokens_in": [
+      7744,
+      7835
+     ],
+     "tokens_out": [
+      324,
+      349
+     ],
+     "cost_usd": [
+      0.030901200000000004,
+      0.031614
+     ],
+     "wall_time_seconds": [
+      16.360349,
+      16.471917
+     ],
+     "external_calls": [
+      0,
+      0
+     ]
+    },
+    "trace_ids": [
+     "edd65fc65d1afc98ffd9c026d6d51ec8",
+     "437c0b1ecd7cf281366946774300813b"
+    ]
+   },
+   {
+    "task_id": "4",
+    "name": "Baggage then cancellation",
+    "status": "failed",
+    "reason": "Exact value mismatch at /resolution/action; Exact value mismatch at /resolution/result",
+    "model_calls": 10.0,
+    "tokens_in": 14432.0,
+    "tokens_out": 655.0,
+    "cost_usd": 0.0584331,
+    "wall_time_seconds": 26.1961825,
+    "spread": {
+     "model_calls": [
+      10,
+      10
+     ],
+     "tokens_in": [
+      14316,
+      14548
+     ],
+     "tokens_out": [
+      637,
+      673
+     ],
+     "cost_usd": [
+      0.0577533,
+      0.0591129
+     ],
+     "wall_time_seconds": [
+      25.351979,
+      27.040386
+     ],
+     "external_calls": [
+      0,
+      0
+     ]
+    },
+    "trace_ids": [
+     "a4697b45247bc8c9b91d5499bc2c597a",
+     "06deec6206661803bb8b0408d1aacaca"
+    ]
+   },
+   {
+    "task_id": "5",
+    "name": "Different flight needs human",
+    "status": "needs_review",
+    "reason": "Automatic checks passed; human review required",
+    "model_calls": 5.0,
+    "tokens_in": 6113.5,
+    "tokens_out": 392.0,
+    "cost_usd": 0.02664255,
+    "wall_time_seconds": 15.3341045,
+    "spread": {
+     "model_calls": [
+      5,
+      5
+     ],
+     "tokens_in": [
+      6099,
+      6128
+     ],
+     "tokens_out": [
+      373,
+      411
+     ],
+     "cost_usd": [
+      0.0262812,
+      0.0270039
+     ],
+     "wall_time_seconds": [
+      14.827127,
+      15.841082
+     ],
+     "external_calls": [
+      0,
+      0
+     ]
+    },
+    "trace_ids": [
+     "72a7bc68032960b668b290ded7ce4440",
+     "d2a45411ed9507380644953535c7ad3d"
+    ]
+   },
+   {
+    "task_id": "6",
+    "name": "Change flight with unavailable availability data",
+    "status": "needs_review",
+    "reason": "Automatic checks passed; human review required",
+    "model_calls": 6.0,
+    "tokens_in": 8128.5,
+    "tokens_out": 588.0,
+    "cost_usd": 0.036526050000000004,
+    "wall_time_seconds": 18.292759500000003,
+    "spread": {
+     "model_calls": [
+      6,
+      6
+     ],
+     "tokens_in": [
+      8058,
+      8199
+     ],
+     "tokens_out": [
+      574,
+      602
+     ],
+     "cost_usd": [
+      0.0360624,
+      0.0369897
+     ],
+     "wall_time_seconds": [
+      18.163647,
+      18.421872
+     ],
+     "external_calls": [
+      0,
+      0
+     ]
+    },
+    "trace_ids": [
+     "b07290235963eecdce28d8453dc766ed",
+     "da6ecadd06c2a04f0c59a63cb30e6c92"
+    ]
+   }
+  ],
+  "note": "per_pass is the mean cost of running every task once. Cost is LiteLLM-reported, not invoice-reconciled."
+ },
+ "investigation": {
+  "job_id": "c165415d2904427c927104873eac44f4",
+  "summary": null,
+  "incomplete": true,
+  "status": "failed",
+  "nothing_worth_changing": null,
+  "findings": [
+   {
+    "finding_id": "1",
+    "waste": "The Flight Modification Agent is a pure routing pass-through that consumes one model call per task without adding value. In every observed run (Tasks 1, 2, 4, 5, 6 across both repetitions), the Triage Agent transfers to flight_modification, which then immediately transfers to either flight_cancel or flight_change without asking any clarifying questions. The triage agent already knows the intent is \"cancel\" or \"change\" from the user message, so the intermediate hop is redundant. Measured cost: ~$0.0027\u2013$0.0048 per run for this call alone (calls 132, 144, 177, 190, 200 in the observed runs).",
+    "proposed_change": "In examples/airline/configs/agents.py, change triage_agent.functions from [transfer_to_flight_modification, transfer_to_lost_baggage] to [transfer_to_flight_cancel, transfer_to_flight_change, transfer_to_lost_baggage]. Remove the flight_modification Agent definition (lines 49\u201357) or keep it unused. This eliminates one model call per flight-related task.",
+    "behaviour_risk": "Low. The triage agent already correctly identifies cancel vs change intent from user messages (confirmed in all runs). Adding transfer_to_flight_cancel and transfer_to_flight_change directly to triage_agent.functions preserves all routing logic. Risk: triage might occasionally need to ask a clarifying question (cancel vs change) that flight_modification currently handles \u2014 but in all 10 observed runs, flight_modification never asked a clarifying question. Task 6 (change flight) would be the regression test.",
+    "estimated_saving": {
+     "cost_usd": 0.033,
+     "wall_time_seconds": 25.0,
+     "tokens": 6000,
+     "model_calls": 10,
+     "method": "Remove flight_modification agent and add transfer_to_flight_cancel and transfer_to_flight_change directly to triage_agent.functions. Each of the 5 flight-related tasks (Tasks 1,2,4,5,6) incurs one flight_modification call per run. Measured cost per call: ~$0.0028\u2013$0.0048 (mean ~$0.0033). Across 10 runs (5 tasks \u00d7 2 reps): ~$0.033 saved, ~8% of total $0.4525. Latency saved: ~1,800\u20133,300ms per run (inferred from call durations), ~20\u201333s across 10 runs."
+    },
+    "saving_scope": "Total over the cited runs; hypothesis, not a measured improvement.",
+    "source": [
+     {
+      "path": "examples/airline/configs/agents.py",
+      "start_line": 49,
+      "end_line": 57,
+      "sha256": "2987a41dfaee3a5711a2d417aa58a2d5342781908ff6f0cb41436f52dbdf80c9"
+     }
+    ],
+    "run_ids": [
+     "464ddb87a4694a69aae655d4c4800aaa",
+     "7d6e5009e0894252869c564976829dd1",
+     "4f9643f9e5a247499980f6b72cad6a43",
+     "7fa1fe19e4c0460da7472744a3f76f76",
+     "a25160cf7b6a4944a1471c89fed9a483"
+    ]
+   },
+   {
+    "finding_id": "2",
+    "waste": "STARTER_PROMPT (examples/airline/data/routines/prompts.py line 12) references a non-existent 'change_intent' function: \"If the user requests are no longer relevant to the selected policy, call the change_intent function.\" No such function exists in tools.py or agents.py. This stale instruction is sent on every call to flight_cancel (5 functions), flight_change (5 functions), and lost_baggage (4 functions) agents. The model may attempt to call change_intent and fail, or waste tokens reasoning about it. Additionally, TRIAGE_SYSTEM_PROMPT defined in prompts.py (lines 18-24, ~400 chars) is never imported or used \u2014 it is dead code. Three separate files each define their own near-identical STARTER_PROMPT (baggage/policies.py, flight_modification/policies.py, prompts.py); only the last import in agents.py survives, making the other two dead code.",
+    "proposed_change": "In examples/airline/data/routines/prompts.py line 12, remove the sentence 'Note: If the user requests are no longer relevant to the selected policy, call the change_intent function.' Replace with nothing or with 'Note: If the user requests are no longer relevant to the selected policy, call the transfer_to_triage function.' Also remove the unused TRIAGE_SYSTEM_PROMPT (lines 18-24) and the duplicate STARTER_PROMPT definitions in baggage/policies.py and flight_modification/policies.py.",
+    "behaviour_risk": "Low-to-medium. Removing the stale reference to change_intent cannot make behavior worse since the function does not exist. It may actually improve behavior by removing a confusing instruction. The transfer_to_triage function already covers the intent-change case. Tasks 1-6 all use specialist agents and would be regression tests.",
+    "estimated_saving": {
+     "cost_usd": 0.005,
+     "wall_time_seconds": null,
+     "tokens": 600,
+     "model_calls": null,
+     "method": "Removing the stale 'change_intent' sentence (~12 tokens) from STARTER_PROMPT saves ~12 tokens per specialist-agent call. Specialist agents make ~4-8 calls per task across Tasks 1-6. Estimated ~50 specialist calls total across all 12 runs \u00d7 12 tokens = ~600 tokens saved. At ~$0.0000025/token input cost, ~$0.0015 direct token saving. Indirect saving: model no longer reasons about a non-existent function, potentially reducing output tokens and confusion. Estimated total ~$0.005 (minor). This is a correctness fix as much as a cost fix."
+    },
+    "saving_scope": "Total over the cited runs; hypothesis, not a measured improvement.",
+    "source": [
+     {
+      "path": "examples/airline/data/routines/prompts.py",
+      "start_line": 12,
+      "end_line": 12,
+      "sha256": "34ff549d7d36e68a68804242a0b9f163c7d256444ad5a980d2041cef2e981bb3"
+     }
+    ],
+    "run_ids": [
+     "464ddb87a4694a69aae655d4c4800aaa",
+     "7d6e5009e0894252869c564976829dd1",
+     "4f9643f9e5a247499980f6b72cad6a43",
+     "a25160cf7b6a4944a1471c89fed9a483",
+     "7fa1fe19e4c0460da7472744a3f76f76"
+    ]
+   },
+   {
+    "finding_id": "3",
+    "waste": "swarm/core.py lines 146 and 239 set max_turns=float('inf') as the default for both run() and run_and_stream(). There is no upper bound on model calls per task. All 6 tasks completed in 5-10 model calls (max observed: 10 for Task 4). An infinite loop due to a buggy agent or unexpected user input would incur unbounded cost with no automatic stop. This is not a baseline waste but a structural risk that could cause large future costs.",
+    "proposed_change": "In swarm/core.py lines 239 and 146, change the default max_turns=float('inf') to max_turns=20 (or pass max_turns=20 from the test harness). This caps any single swarm.run() call at 20 model calls, preventing runaway loops while comfortably exceeding the observed maximum of 10 calls per task.",
+    "behaviour_risk": "Medium. The max_turns=float('inf') default means a runaway agent loop has no safety stop. In the baseline all tasks completed in 5-10 calls, well under any reasonable limit. Setting max_turns=20 would not affect any observed run but would cap runaway costs in production. Risk: if a task legitimately needs more than 20 turns (not observed), it would be cut short. Tasks 1-6 all complete in 6-10 calls, so a limit of 20 is very conservative.",
+    "estimated_saving": {
+     "cost_usd": null,
+     "wall_time_seconds": null,
+     "tokens": null,
+     "model_calls": null,
+     "method": "No saving in the baseline (all tasks completed normally). This is a risk-mitigation change: in a runaway scenario, capping at 20 turns instead of infinity prevents unbounded cost. Expected saving in normal operation: $0. Expected saving in failure mode: up to the full per-run cost ($0.03\u2013$0.06) per runaway task. Not quantifiable from baseline data alone."
+    },
+    "saving_scope": "Total over the cited runs; hypothesis, not a measured improvement.",
+    "source": [
+     {
+      "path": "swarm/core.py",
+      "start_line": 239,
+      "end_line": 239,
+      "sha256": "b393be51475f83aa185a84f19c6a9ee35abe62a52738aa3e5547ee301e13e881"
+     },
+     {
+      "path": "swarm/core.py",
+      "start_line": 146,
+      "end_line": 146,
+      "sha256": "b393be51475f83aa185a84f19c6a9ee35abe62a52738aa3e5547ee301e13e881"
+     }
+    ],
+    "run_ids": [
+     "464ddb87a4694a69aae655d4c4800aaa",
+     "7d6e5009e0894252869c564976829dd1",
+     "4f9643f9e5a247499980f6b72cad6a43",
+     "7fa1fe19e4c0460da7472744a3f76f76",
+     "a25160cf7b6a4944a1471c89fed9a483"
+    ]
+   }
+  ],
+  "coverage": [],
+  "agent_usage": {
+   "calls": 40,
+   "prompt_tokens": 856193,
+   "completion_tokens": 12334,
+   "estimated_cost_usd": 0.71136549,
+   "unknown_cost_calls": 0
+  },
+  "trace": {
+   "status": "failed",
+   "reason": "Neatlogs log_trace failed with status 403."
+  },
+  "note": "Estimated savings are hypotheses until an optimization measures them."
+ },
+ "optimizations": [
+  {
+   "job_id": "6c66dd8ae67042908941c591b02b8e4b",
+   "status": "ready",
+   "decision": "reject",
+   "summary": "The finding correctly identified that `flight_modification` is a pass-through agent, but the task evaluation checks `/function_sequence` and requires `transfer_to_flight_modification` to appear in the call sequence. When triage_agent was given direct access to `transfer_to_flight_cancel` and `transfer_to_flight_change`, Tasks 5 and 6 regressed from `needs_review` (automatic checks passed) to `failed` with \"Exact value mismatch at /function_sequence\". The intermediate hop is part of the task contract and cannot be removed without breaking the required behaviour. The change was reverted.",
+   "incomplete": false,
+   "finding": {
+    "finding_id": "1",
+    "investigation_job_id": "c165415d2904427c927104873eac44f4",
+    "waste": "The Flight Modification Agent is a pure routing pass-through that consumes one model call per task without adding value. In every observed run (Tasks 1, 2, 4, 5, 6 across both repetitions), the Triage Agent transfers to flight_modification, which then immediately transfers to either flight_cancel or flight_change without asking any clarifying questions. The triage agent already knows the intent is \"cancel\" or \"change\" from the user message, so the intermediate hop is redundant. Measured cost: ~$0.0027\u2013$0.0048 per run for this call alone (calls 132, 144, 177, 190, 200 in the observed runs).",
+    "proposed_change": "In examples/airline/configs/agents.py, change triage_agent.functions from [transfer_to_flight_modification, transfer_to_lost_baggage] to [transfer_to_flight_cancel, transfer_to_flight_change, transfer_to_lost_baggage]. Remove the flight_modification Agent definition (lines 49\u201357) or keep it unused. This eliminates one model call per flight-related task.",
+    "behaviour_risk": "Low. The triage agent already correctly identifies cancel vs change intent from user messages (confirmed in all runs). Adding transfer_to_flight_cancel and transfer_to_flight_change directly to triage_agent.functions preserves all routing logic. Risk: triage might occasionally need to ask a clarifying question (cancel vs change) that flight_modification currently handles \u2014 but in all 10 observed runs, flight_modification never asked a clarifying question. Task 6 (change flight) would be the regression test.",
+    "estimated_saving": {
+     "cost_usd": 0.033,
+     "wall_time_seconds": 25.0,
+     "tokens": 6000,
+     "model_calls": 10,
+     "method": "Remove flight_modification agent and add transfer_to_flight_cancel and transfer_to_flight_change directly to triage_agent.functions. Each of the 5 flight-related tasks (Tasks 1,2,4,5,6) incurs one flight_modification call per run. Measured cost per call: ~$0.0028\u2013$0.0048 (mean ~$0.0033). Across 10 runs (5 tasks \u00d7 2 reps): ~$0.033 saved, ~8% of total $0.4525. Latency saved: ~1,800\u20133,300ms per run (inferred from call durations), ~20\u201333s across 10 runs."
+    },
+    "source": [
+     {
+      "path": "examples/airline/configs/agents.py",
+      "start_line": 49,
+      "end_line": 57,
+      "sha256": "2987a41dfaee3a5711a2d417aa58a2d5342781908ff6f0cb41436f52dbdf80c9"
+     }
+    ]
+   },
+   "changed_files": [],
+   "patch_available": false,
+   "candidate_sha256": null,
+   "tried_patch_available": true,
+   "comparison": {
+    "verdict": "regressed",
+    "regressed_tasks": [
+     "5",
+     "6"
+    ],
+    "improved_metrics": [
+     "cost_usd",
+     "tokens_in",
+     "model_calls",
+     "wall_time_seconds"
+    ],
+    "all_tasks": false,
+    "variation_measured": true,
+    "tasks": [
+     {
+      "task_id": "5",
+      "name": "Different flight needs human",
+      "baseline_status": "needs_review",
+      "candidate_status": "failed",
+      "regressed": true,
+      "fixed": false,
+      "candidate_reason": "Exact value mismatch at /function_sequence",
+      "metrics": {
+       "model_calls": {
+        "baseline": 5.0,
+        "candidate": 4,
+        "change_percent": -20.0,
+        "baseline_range": [
+         5,
+         5
+        ]
+       },
+       "tokens_in": {
+        "baseline": 6081.5,
+        "candidate": 5268,
+        "change_percent": -13.38,
+        "baseline_range": [
+         6081,
+         6082
+        ]
+       },
+       "tokens_out": {
+        "baseline": 363.0,
+        "candidate": 321,
+        "change_percent": -11.57,
+        "baseline_range": [
+         363,
+         363
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.026058450000000004,
+        "candidate": 0.022680900000000004,
+        "change_percent": -12.96,
+        "baseline_range": [
+         0.0260568,
+         0.026060100000000003
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 15.145077,
+        "candidate": 12.122316,
+        "change_percent": -19.96,
+        "baseline_range": [
+         14.912272,
+         15.377882
+        ]
+       }
+      }
+     },
+     {
+      "task_id": "6",
+      "name": "Change flight with unavailable availability data",
+      "baseline_status": "needs_review",
+      "candidate_status": "failed",
+      "regressed": true,
+      "fixed": false,
+      "candidate_reason": "Exact value mismatch at /function_sequence",
+      "metrics": {
+       "model_calls": {
+        "baseline": 6.0,
+        "candidate": 5,
+        "change_percent": -16.67,
+        "baseline_range": [
+         6,
+         6
+        ]
+       },
+       "tokens_in": {
+        "baseline": 8149.0,
+        "candidate": 7058,
+        "change_percent": -13.39,
+        "baseline_range": [
+         8128,
+         8170
+        ]
+       },
+       "tokens_out": {
+        "baseline": 610.5,
+        "candidate": 521,
+        "change_percent": -14.66,
+        "baseline_range": [
+         608,
+         613
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.03696495,
+        "candidate": 0.031887900000000004,
+        "change_percent": -13.73,
+        "baseline_range": [
+         0.0369369,
+         0.036993000000000005
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 18.272795000000002,
+        "candidate": 15.274208,
+        "change_percent": -16.41,
+        "baseline_range": [
+         18.175374,
+         18.370216
+        ]
+       }
+      }
+     }
+    ],
+    "totals": {
+     "model_calls": {
+      "baseline": 11.0,
+      "candidate": 9,
+      "change_percent": -18.18,
+      "beyond_baseline_variation": true
+     },
+     "tokens_in": {
+      "baseline": 14230.5,
+      "candidate": 12326,
+      "change_percent": -13.38,
+      "beyond_baseline_variation": true
+     },
+     "tokens_out": {
+      "baseline": 973.5,
+      "candidate": 842,
+      "change_percent": -13.51,
+      "beyond_baseline_variation": true
+     },
+     "cost_usd": {
+      "baseline": 0.06302340000000001,
+      "candidate": 0.05456880000000001,
+      "change_percent": -13.42,
+      "beyond_baseline_variation": true
+     },
+     "wall_time_seconds": {
+      "baseline": 33.417872,
+      "candidate": 27.396524,
+      "change_percent": -18.02,
+      "beyond_baseline_variation": true
+     }
+    },
+    "needs_review": [],
+    "note": "Automatic checks only. Tasks marked needs_review still require a person to confirm the candidate's answers."
+   },
+   "comparison_is_of": "last candidate tried",
+   "stability_checks": [],
+   "experiments": [
+    {
+     "experiment": 1,
+     "verdict": "regressed",
+     "all_tasks": false,
+     "regressed_tasks": [
+      "5",
+      "6"
+     ],
+     "cost_usd": 0.05456880000000001,
+     "changed_files": [
+      "examples/airline/configs/agents.py"
+     ]
+    }
+   ],
+   "agent_usage": {
+    "calls": 8,
+    "prompt_tokens": 54871,
+    "completion_tokens": 1385,
+    "estimated_cost_usd": 0.07485621,
+    "unknown_cost_calls": 0
+   },
+   "target_usage": {
+    "calls": 9,
+    "estimated_cost_usd": 0.05456880000000001
+   },
+   "payback": null,
+   "trace": {
+    "status": "failed",
+    "reason": "Neatlogs log_trace failed with status 403."
+   },
+   "created_at": 1791685856
+  },
+  {
+   "job_id": "9f3f7d84dbec4103acceb67cf16df76d",
+   "status": "ready",
+   "decision": "reject",
+   "summary": "**What was tried:** Replaced `transfer_to_flight_modification` in the Triage Agent's function list with `transfer_to_flight_cancel` and `transfer_to_flight_change` directly, eliminating the Flight Modification Agent pass-through hop.\n\n**What was measured:** Partial run (tasks 1, 5, 6) showed \u221216.67% model calls and \u221211.59% cost with no regressions. Full run (all 6 tasks, 2 reps) showed \u221210% model calls and \u22126.72% cost overall, but task 1 regressed from `needs_review` to `failed` (resolution fields not populated).\n\n**Why rejected:** The controller flagged task 1 as a regression. While the failure pattern is identical to task 2's baseline failure (suggesting stochastic model behavior \u2014 task 2 actually fixed in the same run), the budget was insufficient to run another full experiment to confirm the stochastic nature. The change was reverted to avoid an unconfirmed regression. A future attempt could try updating the triage instructions to be more explicit about asking clarifying questions before routing to cancel vs. change, which might reduce the stochastic failure rate.",
+   "incomplete": false,
+   "finding": {
+    "finding_id": null,
+    "investigation_job_id": null,
+    "waste": "The Flight Modification Agent in examples/airline/configs/agents.py (lines 49-57) is a pure routing pass-through: in every observed run the Triage Agent transfers to it and it immediately transfers on to flight cancel or flight change, costing one model call per task without adding anything. Let the Triage Agent hand off directly to the cancel and change agents. The task contract judges the terminal outcome of each conversation, not which internal agent routed it.",
+    "proposed_change": null,
+    "behaviour_risk": null,
+    "estimated_saving": null,
+    "source": []
+   },
+   "changed_files": [],
+   "patch_available": false,
+   "candidate_sha256": null,
+   "tried_patch_available": true,
+   "comparison": {
+    "verdict": "regressed",
+    "regressed_tasks": [
+     "1"
+    ],
+    "improved_metrics": [
+     "cost_usd",
+     "tokens_in",
+     "model_calls",
+     "wall_time_seconds"
+    ],
+    "all_tasks": true,
+    "variation_measured": true,
+    "tasks": [
+     {
+      "task_id": "1",
+      "name": "Cancel for refund",
+      "baseline_status": "needs_review",
+      "candidate_status": "failed",
+      "regressed": true,
+      "fixed": false,
+      "candidate_reason": "Field /resolution/action must be string; Field /resolution/result must be string; Exact value mismatch at /resolution/closed; Automatic checks passed; human review required",
+      "metrics": {
+       "model_calls": {
+        "baseline": 7.0,
+        "candidate": 5.0,
+        "change_percent": -28.57,
+        "baseline_range": [
+         7,
+         7
+        ]
+       },
+       "tokens_in": {
+        "baseline": 9551.0,
+        "candidate": 6884.0,
+        "change_percent": -27.92,
+        "baseline_range": [
+         9497,
+         9605
+        ]
+       },
+       "tokens_out": {
+        "baseline": 449.0,
+        "candidate": 294.5,
+        "change_percent": -34.41,
+        "baseline_range": [
+         423,
+         475
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.0389268,
+        "candidate": 0.027576450000000002,
+        "change_percent": -29.16,
+        "baseline_range": [
+         0.0383196,
+         0.039534
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 19.0668045,
+        "candidate": 14.2275135,
+        "change_percent": -25.38,
+        "baseline_range": [
+         19.065046,
+         19.068563
+        ]
+       }
+      }
+     },
+     {
+      "task_id": "2",
+      "name": "Cancel for flight credits",
+      "baseline_status": "failed",
+      "candidate_status": "needs_review",
+      "regressed": false,
+      "fixed": true,
+      "candidate_reason": "Automatic checks passed; human review required",
+      "metrics": {
+       "model_calls": {
+        "baseline": 6.0,
+        "candidate": 6.0,
+        "change_percent": 0.0,
+        "baseline_range": [
+         5,
+         7
+        ]
+       },
+       "tokens_in": {
+        "baseline": 7871.5,
+        "candidate": 8483.5,
+        "change_percent": 7.77,
+        "baseline_range": [
+         6111,
+         9632
+        ]
+       },
+       "tokens_out": {
+        "baseline": 399.5,
+        "candidate": 347.0,
+        "change_percent": -13.14,
+        "baseline_range": [
+         345,
+         454
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.032567700000000005,
+        "candidate": 0.03372105,
+        "change_percent": 3.54,
+        "baseline_range": [
+         0.0258588,
+         0.0392766
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 18.5656195,
+        "candidate": 15.4165115,
+        "change_percent": -16.96,
+        "baseline_range": [
+         18.016638,
+         19.114601
+        ]
+       }
+      }
+     },
+     {
+      "task_id": "3",
+      "name": "Recover missing baggage",
+      "baseline_status": "needs_review",
+      "candidate_status": "needs_review",
+      "regressed": false,
+      "fixed": false,
+      "candidate_reason": "Automatic checks passed; human review required",
+      "metrics": {
+       "model_calls": {
+        "baseline": 6.0,
+        "candidate": 6.0,
+        "change_percent": 0.0,
+        "baseline_range": [
+         6,
+         6
+        ]
+       },
+       "tokens_in": {
+        "baseline": 7789.5,
+        "candidate": 7923.5,
+        "change_percent": 1.72,
+        "baseline_range": [
+         7744,
+         7835
+        ]
+       },
+       "tokens_out": {
+        "baseline": 336.5,
+        "candidate": 355.0,
+        "change_percent": 5.5,
+        "baseline_range": [
+         324,
+         349
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.0312576,
+        "candidate": 0.03200505000000001,
+        "change_percent": 2.39,
+        "baseline_range": [
+         0.030901200000000004,
+         0.031614
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 16.416133000000002,
+        "candidate": 15.581153,
+        "change_percent": -5.09,
+        "baseline_range": [
+         16.360349,
+         16.471917
+        ]
+       }
+      }
+     },
+     {
+      "task_id": "4",
+      "name": "Baggage then cancellation",
+      "baseline_status": "failed",
+      "candidate_status": "needs_review",
+      "regressed": false,
+      "fixed": true,
+      "candidate_reason": "Automatic checks passed; human review required",
+      "metrics": {
+       "model_calls": {
+        "baseline": 10.0,
+        "candidate": 10.0,
+        "change_percent": 0.0,
+        "baseline_range": [
+         10,
+         10
+        ]
+       },
+       "tokens_in": {
+        "baseline": 14432.0,
+        "candidate": 15593.5,
+        "change_percent": 8.05,
+        "baseline_range": [
+         14316,
+         14548
+        ]
+       },
+       "tokens_out": {
+        "baseline": 655.0,
+        "candidate": 637.0,
+        "change_percent": -2.75,
+        "baseline_range": [
+         637,
+         673
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.0584331,
+        "candidate": 0.061969050000000005,
+        "change_percent": 6.05,
+        "baseline_range": [
+         0.0577533,
+         0.0591129
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 26.1961825,
+        "candidate": 27.36111,
+        "change_percent": 4.45,
+        "baseline_range": [
+         25.351979,
+         27.040386
+        ]
+       }
+      }
+     },
+     {
+      "task_id": "5",
+      "name": "Different flight needs human",
+      "baseline_status": "needs_review",
+      "candidate_status": "needs_review",
+      "regressed": false,
+      "fixed": false,
+      "candidate_reason": "Automatic checks passed; human review required",
+      "metrics": {
+       "model_calls": {
+        "baseline": 5.0,
+        "candidate": 4.0,
+        "change_percent": -20.0,
+        "baseline_range": [
+         5,
+         5
+        ]
+       },
+       "tokens_in": {
+        "baseline": 6113.5,
+        "candidate": 5249.5,
+        "change_percent": -14.13,
+        "baseline_range": [
+         6099,
+         6128
+        ]
+       },
+       "tokens_out": {
+        "baseline": 392.0,
+        "candidate": 294.0,
+        "change_percent": -25.0,
+        "baseline_range": [
+         373,
+         411
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.02664255,
+        "candidate": 0.022174350000000002,
+        "change_percent": -16.77,
+        "baseline_range": [
+         0.0262812,
+         0.0270039
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 15.3341045,
+        "candidate": 12.3726165,
+        "change_percent": -19.31,
+        "baseline_range": [
+         14.827127,
+         15.841082
+        ]
+       }
+      }
+     },
+     {
+      "task_id": "6",
+      "name": "Change flight with unavailable availability data",
+      "baseline_status": "needs_review",
+      "candidate_status": "needs_review",
+      "regressed": false,
+      "fixed": false,
+      "candidate_reason": "Automatic checks passed; human review required",
+      "metrics": {
+       "model_calls": {
+        "baseline": 6.0,
+        "candidate": 5.0,
+        "change_percent": -16.67,
+        "baseline_range": [
+         6,
+         6
+        ]
+       },
+       "tokens_in": {
+        "baseline": 8128.5,
+        "candidate": 7106.5,
+        "change_percent": -12.57,
+        "baseline_range": [
+         8058,
+         8199
+        ]
+       },
+       "tokens_out": {
+        "baseline": 588.0,
+        "candidate": 508.0,
+        "change_percent": -13.61,
+        "baseline_range": [
+         574,
+         602
+        ]
+       },
+       "cost_usd": {
+        "baseline": 0.036526050000000004,
+        "candidate": 0.03183345,
+        "change_percent": -12.85,
+        "baseline_range": [
+         0.0360624,
+         0.0369897
+        ]
+       },
+       "wall_time_seconds": {
+        "baseline": 18.292759500000003,
+        "candidate": 17.0461905,
+        "change_percent": -6.81,
+        "baseline_range": [
+         18.163647,
+         18.421872
+        ]
+       }
+      }
+     }
+    ],
+    "totals": {
+     "model_calls": {
+      "baseline": 40.0,
+      "candidate": 36.0,
+      "change_percent": -10.0,
+      "beyond_baseline_variation": true
+     },
+     "tokens_in": {
+      "baseline": 53886.0,
+      "candidate": 51240.5,
+      "change_percent": -4.91,
+      "beyond_baseline_variation": true
+     },
+     "tokens_out": {
+      "baseline": 2820.0,
+      "candidate": 2435.5,
+      "change_percent": -13.63,
+      "beyond_baseline_variation": true
+     },
+     "cost_usd": {
+      "baseline": 0.22435380000000002,
+      "candidate": 0.2092794,
+      "change_percent": -6.72,
+      "beyond_baseline_variation": true
+     },
+     "wall_time_seconds": {
+      "baseline": 113.8716035,
+      "candidate": 102.00509499999998,
+      "change_percent": -10.42,
+      "beyond_baseline_variation": true
+     }
+    },
+    "needs_review": [
+     "2",
+     "3",
+     "4",
+     "5",
+     "6"
+    ],
+    "note": "Automatic checks only. Tasks marked needs_review still require a person to confirm the candidate's answers."
+   },
+   "comparison_is_of": "last candidate tried",
+   "stability_checks": [],
+   "experiments": [
+    {
+     "experiment": 1,
+     "verdict": "improved",
+     "all_tasks": false,
+     "regressed_tasks": [],
+     "cost_usd": 0.09026490000000001,
+     "changed_files": [
+      "examples/airline/configs/agents.py"
+     ]
+    },
+    {
+     "experiment": 2,
+     "verdict": "regressed",
+     "all_tasks": true,
+     "regressed_tasks": [
+      "1"
+     ],
+     "cost_usd": 0.41855880000000006,
+     "changed_files": [
+      "examples/airline/configs/agents.py"
+     ]
+    }
+   ],
+   "agent_usage": {
+    "calls": 18,
+    "prompt_tokens": 174409,
+    "completion_tokens": 3567,
+    "estimated_cost_usd": 0.172882545,
+    "unknown_cost_calls": 0
+   },
+   "target_usage": {
+    "calls": 87,
+    "estimated_cost_usd": 0.5088237000000001
+   },
+   "payback": null,
+   "trace": {
+    "status": "queued",
+    "trace_id": "9d283d3648d730a8a6d1cb25d7d0196e",
+    "spans": 40,
+    "content": "withheld",
+    "trace_ids": [
+     "9d283d3648d730a8a6d1cb25d7d0196e",
+     "d44ac54ad548351400d21e90b6abe9ad",
+     "f004dc0551b627d5af60744f4f6069c5",
+     "e2c546194a4a555defa2aec3dccfd719"
+    ]
+   },
+   "created_at": 1791687109
+  }
+ ],
+ "accepted": [],
+ "spend_usd": {
+  "onboarding": 1.5557949,
+  "investigation": 2.29451937,
+  "optimization": 0.247738755,
+  "candidate_runs": 0.5633925000000001
+ },
+ "stages": {
+  "onboarded": true,
+  "baseline": true,
+  "investigated": true,
+  "optimized": true
+ },
+ "next": {
+  "action": "investigate",
+  "endpoint": "investigation",
+  "reason": "The latest baseline has not been investigated."
+ },
+ "limits": [
+  "Results hold for the listed tasks at this commit, model and repetition count only.",
+  "Tasks marked needs_review have not had their answers confirmed by a person.",
+  "A candidate is compared on automatic checks; it is not a protected, held-out evaluation.",
+  "Costs are the provider's reported figures per call and exclude compute."
+ ]
+}
