@@ -84,6 +84,12 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
     <input id={`setup-${key}`} className="field mt-2 font-mono" required value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} />
     <span className="mt-1 block text-[13px] text-muted">{hint}</span>{suggestions(key)}</div>
 
+  // A fresh read of the repository. Saved settings are kept only if you save them again afterwards.
+  async function rescan() {
+    setBusy(true); setError('')
+    try { onSaved(await send<Inspection>(`${base}/inspection`, session.csrf_token)) }
+    catch (caught) { setError(message(caught)) } finally { setBusy(false) }
+  }
   async function save(event: React.FormEvent) {
     event.preventDefault(); setBusy(true); setError('')
     try { onSaved(await send<Inspection>(`${base}/configuration`, session.csrf_token, { revision: inspection.revision, commit_sha: inspection.commit_sha, ...form, dependency_manifests: picked, approved_tools: allowed })) }
@@ -93,7 +99,8 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
   return <form onSubmit={event => void save(event)} className="slab p-6 pt-8 sm:p-8 sm:pt-9"><span className="slab-tab">1 · how it runs</span>
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-display text-[28px] leading-none font-[780] tracking-[-.04em]">Check what Hansa detected.</h3>
       <p className="mt-2 text-muted">Read from {inspection.findings.scanned_files} files without running anything.{inspection.findings.partial ? ' The scan was cut short, so check these carefully.' : ''}</p></div>
-      {done && <span className="chip chip-ok"><Check size={13} strokeWidth={3} aria-hidden="true" /> saved</span>}</div>
+      <div className="flex flex-wrap items-center gap-2">{done && <span className="chip chip-ok"><Check size={13} strokeWidth={3} aria-hidden="true" /> saved</span>}
+        <button type="button" disabled={busy} className="chip min-h-9 bg-surface hover:bg-waste" onClick={() => void rescan()}>{busy ? 'scanning…' : 'scan the code again'}</button></div></div>
     <div className="mt-6 grid gap-5 sm:grid-cols-2">
       {field('entrypoint', 'Entrypoint', 'The command that starts the agent.')}
       <div>{field('python_version', 'Python version', 'Hansa\'s sandbox runs Python 3.12, so this has to allow 3.12.')}
@@ -105,7 +112,7 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
     {[['Dependencies to install', manifests, picked, setPicked, 'No dependency file found. The agent must run on the standard library alone.'], ['Tools the agent may use', tools, allowed, setAllowed, 'No tools detected.']].map(([title, values, list, set, empty]) =>
       <fieldset key={title as string} className="mt-6"><legend className="text-[13px] font-medium">{title as string}</legend>
         {(values as string[]).length ? <div className="mt-2 flex flex-wrap gap-2">{(values as string[]).map(value => { const on = (list as string[]).includes(value)
-          return <label key={value} className={`chip cursor-pointer py-1.5 ${on ? 'bg-ink text-paper' : 'bg-surface'}`}><input type="checkbox" className="sr-only" checked={on} onChange={() => toggle(list as string[], set as (next: string[]) => void, value)} />{on && <Check size={13} strokeWidth={3} aria-hidden="true" />}{value}</label> })}</div>
+          return <label key={value} className={`chip relative cursor-pointer py-1.5 ${on ? 'bg-ink text-paper' : 'bg-surface'}`}><input type="checkbox" className="absolute inset-0 size-full cursor-pointer opacity-0" checked={on} onChange={() => toggle(list as string[], set as (next: string[]) => void, value)} />{on && <Check size={13} strokeWidth={3} aria-hidden="true" />}{value}</label> })}</div>
           : <p className="mt-2 text-[13px] text-muted">{empty as string}</p>}</fieldset>)}
     {error && <p role="alert" className="mt-5 font-medium">{error}</p>}
     <button className="button-primary mt-7" disabled={busy || !pythonFits}>{busy ? 'Saving…' : done ? 'Save changes' : 'Looks right, save'}</button>

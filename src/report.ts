@@ -36,6 +36,7 @@ export type Optimization = {
   job_id: string; status: string; decision: string | null; summary: string | null; incomplete: boolean; changed_files: string[]
   comparison: Comparison | null; comparison_is_of: string | null; patch_available: boolean; tried_patch_available: boolean
   trace?: { status: string; trace_id?: string; trace_ids?: string[]; reason?: string }
+  proof?: { strength: 'thin' | 'fair' | 'solid'; tasks: number; notes: string[] } | null
 }
 export type Xray = {
   runs: number; model_calls: number; calls_per_run: number; cost_usd: number | null
@@ -70,7 +71,7 @@ export type ImportReport = {
 
 export const steps = ['import', 'setup', 'baseline', 'findings', 'fix', 'result'] as const
 export type Step = typeof steps[number]
-export const stepNames: Record<Step, string> = { import: 'Import', setup: 'Setup', baseline: 'Baseline', findings: 'Findings', fix: 'Fix', result: 'Result' }
+export const stepNames: Record<Step, string> = { import: 'Import', setup: 'Setup', baseline: 'Baseline', findings: 'Fixes', fix: 'Test', result: 'Result' }
 
 export function recommendedStep(report: ImportReport): Step {
   const action = report.next.action === 'wait' ? report.active?.kind : report.next.action
