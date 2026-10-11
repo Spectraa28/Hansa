@@ -143,7 +143,7 @@ class AgentService:
     def __init__(self, settings, database, runner, gateway):
         self.settings, self.database = settings, database
         self.runner, self.gateway = runner, gateway
-        self.tracer = None
+        self.tracer = self.baselines = None
         self.threads = {}
 
     # -- storage -----------------------------------------------------------------------------
@@ -203,7 +203,33 @@ class AgentService:
         baseline = completed_baseline(self, user_id, import_id, baseline_id)
         return self.start(user_id, import_id, "investigation", baseline, max_spend_usd)
 
-    def start(self, user_id, import_id, kind, baseline=None, max_spend_usd=1.5):
+    def start_optimization(self, user_id, import_id, investigation_job_id=None, finding_id=None, goal=None,
+                           max_spend_usd=1.5, max_target_spend_usd=1.5):
+        """Act on one saved finding, or on a goal stated by the user, against the baseline it was measured on."""
+        from .investigation import completed_baseline
+        if type(max_target_spend_usd) not in {int, float} or not math.isfinite(max_target_spend_usd) or not 0 < max_target_spend_usd <= 3:
+            raise ValueError("Experiment spend threshold must be greater than zero and at most $3.")
+        if investigation_job_id:
+            source = self.job(user_id, import_id, investigation_job_id)
+            found = [f for f in source["result"].get("findings", []) if f.get("finding_id") == finding_id]
+            if source["kind"] != "investigation" or not found:
+                raise HTTPException(404, "Finding not found in that investigation.")
+            finding = {"finding_id": finding_id, "investigation_job_id": investigation_job_id,
+                       **{key: found[0].get(key) for key in ("waste", "proposed_change", "behaviour_risk", "estimated_saving")},
+                       "source": found[0]["evidence"]["source"]}
+            baseline = completed_baseline(self, user_id, import_id, source["result"]["baseline_id"])
+        else:
+            if not isinstance(goal, str) or not 10 <= len(goal.strip()) <= 2000:
+                raise HTTPException(422, "Choose a finding, or describe the goal in 10 to 2000 characters.")
+            finding = {"finding_id": None, "investigation_job_id": None, "waste": goal.strip(), "proposed_change": None,
+                       "behaviour_risk": None, "estimated_saving": None, "source": []}
+            baseline = completed_baseline(self, user_id, import_id)
+        if baseline.get("kind") != "contract":
+            raise HTTPException(409, "Optimization needs a baseline of the import's task contract.")
+        return self.start(user_id, import_id, "optimization", baseline, max_spend_usd,
+                          {"finding": finding, "max_target_spend_usd": max_target_spend_usd})
+
+    def start(self, user_id, import_id, kind, baseline=None, max_spend_usd=1.5, extra=None):
         if type(max_spend_usd) not in {int, float} or not math.isfinite(max_spend_usd) or not 0 < max_spend_usd <= 1.5:
             raise ValueError("Agent stage spend threshold must be greater than zero and at most $1.50.")
         if not self.settings.litellm_base_url or not self.settings.litellm_api_key:
@@ -218,6 +244,7 @@ class AgentService:
                 self.owned(db, user_id, import_id)
                 initial = {"baseline_id": baseline["baseline_id"]} if baseline else {}
                 initial["max_spend_usd"] = max_spend_usd
+                initial.update(extra or {})
                 db.execute("INSERT INTO agent_jobs VALUES (?,?,?,'running',?,?,?)", (job_id, import_id, kind, json.dumps(initial), now, now))
             thread = threading.Thread(target=self.guarded, args=(job_id, user_id, import_id, kind, baseline), daemon=True)
             self.threads[job_id] = thread
@@ -233,8 +260,10 @@ class AgentService:
             budget = self.job(user_id, import_id, job_id)["result"]["max_spend_usd"]
             key = self.gateway.mint_key("hansa-" + kind + "-" + job_id, max_calls=MAX_TURNS + 6, max_spend_usd=budget,
                                         expires_at=int(time.time()) + 1800)
-            status, result = (self.onboard(job_id, user_id, import_id, key, steps) if kind == "onboarding" else
-                              self.investigate(job_id, user_id, import_id, key, steps, baseline))
+            stage = {"onboarding": lambda: self.onboard(job_id, user_id, import_id, key, steps),
+                     "investigation": lambda: self.investigate(job_id, user_id, import_id, key, steps, baseline),
+                     "optimization": lambda: self.optimize(job_id, user_id, import_id, key, steps, baseline)}[kind]
+            status, result = stage()
         except HTTPException as exc:
             status, result = "failed", {"reason": str(exc.detail)}
         except (AgentFailure, ValueError, RuntimeError) as exc:
@@ -374,7 +403,10 @@ class AgentService:
                 raise AgentFailure("Unknown agent cost; no further calls admitted.")
             if "max_spend_usd" in state and (usage["estimated_cost_usd"] or 0) + state["target_cost_usd"] >= state["max_spend_usd"]:
                 raise AgentFailure("Onboarding stage budget exhausted; no further calls admitted.")
-            message = self.complete(key, messages, tools)
+            closing = state.get("closing_tools")
+            offered = ([tool for tool in tools if tool["function"]["name"] in closing]
+                       if closing and MAX_TURNS - turn <= 3 else tools)
+            message = self.complete(key, messages, offered)
             messages.append(message)
             if message["content"].strip():
                 self.event(job_id, "note", {"text": message["content"].strip()[:2000]})
@@ -416,8 +448,46 @@ class AgentService:
                         {"role": "user", "content": "Investigate this completed baseline. The tools are already bound to it. "
                          "First call read_baseline with empty arguments {}. Then inspect concentrated runs and their code. No changes or reruns. "
                          "Save each finding with save_finding as soon as its run and source evidence is established; do not leave them all to the end."}]
-            self.loop(job_id, key, messages, steps, tools.state, tools.dispatch,
-                      toolset(TOOLS[:3], [task["task_id"] for task in baseline["tasks"]]))
+            tools.state["closing_tools"] = {"save_finding", "finish", "note"}
+            try:
+                self.loop(job_id, key, messages, steps, tools.state, tools.dispatch,
+                          toolset(TOOLS[:3], [task["task_id"] for task in baseline["tasks"]]))
+            except AgentFailure as exc:
+                if not tools.findings:
+                    raise
+                # Findings were verified and saved one by one; a missing write-up does not unsay them.
+                tools.state["finish"] = {"summary": f"{len(tools.findings)} findings were saved, but the agent stopped before "
+                                         f"writing its conclusion and category coverage: {exc}",
+                                         "nothing_worth_changing": False, "incomplete": True}
+            return "ready", {**tools.result(), **tools.state["finish"], "snapshot_digest": digest}
+
+    def optimize(self, job_id, user_id, import_id, key, steps, baseline):
+        from .optimization import OptimizationTools, SYSTEM as OPTIMIZE, TOOLS as CANDIDATE_TOOLS
+        initial = self.job(user_id, import_id, job_id)["result"]
+        with tempfile.TemporaryDirectory(prefix="hansa-optimize-") as temporary:
+            config, digest = self.runner.stage(user_id, import_id, Path(temporary))
+            if (config["commit_sha"] != baseline["commit_sha"] or
+                    config["configuration_revision"] != baseline["configuration_revision"] or
+                    digest != (baseline.get("snapshot_digest") or baseline["build"].get("snapshot_digest"))):
+                raise HTTPException(409, "Baseline source or configuration is stale. Run a current baseline.")
+            tools = OptimizationTools(self, job_id, user_id, import_id, baseline, Path(temporary) / "snapshot", initial["finding"],
+                                      config["configuration"]["dependency_manifests"], initial["max_target_spend_usd"])
+            tools.state["closing_tools"] = {"finish", "revert", "show_diff", "note"}
+            self.event(job_id, "started", {"kind": "optimization", "baseline_id": baseline["baseline_id"],
+                                           "commit_sha": config["commit_sha"], "model": self.settings.agent_model,
+                                           "finding": initial["finding"]})
+            brief = {"finding": initial["finding"], "baseline": tools.read_baseline(),
+                     "experiments_available": 5, "experiment_budget_usd": initial["max_target_spend_usd"]}
+            messages = [{"role": "system", "content": OPTIMIZE},
+                        {"role": "user", "content": "Act on this finding against this baseline.\n" + json.dumps(brief, indent=1, default=str)}]
+            try:
+                self.loop(job_id, key, messages, steps, tools.state, tools.dispatch, [*TOOLS[:3], *CANDIDATE_TOOLS])
+            except AgentFailure as exc:
+                if not tools.experiments:
+                    raise
+                # Nothing is accepted without the agent's own decision; the measurements are still kept.
+                tools.state["finish"] = {"decision": "reject", "accepted_experiment": None, "incomplete": True,
+                                         "summary": f"The agent stopped before deciding, so nothing was accepted: {exc}"}
             return "ready", {**tools.result(), **tools.state["finish"], "snapshot_digest": digest}
 
     def dispatch(self, job_id, user_id, import_id, build, tools, state, call):

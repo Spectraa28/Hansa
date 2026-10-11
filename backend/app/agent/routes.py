@@ -1,6 +1,7 @@
 import uuid
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..auth.service import rate_limit
@@ -22,6 +23,34 @@ class InvestigationInput(StageInput):
 def start_investigation(import_id: uuid.UUID, body: InvestigationInput, request: Request, user: dict = Depends(require_csrf)):
     rate_limit(request)
     return request.app.state.agent.start_investigation(user["id"], str(import_id), body.baseline_id, body.max_spend_usd)
+
+
+class OptimizationInput(StageInput):
+    investigation_job_id: str | None = Field(default=None, pattern=r"^[a-f0-9]{32}$")
+    finding_id: str | None = Field(default=None, min_length=1, max_length=8)
+    goal: str | None = Field(default=None, min_length=10, max_length=2000)
+    max_target_spend_usd: float = Field(default=1.5, strict=True, gt=0, le=3, allow_inf_nan=False)
+
+
+@router.post("/{import_id}/optimization", status_code=202)
+def start_optimization(import_id: uuid.UUID, body: OptimizationInput, request: Request, user: dict = Depends(require_csrf)):
+    rate_limit(request)
+    return request.app.state.agent.start_optimization(user["id"], str(import_id), body.investigation_job_id, body.finding_id,
+                                                       body.goal, body.max_spend_usd, body.max_target_spend_usd)
+
+
+@router.get("/{import_id}/report")
+def report(import_id: uuid.UUID, request: Request, user: dict = Depends(current_session)):
+    from .report import build
+    return build(request.app.state.agent, request.app.state.baselines, user["id"], str(import_id))
+
+
+@router.get("/{import_id}/agent-jobs/{job_id}/patch")
+def patch(import_id: uuid.UUID, job_id: str, request: Request, user: dict = Depends(current_session)):
+    result = request.app.state.agent.job(user["id"], str(import_id), job_id)["result"]
+    if not result.get("patch"):
+        raise HTTPException(404, "This job has no patch.")
+    return PlainTextResponse(result["patch"], headers={"Content-Disposition": f'attachment; filename="hansa-{job_id[:8]}.patch"'})
 
 
 @router.post("/{import_id}/onboarding", status_code=202)

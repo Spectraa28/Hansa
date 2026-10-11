@@ -197,7 +197,7 @@ def test_legacy_job_migration_preserves_jobs_events_and_cascade(investigation):
         job_sql = db.execute("SELECT sql FROM sqlite_master WHERE name='agent_jobs'").fetchone()[0]
         event_sql = db.execute("SELECT sql FROM sqlite_master WHERE name='agent_events'").fetchone()[0]
         db.executescript("DROP TABLE agent_events; DROP TABLE agent_jobs;")
-        db.execute(job_sql.replace("'onboarding','investigation'", "'onboarding'"))
+        db.execute(job_sql.replace("'onboarding','investigation','optimization'", "'onboarding'"))
         db.execute(event_sql)
         db.execute("INSERT INTO agent_jobs VALUES ('legacy',?,'onboarding','ready','{}',1,1)", (imported,))
         db.execute("INSERT INTO agent_events VALUES (41,'legacy','finished','{}',1)")

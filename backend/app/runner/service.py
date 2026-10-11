@@ -34,6 +34,7 @@ HERE = Path(__file__).parent
 MAX_OUTPUT = 1024 * 1024
 STDERR_TAIL = 16384
 MAX_ADAPTER = 32768
+MAX_OVERLAY_FILES, MAX_OVERLAY_BYTES = 20, 1024 * 1024
 ENV_TEMPLATES = {".env.example", ".env.sample", ".env.template", ".env.dist"}
 RUN_LOCK = threading.Lock()
 
@@ -91,6 +92,31 @@ def copy_snapshot(source, destination, settings):
             target.write_bytes(content)
             target.chmod(0o444)
             digest.update(str(relative).encode() + b"\0" + hashlib.sha256(content).digest())
+    return digest.hexdigest()
+
+
+def apply_overlay(snapshot, overlay, manifests):
+    """Replace or add files in a staged copy. The original import is never modified."""
+    if (not isinstance(overlay, dict) or not 1 <= len(overlay) <= MAX_OVERLAY_FILES
+            or any(not isinstance(path, str) or not isinstance(content, str) for path, content in overlay.items())
+            or sum(len(content.encode()) for content in overlay.values()) > MAX_OVERLAY_BYTES):
+        raise ValueError("A candidate may replace at most 20 text files totalling 1 MiB.")
+    root, digest = snapshot.resolve(), hashlib.sha256()
+    for path in sorted(overlay):
+        parts = Path(path).parts
+        if (not parts or Path(path).is_absolute() or ".." in parts or len(path) > 400 or path in manifests
+                or any(part in {".git", ".aws", ".ssh", ".env"} or part.startswith(".env.") or part.endswith((".pem", ".key"))
+                       for part in parts)):
+            raise ValueError("Candidate paths must be relative source files; dependency manifests and credential paths cannot change.")
+        target = (root / path).resolve()
+        if not target.is_relative_to(root) or target.is_dir():
+            raise ValueError("Candidate path is outside the snapshot.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            target.chmod(0o644)
+        target.write_text(overlay[path])
+        target.chmod(0o444)
+        digest.update(path.encode() + b"\0" + hashlib.sha256(overlay[path].encode()).digest())
     return digest.hexdigest()
 
 
@@ -408,7 +434,7 @@ class RunnerService:
 
     def run(self, user_id, import_id, build_id, task, *, timeout_seconds=60, max_calls=10,
             max_spend_usd=0.01, memory_mb=256, cpus=1.0, pids=64, adapter=None, adapter_code=None,
-            internet=False, labels=None):
+            internet=False, labels=None, overlay=None):
         # adapter: "swarm_airline" (reviewed file), "stored" (this import's saved adapter) or None.
         # adapter_code: an unsaved draft to try, used by onboarding before anything is stored.
         if adapter not in {None, "swarm_airline", "stored"}:
@@ -448,6 +474,9 @@ class RunnerService:
                     or build["configuration_revision"] != config["configuration_revision"]
                     or build["snapshot_digest"] != digest):
                 raise HTTPException(409, "Build is absent or stale. Build this confirmed snapshot again.")
+            # The dependency image belongs to the original source; a candidate reuses it and cannot change manifests.
+            overlay_sha = (apply_overlay(root / "snapshot", overlay, set(config["configuration"]["dependency_manifests"]))
+                           if overlay is not None else None)
             run_id = uuid.uuid4().hex
             relay, container = "ouro-relay-" + run_id, "ouro-run-" + run_id
             network, egress = "ouro-net-" + run_id, "ouro-egress-" + run_id
@@ -542,6 +571,7 @@ class RunnerService:
             result = json.loads(encoded)
             result.update({"run_id": run_id, "import_id": import_id, "commit_sha": config["commit_sha"],
                            "configuration_revision": config["configuration_revision"], "build_id": build_id,
+                           "candidate_sha256": overlay_sha, "candidate_files": sorted(overlay) if overlay else [],
                            "adapter": adapter or ("draft" if adapter_file else None),
                            "adapter_sha256": hashlib.sha256(adapter_file.read_bytes()).hexdigest() if adapter_file else None,
                            "gateway": self.gateway.summarize_key(key), "cleanup_complete": True})

@@ -138,6 +138,59 @@ def combine(runs):
     return task
 
 
+METRICS = ("model_calls", "tokens_in", "tokens_out", "cost_usd", "wall_time_seconds")
+
+
+def change(before, after):
+    return None if before in (None, 0) or after is None else round((after - before) / before * 100, 2)
+
+
+def compare(baseline, candidate_tasks):
+    """Deterministic verdict. A task regresses when its automatic checks passed before and do not now.
+
+    Improvement must exceed what the baseline's own repetitions varied by: the candidate total has to
+    beat the sum of each task's best baseline repetition. With one baseline repetition there is no
+    measured variation, and the verdict says so.
+    """
+    rows, totals = [], {key: {"baseline": 0, "candidate": 0, "baseline_best": 0, "known": True} for key in METRICS}
+    by_id = {task["task_id"]: task for task in baseline["tasks"]}
+    for task in candidate_tasks:
+        base = by_id[task["task_id"]]
+        regressed = bool(base.get("automatic_passed")) and not task.get("automatic_passed")
+        row = {"task_id": task["task_id"], "name": task.get("name"), "baseline_status": base.get("status"),
+               "candidate_status": task.get("status"), "regressed": regressed,
+               "fixed": not base.get("automatic_passed") and bool(task.get("automatic_passed")),
+               "candidate_reason": task.get("reason"), "metrics": {}}
+        for key in METRICS:
+            before, after = base.get(key), task.get(key)
+            spread = (base.get("spread") or {}).get(key)
+            row["metrics"][key] = {"baseline": before, "candidate": after, "change_percent": change(before, after),
+                                   "baseline_range": spread}
+            total = totals[key]
+            if before is None or after is None:
+                total["known"] = False
+            else:
+                total["baseline"] += before
+                total["candidate"] += after
+                total["baseline_best"] += spread[0] if spread else before
+        rows.append(row)
+    summary = {}
+    for key, total in totals.items():
+        summary[key] = ({"baseline": total["baseline"], "candidate": total["candidate"],
+                         "change_percent": change(total["baseline"], total["candidate"]),
+                         "beyond_baseline_variation": total["candidate"] < total["baseline_best"]}
+                        if total["known"] else {"baseline": None, "candidate": None, "change_percent": None,
+                                                "beyond_baseline_variation": False})
+    regressions = [row["task_id"] for row in rows if row["regressed"]]
+    improved = [key for key in ("cost_usd", "tokens_in", "model_calls", "wall_time_seconds") if summary[key]["beyond_baseline_variation"]]
+    complete = {task["task_id"] for task in candidate_tasks} == set(by_id)
+    verdict = "regressed" if regressions else "improved" if improved else "no_measurable_change"
+    return {"verdict": verdict, "regressed_tasks": regressions, "improved_metrics": improved, "all_tasks": complete,
+            "variation_measured": baseline.get("repetitions", 1) > 1, "tasks": rows, "totals": summary,
+            "needs_review": [row["task_id"] for row in rows if row["candidate_status"] == "needs_review"],
+            "note": "Automatic checks only. Tasks marked needs_review still require a person to confirm the candidate's answers."}
+
+
 class BaselineService:
     def __init__(self, runner):
         self.runner = runner
@@ -279,6 +332,39 @@ class BaselineService:
                       passed=sum(task["status"] == "passed" for task in report["tasks"]),
                       failed=sum(task["status"] == "failed" for task in report["tasks"]),
                       needs_review=sum(task["status"] == "needs_review" for task in report["tasks"]))
+
+    def evaluate(self, user_id, baseline, overlay, task_ids=None, repetitions=1, labels=None):
+        """Run a candidate (the baseline's source plus replaced files) on the baseline's own tasks.
+
+        Same adapter, dependency image, model, task inputs and scoring as the baseline; only the source differs.
+        The caller already holds the job lock.
+        """
+        imported, contract = baseline["import_id"], baseline["contract"]
+        if baseline.get("kind") != "contract" or baseline["status"] != "completed":
+            raise HTTPException(409, "A completed contract baseline is required.")
+        with self.database.connect() as db:
+            self.runner.inspection.ready(db, user_id, imported)
+            adapter = db.execute("SELECT * FROM import_adapters WHERE import_id=?", (imported,)).fetchone()
+        if adapter is None or adapter["sha256"] != baseline["adapter_sha256"]:
+            raise HTTPException(409, "The stored adapter changed since the baseline. Run a new baseline.")
+        limits, tasks = contract["limits"], []
+        for index, task in enumerate(contract["tasks"], 1):
+            if task_ids and str(index) not in task_ids:
+                continue
+            runs = []
+            for repetition in range(1, repetitions + 1):
+                result = self.runner.run(user_id, imported, baseline["build"]["build_id"], task["input"],
+                    adapter_code=adapter["content"], timeout_seconds=min(300, limits["max_runtime_seconds"]),
+                    max_calls=limits["max_model_calls"], max_spend_usd=limits["max_spend_usd"], memory_mb=1024, pids=128,
+                    internet=self.runner.settings.runner_internet, overlay=overlay,
+                    labels={"kind": "candidate", **(labels or {}), "task_id": str(index), "repetition": repetition})
+                runs.append({**measured(result, True, None), **score_task(result["output"], task, contract, result["stop_reason"]),
+                             "repetition": repetition, "output": result["output"], "trace": result.get("trace"),
+                             "stderr_tail": result.get("stderr_tail", "")[-1500:], "candidate_sha256": result.get("candidate_sha256")})
+            report = {"task_id": str(index), "name": task["name"], **combine(runs)}
+            report["runs"] = runs
+            tasks.append(report)
+        return tasks
 
     def airline(self, user_id, import_id, repetitions=1):
         if type(repetitions) is not int or not 1 <= repetitions <= 5:

@@ -153,7 +153,7 @@ class Database:
                 CREATE TABLE IF NOT EXISTS agent_jobs (
                     id TEXT PRIMARY KEY,
                     import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
-                    kind TEXT NOT NULL CHECK(kind IN ('onboarding','investigation')),
+                    kind TEXT NOT NULL CHECK(kind IN ('onboarding','investigation','optimization')),
                     status TEXT NOT NULL CHECK(status IN ('running','ready','blocked','failed')),
                     result TEXT NOT NULL DEFAULT '{}',
                     created_at INTEGER NOT NULL,
@@ -228,13 +228,13 @@ class Database:
             """)
             # SQLite cannot widen a CHECK constraint in place; copy both tables with their IDs intact.
             schema = db.execute("SELECT sql FROM sqlite_master WHERE name='agent_jobs'").fetchone()[0]
-            if "'investigation'" not in schema:
+            if "'optimization'" not in schema:
                 db.executescript("""
                     BEGIN IMMEDIATE;
                     CREATE TABLE agent_jobs_new (
                         id TEXT PRIMARY KEY,
                         import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
-                        kind TEXT NOT NULL CHECK(kind IN ('onboarding','investigation')),
+                        kind TEXT NOT NULL CHECK(kind IN ('onboarding','investigation','optimization')),
                         status TEXT NOT NULL CHECK(status IN ('running','ready','blocked','failed')),
                         result TEXT NOT NULL DEFAULT '{}', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL
                     );

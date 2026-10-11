@@ -111,3 +111,39 @@ The real GitHub import at `6af0b4caf37dca4526dfd98e9fbd8ce36e7eeb22` used `claud
 After actionable message-field errors, an explicit allowlist/preserved-parameter instruction, and failed-draft recovery, attempt `4df0cf667b7b4f72a763279aaf2b18a7` succeeded. It used nine agent calls, 126,387 input and 3,980 output tokens ($0.4827471), plus a seven-call full-conversation smoke ($0.0429429). Combined onboarding cost, including failure, was $1.6145646. Adapter SHA-256: `97adabe7c7d502f5f2e699da6fbe8d22719d719a69eacd28a17bd82b2b53aa6b`. Its source review confirmed original prompts/tools/model names and `tool_choice`/`parallel_tool_calls` were retained, history/active agents persisted between turns, and function/outcome fields came from real executed tool messages.
 
 The accepted smoke escalated a refund request after inventing a different flight, then closed it. That is a target correctness failure, not an invocation failure or passing baseline. Hansa trace export returned Neatlogs HTTP 403; costs and events remain in the local database. All **270 Docker-enabled tests passed in 101.19 seconds** after these changes.
+
+## Optimization: fix and prove
+
+Status: implemented and covered by scripted tests on October 11. It has not been run with a real model or real containers yet.
+
+`POST /github/imports/{id}/optimization` starts a third job kind. It takes either a saved finding (`investigation_job_id` and `finding_id`) or a `goal` in the user's words, and works against the completed contract baseline that finding was measured on.
+
+The agent edits a private copy of the snapshot. The imported source on disk is never written to. Its tools, defined in [`backend/app/agent/optimization.py`](backend/app/agent/optimization.py):
+
+| Tool | Effect |
+| --- | --- |
+| `list_files`, `search_code`, `read_file` | Read the candidate copy, including its own edits |
+| `edit_file` | Replace one exact occurrence of text. Python files must still parse |
+| `write_file`, `revert`, `show_diff` | Add a file, undo changes, see the current patch |
+| `read_baseline` | Per-task status, cost, calls, time, and the checks each task must pass |
+| `run_candidate` | Run the candidate on baseline tasks and compare. At most five per job, within an experiment spend limit |
+| `finish` | `accept`, `reject` or `no_improvement` |
+
+A candidate may change at most ten text files and cannot touch dependency manifests, hidden files or anything outside the snapshot. It runs with the baseline's adapter, dependency image, model, task inputs and scoring; only the source differs.
+
+The comparison and the accept decision are controller code in [`backend/app/runner/baseline.py`](backend/app/runner/baseline.py) (`compare`):
+
+- A task **regressed** if its automatic checks passed in the baseline and do not pass now. A task that failed before and fails the same way is not a regression.
+- A metric **improved** only if the candidate's total is lower than the sum of each task's best baseline repetition, so a saving has to exceed the variation the baseline itself showed. With one baseline repetition no variation was measured, and the result says so.
+- `accept` is refused unless the current candidate has a run of every task, no regression, and a measured improvement. An earlier run does not count for a revised candidate.
+- If the agent runs out of turns without deciding, nothing is accepted; the experiments are kept and the job ends as `reject` with `incomplete: true`.
+
+`GET /github/imports/{id}/agent-jobs/{job_id}/patch` downloads the unified diff. `GET /github/imports/{id}/report` returns one document: baseline per task, findings and coverage, each optimization with its experiments and comparison, spend by stage, and payback (optimization cost divided by saving per pass of the task set).
+
+Limits: tasks marked `needs_review` are compared on automatic checks only, and a person still has to confirm their answers. The same tasks guide the change and judge it, so this is a development comparison, not a held-out evaluation.
+
+## The agent's own context
+
+The agent applies to itself what it looks for in others. With `AGENT_CONTEXT=managed` (the default) it marks the fixed prefix and newest message for prompt caching, cuts older tool results to their opening lines once the transcript passes 90,000 characters, keeps facts in a `note` tool whose contents are never cut, and is warned once when turns or budget are nearly used. `AGENT_CONTEXT=naive` turns all of that off so the two can be compared.
+
+Measured on the Swarm investigation, October 11: in naive mode the agent's prompt grew from 3,400 to 39,000 tokens over 12 calls and the job stopped at its $1.00 limit with nothing saved. In managed mode a call carrying 35,000 tokens of context cost about $0.016 instead of about $0.12, and 40 calls cost $0.71 with three findings saved. Those two runs also differ in turn limit and in one finding-saving rule, so this is a before-and-after on the same task, not a controlled experiment.

@@ -77,6 +77,7 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.state.agent = AgentService(settings, database, app.state.runner, app.state.gateway)
     app.state.traces = TraceService(settings, database, app.state.inspection)
     app.state.runner.tracer = app.state.agent.tracer = app.state.traces
+    app.state.agent.baselines = app.state.baselines
     app.add_middleware(SessionMiddleware, secret_key=settings.secret_key,
                        session_cookie="ouro_oauth", max_age=600,
                        same_site="lax", https_only=settings.cookie_secure)
