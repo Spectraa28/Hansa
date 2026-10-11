@@ -145,6 +145,14 @@ def change(before, after):
     return None if before in (None, 0) or after is None else round((after - before) / before * 100, 2)
 
 
+def passes(task):
+    """[runs whose automatic checks passed, runs] for a task, from whichever form of it is at hand."""
+    if "automatic_pass_count" in task:
+        return [task["automatic_pass_count"], task["run_count"]]
+    runs = task.get("runs") or [task]
+    return [sum(bool(run.get("automatic_passed")) for run in runs), len(runs)]
+
+
 def compare(baseline, candidate_tasks):
     """Deterministic verdict. A task regresses when its automatic checks passed before and do not now.
 
@@ -158,6 +166,7 @@ def compare(baseline, candidate_tasks):
         base = by_id[task["task_id"]]
         regressed = bool(base.get("automatic_passed")) and not task.get("automatic_passed")
         row = {"task_id": task["task_id"], "name": task.get("name"), "baseline_status": base.get("status"),
+               "baseline_automatic_passes": passes(base), "candidate_automatic_passes": passes(task),
                "candidate_status": task.get("status"), "regressed": regressed,
                "fixed": not base.get("automatic_passed") and bool(task.get("automatic_passed")),
                "candidate_reason": task.get("reason"), "metrics": {}}
@@ -365,6 +374,26 @@ class BaselineService:
             report["runs"] = runs
             tasks.append(report)
         return tasks
+
+    def extend(self, user_id, baseline, task_id, runs):
+        """Add further runs of the unchanged agent to one baseline task and recompute that task.
+
+        Used to learn how often a task fails with no change at all. The added runs are kept and labelled;
+        the baseline's other tasks keep their original repetitions.
+        """
+        task = next(task for task in baseline["tasks"] if task["task_id"] == task_id)
+        for run in runs:
+            run["repetition"] = len(task["runs"]) + 1
+            run["stability_check"] = True
+            task["runs"].append(run)
+        kept = task["runs"]
+        task.update(combine(kept))
+        task["runs"] = kept
+        baseline.setdefault("stability_checks", []).append({"task_id": task_id, "added_runs": len(runs), "at": int(time.time())})
+        for status in ("passed", "failed", "needs_review"):
+            baseline[status] = sum(item["status"] == status for item in baseline["tasks"])
+        self.save(user_id, baseline)
+        return baseline
 
     def airline(self, user_id, import_id, repetitions=1):
         if type(repetitions) is not int or not 1 <= repetitions <= 5:

@@ -46,6 +46,27 @@ def payback(job, baseline):
                     "the investigation and compute. A pass is every contract task run once."}
 
 
+def next_step(adapter, baseline, investigation, optimizations, jobs):
+    """What the owner can usefully do now. Advice for the interface; it starts nothing."""
+    if any(job["status"] == "running" for job in jobs) or (baseline and baseline["status"] == "running"):
+        return {"action": "wait", "reason": "A job is running."}
+    if adapter is None:
+        blocked = [job for job in jobs if job["kind"] == "onboarding" and job["status"] == "blocked"]
+        return {"action": "onboard", "endpoint": "onboarding",
+                "reason": blocked[-1]["result"].get("reason") if blocked else "No adapter is stored for this import."}
+    if not baseline or baseline["status"] != "completed":
+        return {"action": "baseline", "endpoint": "baseline", "reason": "Confirm a task contract, then measure the agent."}
+    if investigation is None or investigation["result"].get("baseline_id") != baseline["baseline_id"]:
+        return {"action": "investigate", "endpoint": "investigation", "reason": "The latest baseline has not been investigated."}
+    tried = {(item["finding"] or {}).get("finding_id") for item in optimizations
+             if (item["finding"] or {}).get("investigation_job_id") == investigation["job_id"]}
+    untried = [f["finding_id"] for f in investigation["result"].get("findings", []) if f["finding_id"] not in tried]
+    if untried:
+        return {"action": "optimize", "endpoint": "optimization", "finding_ids": untried,
+                "reason": "Findings that have not been tested yet."}
+    return {"action": "review", "reason": "Every saved finding has been tested. Review the results."}
+
+
 def build(service, baselines, user_id, import_id):
     with service.database.connect() as db:
         imported = service.owned(db, user_id, import_id)
@@ -55,18 +76,26 @@ def build(service, baselines, user_id, import_id):
         adapter = db.execute("SELECT sha256, job_id, created_at FROM import_adapters WHERE import_id=?", (import_id,)).fetchone()
     baseline = json.loads(baseline_row["result"]) if baseline_row else None
     jobs = [service.job(user_id, import_id, row["id"]) for row in jobs]
-    investigations = [job for job in jobs if job["kind"] == "investigation" and job["status"] == "ready"]
-    investigation = investigations[-1] if investigations else None
+    # Findings are verified and saved one at a time, so a job that later ran out of turns still has real ones.
+    investigations = [job for job in jobs if job["kind"] == "investigation"
+                      and (job["status"] == "ready" or job["result"].get("findings"))]
+    concluded = [job for job in investigations if job["status"] == "ready" and not job["result"].get("incomplete")]
+    investigation = (concluded or investigations or [None])[-1]
     optimizations = []
     for job in jobs:
         if job["kind"] != "optimization":
             continue
         result = job["result"]
+        tried = result.get("experiments", [])
         optimizations.append({
             "job_id": job["job_id"], "status": job["status"], "decision": result.get("decision"), "summary": result.get("summary") or result.get("reason"),
             "incomplete": bool(result.get("incomplete")), "finding": result.get("finding"), "changed_files": result.get("changed_files", []),
             "patch_available": bool(result.get("patch")), "candidate_sha256": result.get("candidate_sha256"),
-            "comparison": result.get("comparison"),
+            # A rejected change is reverted, so its measurements and patch live on the last experiment.
+            "tried_patch_available": bool(tried and tried[-1].get("patch")),
+            "comparison": result.get("comparison") or (tried[-1]["comparison"] if tried else None),
+            "comparison_is_of": "accepted candidate" if result.get("decision") == "accept" else "last candidate tried" if tried else None,
+            "stability_checks": result.get("stability_checks", []),
             "experiments": [{"experiment": e["experiment"], "verdict": e["comparison"]["verdict"], "all_tasks": e["comparison"]["all_tasks"],
                              "regressed_tasks": e["comparison"]["regressed_tasks"], "cost_usd": e["cost_usd"],
                              "changed_files": e["changed_files"]} for e in result.get("experiments", [])],
@@ -82,7 +111,8 @@ def build(service, baselines, user_id, import_id):
         "baseline": baseline_section(baseline),
         "investigation": None if investigation is None else {
             "job_id": investigation["job_id"], "summary": investigation["result"].get("summary"),
-            "incomplete": bool(investigation["result"].get("incomplete")),
+            "incomplete": bool(investigation["result"].get("incomplete")) or investigation["status"] != "ready",
+            "status": investigation["status"],
             "nothing_worth_changing": investigation["result"].get("nothing_worth_changing"),
             "findings": [{key: finding.get(key) for key in ("finding_id", "waste", "proposed_change", "behaviour_risk", "estimated_saving", "saving_scope")}
                          | {"source": finding["evidence"]["source"], "run_ids": [run["run_id"] for run in finding["evidence"]["runs"]]}
@@ -95,6 +125,7 @@ def build(service, baselines, user_id, import_id):
         "spend_usd": spend,
         "stages": {"onboarded": adapter is not None, "baseline": bool(baseline and baseline["status"] == "completed"),
                    "investigated": investigation is not None, "optimized": bool(optimizations)},
+        "next": next_step(adapter, baseline, investigation, optimizations, jobs),
         "limits": ["Results hold for the listed tasks at this commit, model and repetition count only.",
                    "Tasks marked needs_review have not had their answers confirmed by a person.",
                    "A candidate is compared on automatic checks; it is not a protected, held-out evaluation.",

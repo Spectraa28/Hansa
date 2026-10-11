@@ -48,9 +48,15 @@ def report(import_id: uuid.UUID, request: Request, user: dict = Depends(current_
 @router.get("/{import_id}/agent-jobs/{job_id}/patch")
 def patch(import_id: uuid.UUID, job_id: str, request: Request, user: dict = Depends(current_session)):
     result = request.app.state.agent.job(user["id"], str(import_id), job_id)["result"]
-    if not result.get("patch"):
+    tried = [experiment["patch"] for experiment in result.get("experiments", []) if experiment.get("patch")]
+    accepted = result.get("decision") == "accept" and result.get("patch")
+    if not accepted and not tried:
         raise HTTPException(404, "This job has no patch.")
-    return PlainTextResponse(result["patch"], headers={"Content-Disposition": f'attachment; filename="hansa-{job_id[:8]}.patch"'})
+    # A change that was not accepted is still downloadable for review, and is named and marked as such.
+    name = f"hansa-{job_id[:8]}.patch" if accepted else f"hansa-{job_id[:8]}-not-accepted.patch"
+    return PlainTextResponse(result["patch"] if accepted else tried[-1],
+                             headers={"Content-Disposition": f'attachment; filename="{name}"',
+                                      "X-Hansa-Decision": str(result.get("decision") or "none")})
 
 
 @router.post("/{import_id}/onboarding", status_code=202)

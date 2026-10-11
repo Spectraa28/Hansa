@@ -207,7 +207,10 @@ class InvestigationTools:
                 checked = self.service.tracer.recheck(self.user_id, self.import_id, trace_id)
             except HTTPException as exc:
                 checked = {"trace_id": trace_id, "status": "unavailable", "error": str(exc.detail)}
-        self.traces[run_id] = {k: checked.get(k) for k in ("trace_id", "status", "checked_at", "error", "note")}
+        detections = (checked.get("context") or {}).get("detections") or []
+        self.traces[run_id] = {**{k: checked.get(k) for k in ("trace_id", "status", "checked_at", "error", "note")},
+                               "neatlogs_detections": detections[:20]}
+        checked = {**checked, "neatlogs_detections": detections[:20]}
         return {"run_id": run_id, **checked, "numbers_source": "Use read_run database numbers, never Neatlogs costs."}
 
     def save_finding(self, **arguments):

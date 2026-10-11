@@ -19,7 +19,9 @@ def task(task_id, status="passed", cost=0.10, calls=6, tokens=8000, wall=18.0, s
     row = {"task_id": task_id, "name": "Task " + task_id, "status": status, "automatic_passed": status != "failed",
            "passed": {"passed": True, "failed": False, "needs_review": None}[status], "reason": "All automatic checks passed" if status != "failed" else "function_sequence does not match",
            "model_calls": calls, "tokens_in": tokens, "tokens_out": 200, "cost_usd": cost, "wall_time_seconds": wall,
-           "input": {"user_turns": ["hello"]}, "runs": [{"run_id": "r" + task_id, "trace_id": None, "status": status, "stop_reason": "completed",
+           "input": {"user_turns": ["hello"]}, "runs": [{"run_id": "r" + task_id, "trace_id": None, "status": status, "stop_reason": "completed", "automatic_passed": status != "failed",
+           "passed": {"passed": True, "failed": False, "needs_review": None}[status], "reason": "ok", "requirements": [], "tokens_in": tokens, "tokens_out": 200,
+           "wall_time_seconds": wall, "external_calls": 0, "external_denied": 0, "external_hosts": [], "unknown_cost_calls": 0, "unknown_usage_calls": 0,
            "cost_usd": cost, "model_calls": calls, "stderr_tail": "", "output": {"function_sequence": ["a"]}}]}
     if spread:
         row["spread"] = {key: [value * spread[0], value * spread[1]] for key, value in
@@ -264,3 +266,80 @@ def test_optimization_needs_a_goal_or_a_real_finding_and_stops_safely(optimizabl
     job = finished(state.agent, owner, imported, state.agent.start_optimization(owner, imported, goal="Cap the output length."))
     assert job["status"] == "ready" and job["result"]["decision"] == "reject" and job["result"]["incomplete"]
     assert len(job["result"]["experiments"]) == 1 and job["result"]["accepted_experiment"] is None
+    # Nothing was accepted, but what was tried stays reviewable and is labelled as not accepted.
+    from backend.app.agent.report import build
+    item = build(state.agent, state.baselines, owner, imported)["optimizations"][0]
+    assert item["patch_available"] is True and item["comparison_is_of"] == "last candidate tried" and item["payback"] is None
+
+
+def test_unstable_baseline_task_is_measured_and_no_longer_counts_as_a_regression(candidate):
+    make, root = candidate
+    flaky = [task("1", status="failed", cost=0.07, tokens=5000), task("2", cost=0.07, tokens=5000)]
+    tools, service = make([flaky])
+    saved = []
+    def extend(user_id, baseline, task_id, runs):
+        from backend.app.runner.baseline import combine
+        item = next(t for t in baseline["tasks"] if t["task_id"] == task_id)
+        item["runs"] += runs
+        kept = item["runs"]
+        item.update(combine(kept)); item["runs"] = kept
+        saved.append(task_id)
+        return baseline
+    service.baselines.extend = extend
+    reruns = [[task("1", status="failed", cost=0.1)["runs"][0], task("1", cost=0.1)["runs"][0]]]
+    original = service.baselines.evaluate
+    def evaluate(user_id, baseline, overlay, task_ids, repetitions, labels):
+        if overlay is None:
+            assert labels["kind"] == "baseline-stability" and task_ids == ["1"]
+            return [{"task_id": "1", "runs": reruns.pop(0)}]
+        return original(user_id, baseline, overlay, task_ids, repetitions, labels)
+    service.baselines.evaluate = evaluate
+    tools.edit_file("swarm/core.py", "    messages = history\n", "    messages = history[-6:]\n")
+    assert tools.run_candidate()["regressed_tasks"] == ["1"]
+    with pytest.raises(ValueError, match="regressed tasks 1"):
+        tools.finish("accept", "Trimmed the history to six messages.")
+    with pytest.raises(ValueError):
+        tools.measure_baseline("9")
+    checked = tools.measure_baseline("1", repetitions=2)
+    # The unchanged agent failed one of its two extra runs: task 1 is unstable on its own.
+    assert checked["baseline_automatic_passes_before"] == [1, 1] and checked["baseline_automatic_passes_after"] == [2, 3]
+    assert "not counted as a regression" in checked["meaning"] and saved == ["1"]
+    assert checked["experiments_now"] == [{"experiment": 1, "verdict": "improved", "regressed_tasks": []}]
+    assert tools.finish("accept", "Trimmed the history; task 1 fails without the change too.")["decision"] == "accept"
+    result = tools.result()
+    assert result["stability_checks"][0]["added_runs"] == 2 and result["comparison"]["tasks"][0]["baseline_automatic_passes"] == [2, 3]
+    assert result["comparison"]["tasks"][0]["candidate_automatic_passes"] == [0, 1]
+    assert tools.target_cost == pytest.approx(0.14 + 0.2)
+    tools.measure_baseline("2", repetitions=1) if False else None
+    for _ in range(1):
+        reruns.append([task("2")["runs"][0]])
+        service.baselines.evaluate = lambda u, b, overlay, ids, reps, labels: [{"task_id": "2", "runs": reruns.pop(0)}]
+        stable = tools.measure_baseline("2", repetitions=1)
+        assert "still counts as a regression" in stable["meaning"]
+    with pytest.raises(ValueError, match="No baseline stability checks remain"):
+        tools.measure_baseline("1")
+
+
+def test_report_keeps_findings_from_an_unfinished_investigation_and_suggests_the_next_step(optimizable, imported_client):
+    state, owner, imported, baseline = optimizable
+    client, _, _ = imported_client
+    report = client.get(f"/github/imports/{imported}/report").json()
+    assert report["next"]["action"] == "onboard" and report["investigation"] is None
+    finding = {"finding_id": "1", "waste": "History is re-sent on every call.", "proposed_change": "Trim it.", "behaviour_risk": "May drop context.",
+               "estimated_saving": {"cost_usd": 0.01, "method": "Estimated from repeated size."}, "saving_scope": "cited runs",
+               "evidence": {"source": [{"path": "agent.py", "start_line": 1, "end_line": 3}], "runs": [{"run_id": "r1"}]}}
+    with state.database.connect() as db:
+        db.execute("INSERT INTO import_adapters VALUES (?,?,?,?,?,1)", (imported, "print(1)", "a" * 64, "{}", "job"))
+        db.execute("INSERT INTO agent_jobs VALUES ('unfinished',?,'investigation','failed',?,5,5)",
+                   (imported, json.dumps({"baseline_id": baseline["baseline_id"], "findings": [finding], "reason": "The agent did not finish within 40 turns.",
+                                          "agent_usage": {"calls": 40, "estimated_cost_usd": 0.7}})))
+    report = client.get(f"/github/imports/{imported}/report").json()
+    assert report["investigation"]["job_id"] == "unfinished" and report["investigation"]["incomplete"] and report["investigation"]["status"] == "failed"
+    assert [f["finding_id"] for f in report["investigation"]["findings"]] == ["1"] and report["stages"]["investigated"]
+    assert report["next"] == {"action": "optimize", "endpoint": "optimization", "finding_ids": ["1"], "reason": "Findings that have not been tested yet."}
+    assert report["spend_usd"]["investigation"] == pytest.approx(0.7)
+    with state.database.connect() as db:
+        db.execute("INSERT INTO agent_jobs VALUES ('tested',?,'optimization','ready',?,6,6)",
+                   (imported, json.dumps({"decision": "reject", "summary": "Broke task 1.", "experiments": [],
+                                          "finding": {"finding_id": "1", "investigation_job_id": "unfinished"}})))
+    assert client.get(f"/github/imports/{imported}/report").json()["next"]["action"] == "review"

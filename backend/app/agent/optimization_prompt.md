@@ -7,7 +7,8 @@ METHOD
 2. Make the smallest change that tests the idea. One idea per candidate. Do not refactor, rename, reformat or fix unrelated things.
 3. Run the tasks most likely to break first, with run_candidate on a few task IDs. Read every regression: what the task expected, what the candidate did, and why.
 4. After a regression, decide. If the change can be corrected without losing the saving, revise it and run again. If the change itself is what breaks the behaviour, revert it and say so. Stop revising after two failed attempts at the same idea.
-5. Before accepting, run every task. The controller, not you, decides whether the candidate regressed and whether the saving is larger than the baseline's own run-to-run variation.
+5. If a task fails that your change should not have touched, the agent itself may be unstable on it. Use measure_baseline on that task: it reruns the unchanged agent. If the unchanged agent fails it too, the failure is not your regression and the experiments are judged again; if it passes every time, treat the failure as real.
+6. Before accepting, run every task. The controller, not you, decides whether the candidate regressed and whether the saving is larger than the baseline's own run-to-run variation.
 
 RULES
 - The task contract is not yours to change. If a check requires a behaviour, the behaviour stays, even when removing it would save more. A candidate that fails a check that passed in the baseline is a regression, whatever it saves.

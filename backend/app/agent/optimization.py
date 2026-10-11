@@ -12,12 +12,13 @@ from pathlib import Path
 
 from fastapi import HTTPException
 
-from ..runner.baseline import compare
+from ..runner.baseline import METRICS, compare
 from ..runner.service import MAX_OVERLAY_FILES
 from .tools import MAX_FILE_BYTES, SnapshotTools
 
 SYSTEM = Path(__file__).with_name("optimization_prompt.md").read_text()
 MAX_EXPERIMENTS = 5
+MAX_STABILITY_CHECKS = 2
 MAX_DIFF = 60_000
 
 TOOLS = [
@@ -35,6 +36,9 @@ TOOLS = [
     {"type": "function", "function": {"name": "run_candidate", "description": "Run the current candidate on baseline tasks and compare with the baseline. Omit task_ids to run every task, which is required before accept.",
         "parameters": {"type": "object", "properties": {"task_ids": {"type": "array", "items": {"type": "string"}},
                                                         "repetitions": {"type": "integer", "minimum": 1, "maximum": 3}}}}},
+    {"type": "function", "function": {"name": "measure_baseline", "description": "Run the UNCHANGED agent again on one task, to learn whether that task also fails without your change. Use it when a task fails that your change should not have affected.",
+        "parameters": {"type": "object", "properties": {"task_id": {"type": "string"}, "repetitions": {"type": "integer", "minimum": 1, "maximum": 4}},
+                       "required": ["task_id"]}}},
     {"type": "function", "function": {"name": "finish", "description": "End with a decision the measurements support.",
         "parameters": {"type": "object", "properties": {
             "decision": {"type": "string", "enum": ["accept", "reject", "no_improvement"]},
@@ -48,7 +52,7 @@ class OptimizationTools:
         self.service, self.job_id, self.user_id, self.import_id = service, job_id, user_id, import_id
         self.baseline, self.finding, self.manifests = baseline, finding, set(manifests)
         self.source, self.root = SnapshotTools(root), Path(root).resolve()
-        self.original, self.experiments = {}, []
+        self.original, self.experiments, self.stability = {}, [], []
         self.target_budget, self.target_cost, self.target_calls = target_budget, 0.0, 0
         self.state = {"finish": None, "result_limit": 12000}
 
@@ -177,8 +181,12 @@ class OptimizationTools:
         self.target_cost += cost
         self.target_calls += sum(run["model_calls"] for run in runs)
         comparison = compare(self.baseline, tasks)
+        # Enough of each candidate task to compare it again if the baseline later gains runs.
+        kept = [{**{key: task.get(key) for key in ("task_id", "name", "status", "automatic_passed", "reason", *METRICS)},
+                 "automatic_pass_count": sum(bool(run.get("automatic_passed")) for run in task["runs"]), "run_count": len(task["runs"])}
+                for task in tasks]
         experiment = {"experiment": number, "candidate_sha256": sha, "changed_files": sorted(self.original), "patch": self.patch(),
-                      "repetitions": repetitions, "cost_usd": cost, "comparison": comparison,
+                      "repetitions": repetitions, "cost_usd": cost, "comparison": comparison, "candidate_tasks": kept,
                       "runs": [{"task_id": task["task_id"], "run_id": run["run_id"], "trace_id": run.get("trace_id"),
                                 "status": run["status"], "stop_reason": run["stop_reason"]} for task in tasks for run in task["runs"]]}
         self.experiments.append(experiment)
@@ -194,6 +202,44 @@ class OptimizationTools:
                                                              "calls": [row["metrics"]["model_calls"]["baseline"], row["metrics"]["model_calls"]["candidate"]]}
                                                           for row in comparison["tasks"]],
                 "failing_tasks": failures, "experiment_cost_usd": cost, "budget_left_usd": round(self.target_budget - self.target_cost, 4)}
+
+    def measure_baseline(self, task_id, repetitions=2):
+        """How often does this task fail with no change at all? Reruns the original source, not the candidate."""
+        task = next((item for item in self.baseline["tasks"] if item["task_id"] == task_id), None)
+        if task is None:
+            raise ValueError("Unknown task ID.")
+        if type(repetitions) is not int or not 1 <= repetitions <= 4:
+            raise ValueError("repetitions must be 1 to 4.")
+        if len(self.stability) >= MAX_STABILITY_CHECKS:
+            raise ValueError("No baseline stability checks remain.")
+        if self.target_cost >= self.target_budget:
+            raise ValueError("The experiment budget is used. Call finish.")
+        before = [sum(bool(run.get("automatic_passed")) for run in task["runs"]), len(task["runs"])]
+        try:
+            runs = self.service.baselines.evaluate(self.user_id, self.baseline, None, [task_id], repetitions,
+                                                   {"kind": "baseline-stability", "job_id": self.job_id})[0]["runs"]
+        except HTTPException as exc:
+            raise ValueError(str(exc.detail)) from None
+        cost = sum(run["cost_usd"] or 0 for run in runs)
+        self.target_cost += cost
+        self.target_calls += sum(run["model_calls"] for run in runs)
+        self.baseline = self.service.baselines.extend(self.user_id, self.baseline, task_id, runs)
+        task = next(item for item in self.baseline["tasks"] if item["task_id"] == task_id)
+        after = [sum(bool(run.get("automatic_passed")) for run in task["runs"]), len(task["runs"])]
+        # Every earlier experiment is judged again against what is now known about the unchanged agent.
+        for experiment in self.experiments:
+            experiment["comparison"] = compare(self.baseline, experiment["candidate_tasks"])
+        check = {"task_id": task_id, "added_runs": len(runs), "new_runs_passed": sum(bool(run.get("automatic_passed")) for run in runs),
+                 "baseline_automatic_passes_before": before, "baseline_automatic_passes_after": after, "cost_usd": cost}
+        self.stability.append(check)
+        self.service.update(self.job_id, "running", self.result())
+        self.service.event(self.job_id, "stability", check)
+        return {**check, "task_status_now": task["status"],
+                "meaning": ("The unchanged agent also fails this task some of the time, so a candidate failure here is not counted as a regression."
+                            if after[0] < after[1] else "The unchanged agent passed every run of this task, so a candidate failure here still counts as a regression."),
+                "experiments_now": [{"experiment": e["experiment"], "verdict": e["comparison"]["verdict"],
+                                     "regressed_tasks": e["comparison"]["regressed_tasks"]} for e in self.experiments],
+                "budget_left_usd": round(self.target_budget - self.target_cost, 4)}
 
     def finish(self, decision, summary):
         if decision not in {"accept", "reject", "no_improvement"} or not isinstance(summary, str) or not 10 <= len(summary.strip()) <= 3000:
@@ -215,6 +261,7 @@ class OptimizationTools:
     def result(self):
         latest = next((e for e in reversed(self.experiments) if e["candidate_sha256"] == self.sha()), None)
         return {"baseline_id": self.baseline["baseline_id"], "finding": self.finding, "experiments": self.experiments,
+                "stability_checks": self.stability,
                 "changed_files": sorted(self.original), "candidate_sha256": self.sha(), "patch": self.patch(),
                 "comparison": latest["comparison"] if latest else None,
                 "target_usage": {"calls": self.target_calls, "estimated_cost_usd": self.target_cost}}
@@ -229,7 +276,7 @@ class OptimizationTools:
             self.service.event(self.job_id, "tool", {"name": name, "arguments": logged})
             if name in {"list_files", "search_code", "read_file"}:
                 return getattr(self.source, name)(**arguments)
-            if name in {"edit_file", "write_file", "revert", "show_diff", "read_baseline", "run_candidate", "finish"}:
+            if name in {"edit_file", "write_file", "revert", "show_diff", "read_baseline", "run_candidate", "measure_baseline", "finish"}:
                 return getattr(self, name)(**arguments)
             raise ValueError("Tool is not available in optimization.")
         except (ValueError, TypeError, OSError, HTTPException) as exc:

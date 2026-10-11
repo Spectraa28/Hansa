@@ -114,7 +114,7 @@ The accepted smoke escalated a refund request after inventing a different flight
 
 ## Optimization: fix and prove
 
-Status: implemented and covered by scripted tests on October 11. It has not been run with a real model or real containers yet.
+Status: implemented, and run live twice on the Swarm airline example on October 11. Both runs ended in a reject: the first because the change broke a required function sequence, the second because one task failed in one of two repetitions. No change has been accepted in a live run.
 
 `POST /github/imports/{id}/optimization` starts a third job kind. It takes either a saved finding (`investigation_job_id` and `finding_id`) or a `goal` in the user's words, and works against the completed contract baseline that finding was measured on.
 
@@ -138,7 +138,9 @@ The comparison and the accept decision are controller code in [`backend/app/runn
 - `accept` is refused unless the current candidate has a run of every task, no regression, and a measured improvement. An earlier run does not count for a revised candidate.
 - If the agent runs out of turns without deciding, nothing is accepted; the experiments are kept and the job ends as `reject` with `incomplete: true`.
 
-`GET /github/imports/{id}/agent-jobs/{job_id}/patch` downloads the unified diff. `GET /github/imports/{id}/report` returns one document: baseline per task, findings and coverage, each optimization with its experiments and comparison, spend by stage, and payback (optimization cost divided by saving per pass of the task set).
+**Unstable targets.** An agent can fail a task some of the time with no change at all. `measure_baseline` lets the optimization agent rerun the unchanged source on one task (at most four runs, twice per job, within the experiment budget). The extra runs are added to the baseline and labelled, and every earlier experiment is judged again. If the unchanged agent also fails the task, a candidate failure there no longer counts as a regression; if it passes every time, it still does. Each comparison row shows `[passed, runs]` for baseline and candidate so a single failure in two runs is visible. Implemented and unit-tested; not yet used in a live run.
+
+`GET /github/imports/{id}/agent-jobs/{job_id}/patch` downloads the unified diff. For a job that did not accept, it returns the last change tried, named `-not-accepted.patch` with an `X-Hansa-Decision` header. `GET /github/imports/{id}/report` returns one document: baseline per task, findings and coverage, each optimization with its experiments and comparison, spend by stage, and payback (optimization cost divided by saving per pass of the task set).
 
 Limits: tasks marked `needs_review` are compared on automatic checks only, and a person still has to confirm their answers. The same tasks guide the change and judge it, so this is a development comparison, not a held-out evaluation.
 
