@@ -5,10 +5,12 @@ from fastapi.testclient import TestClient
 import httpx
 import pytest
 
-from backend.app.config import Settings
-from backend.app.sessions import session, token_hash
-from backend.app.users import EmailInUse, oauth_user
-from backend.app.main import create_app
+from app.config import Settings
+from app.sessions import session, token_hash
+from app.users import EmailInUse, oauth_user
+from app.main import create_app
+from app.oauth.providers import ProviderIdentity
+from app.oauth import routes as oauth_routes
 
 
 @pytest.fixture
@@ -142,3 +144,24 @@ def test_hosted_settings_require_https_and_secure_cookies(tmp_path):
     with pytest.raises(ValueError):
         Settings(database_path=tmp_path / "auth.sqlite3", secret_key="test-only-secret-" * 4,
                  app_url="https://ouro.example")
+
+
+@pytest.mark.parametrize("provider", ["google", "github"])
+def test_oauth_success_redirects_to_frontend_app_and_sets_session(tmp_path, monkeypatch, provider):
+    class FakeProvider:
+        async def authorize_access_token(self, request):
+            return {"access_token": "test-only"}
+
+    async def identity(*args):
+        return ProviderIdentity(subject="test-subject", name="Test Person", email="test@example.com")
+
+    monkeypatch.setattr(oauth_routes, "provider_client", lambda *args: FakeProvider())
+    monkeypatch.setattr(oauth_routes, "provider_identity", identity)
+    settings = Settings(database_path=tmp_path / "auth.sqlite3", secret_key="test-only-secret-" * 4,
+                        frontend_origin="http://localhost:5174/")
+    with TestClient(create_app(settings)) as client:
+        response = client.get(f"/auth/{provider}/callback?next=https://attacker.example", follow_redirects=False)
+        assert response.status_code == 303
+        assert response.headers["location"] == "http://localhost:5174/app"
+        assert "httponly" in response.headers["set-cookie"].lower()
+        assert client.get("/auth/me").json()["user"]["name"] == "Test Person"

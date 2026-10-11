@@ -40,7 +40,7 @@ async def oauth_callback(provider: Literal["google", "github"], request: Request
             oauth_user, request.app.state.database, provider, identity.subject,
             str(identity.email).casefold() if identity.email else None, identity.name, identity.avatar_url,
         )
-        response = RedirectResponse(f"{request.app.state.settings.app_url}/auth/me", status_code=303)
+        response = RedirectResponse(f"{request.app.state.settings.frontend_origin.rstrip('/')}/app", status_code=303)
         await run_in_threadpool(establish_session, request, user, response)
         return response
     except (OAuthError, JoseError):

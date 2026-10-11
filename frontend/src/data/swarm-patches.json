@@ -1,0 +1,4 @@
+{
+ "6c66dd8ae67042908941c591b02b8e4b": "--- a/examples/airline/configs/agents.py\n+++ b/examples/airline/configs/agents.py\n@@ -43,7 +43,7 @@\n triage_agent = Agent(\n     name=\"Triage Agent\",\n     instructions=triage_instructions,\n-    functions=[transfer_to_flight_modification, transfer_to_lost_baggage],\n+    functions=[transfer_to_flight_cancel, transfer_to_flight_change, transfer_to_lost_baggage],\n )\n \n flight_modification = Agent(\n",
+ "9f3f7d84dbec4103acceb67cf16df76d": "--- a/examples/airline/configs/agents.py\n+++ b/examples/airline/configs/agents.py\n@@ -43,7 +43,7 @@\n triage_agent = Agent(\n     name=\"Triage Agent\",\n     instructions=triage_instructions,\n-    functions=[transfer_to_flight_modification, transfer_to_lost_baggage],\n+    functions=[transfer_to_flight_cancel, transfer_to_flight_change, transfer_to_lost_baggage],\n )\n \n flight_modification = Agent(\n"
+}

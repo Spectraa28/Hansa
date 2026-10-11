@@ -33,7 +33,6 @@ from .agent.routes import router as agent_router
 from .agent.service import AgentService
 from .tracing.routes import router as tracing_router
 from .tracing.service import TraceService
-from .ui.routes import router as ui_router
 from .oauth.providers import oauth_clients
 from .oauth.routes import router as oauth_router
 
@@ -90,7 +89,6 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
     app.include_router(runner_router)
     app.include_router(agent_router)
     app.include_router(tracing_router)
-    app.include_router(ui_router)
 
     @app.middleware("http")
     async def auth_boundary(request: Request, call_next):
