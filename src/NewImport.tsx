@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { UseQueryResult } from '@tanstack/react-query'
 import { Link, Navigate, useNavigate } from 'react-router-dom'
-import { ArrowRight, GitBranch, Lock, Search } from 'lucide-react'
+import { ArrowRight, FolderOpen, GitBranch, Lock, Search } from 'lucide-react'
 import { api, ApiError, send } from './api'
 import type { Session } from './api'
 
@@ -19,6 +19,7 @@ export default function NewImport({ session }: { session: UseQueryResult<Session
   const [installation, setInstallation] = useState<number | null>(null)
   const [repo, setRepo] = useState<Repo | null>(null)
   const [branch, setBranch] = useState('')
+  const [folder, setFolder] = useState('')
   const [filter, setFilter] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -30,8 +31,10 @@ export default function NewImport({ session }: { session: UseQueryResult<Session
   const repos = useQuery({ queryKey: ['repos', user, account], enabled: account != null, queryFn: ({ signal }) => api<{ repositories: Repo[]; has_next: boolean }>(`/github/repositories?installation_id=${account}&per_page=100`, { signal }) })
   const branches = useQuery({ queryKey: ['branches', user, account, repo?.id], enabled: account != null && repo != null, queryFn: ({ signal }) => api<Branches>(`/github/branches?installation_id=${account}&repository_id=${repo!.id}&per_page=100`, { signal }) })
 
-  if (session.isSuccess && !session.data) return <Navigate to="/sign-in" replace />
   const chosen = branch || repo?.default_branch || branches.data?.branches[0]?.name || ''
+  const folders = useQuery({ queryKey: ['folders', user, account, repo?.id, chosen], enabled: account != null && repo != null && Boolean(chosen), retry: false,
+    queryFn: ({ signal }) => api<{ folders: string[] }>(`/github/folders?installation_id=${account}&repository_id=${repo!.id}&branch=${encodeURIComponent(chosen)}`, { signal }) })
+  if (session.isSuccess && !session.data) return <Navigate to="/sign-in" replace />
 
   async function connect() {
     setBusy(true); setError('')
@@ -42,14 +45,14 @@ export default function NewImport({ session }: { session: UseQueryResult<Session
     if (!repo || account == null || !chosen) return
     setBusy(true); setError('')
     try {
-      const created = await send<{ id: string }>('/github/imports', session.data!.csrf_token, { installation_id: account, repository_id: repo.id, branch: chosen })
+      const created = await send<{ id: string }>('/github/imports', session.data!.csrf_token, { installation_id: account, repository_id: repo.id, branch: chosen, ...(folder.trim() ? { folder: folder.trim().replace(/^\/+|\/+$/g, '') } : {}) })
       navigate(`/app/imports/${created.id}?step=import`)
     } catch (caught) { setError(message(caught)); setBusy(false) }
   }
 
   const shown = repos.data?.repositories.filter(item => item.full_name.toLowerCase().includes(filter.trim().toLowerCase())) || []
   return <main className="page max-w-4xl">
-    <Link to="/app" className="font-mono text-[13px] font-medium hover:underline">← your agents</Link>
+    <Link to="/app" className="back-link">← your agents</Link>
     <h1 className="page-title mt-2">Bring an agent.</h1>
     <p className="mt-4 max-w-[52ch] text-[17px] text-muted">Pick the repository your agent lives in. Hansa copies one commit, read-only. Nothing runs until you say so.</p>
 
@@ -73,20 +76,30 @@ export default function NewImport({ session }: { session: UseQueryResult<Session
             : account == null ? <p className="mt-5">The Hansa GitHub App isn't installed on any account you can reach. <a className="font-semibold underline" href={installs.data?.installation_url}>Install it on a repository</a>, then come back.</p>
             : shown.length === 0 ? <p className="mt-5 text-muted">{filter ? 'No repository matches that filter.' : 'The app has no repositories yet. Grant access to one.'}</p>
             : <ul className="mt-5 max-h-[340px] divide-y-2 divide-line overflow-y-auto rounded-control border-2 border-ink">{shown.map(item => <li key={item.id}>
-              <button aria-pressed={repo?.id === item.id} onClick={() => { setRepo(item); setBranch('') }} className={`flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left font-mono text-[14px] transition-colors ${repo?.id === item.id ? 'bg-ink text-paper' : 'hover:bg-waste'}`}>
+              <button aria-pressed={repo?.id === item.id} onClick={() => { setRepo(item); setBranch(''); setFolder('') }} className={`flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left font-mono text-[14px] transition-colors ${repo?.id === item.id ? 'bg-ink text-paper' : 'hover:bg-waste'}`}>
                 <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{item.full_name}</span>{item.private && <Lock size={14} aria-label="private" />}</button></li>)}</ul>}
           {repos.data?.has_next && <p className="mt-3 font-mono text-[12px] text-muted">Showing the first 100. Use the filter, or limit the app to fewer repositories.</p>}
         </section>
 
-        <section className={`slab mt-9 p-6 pt-8 sm:p-8 sm:pt-9 ${repo ? '' : 'opacity-50'}`}><span className="slab-tab">2 · pick a branch</span>
+        <section className={`slab mt-9 p-6 pt-8 sm:p-8 sm:pt-9 ${repo ? '' : 'opacity-50'}`}><span className="slab-tab">2 · branch and folder</span>
           {!repo ? <p className="text-muted">Choose a repository first.</p>
             : branches.isError ? <p role="alert">{message(branches.error)}</p>
             : <div className="flex flex-wrap items-end gap-4">
               <label className="min-w-[220px] flex-1 text-[13px] font-medium">Branch of <span className="font-mono">{repo.full_name}</span>
                 <span className="relative mt-2 block"><GitBranch size={16} aria-hidden="true" className="absolute top-1/2 left-3 -translate-y-1/2" />
-                  <select className="field pl-9 font-mono" value={chosen} disabled={branches.isPending} onChange={event => setBranch(event.target.value)}>{branches.isPending ? <option>{chosen || 'Loading…'}</option> : branches.data.branches.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</select></span></label>
-              <button className="button-primary min-h-12 px-7 text-[16px]" disabled={busy || !chosen} onClick={() => void start()}>{busy ? 'Importing…' : 'Import this repo'} <ArrowRight size={18} aria-hidden="true" /></button>
+                  <select className="field pl-9 font-mono" value={chosen} disabled={branches.isPending} onChange={event => { setBranch(event.target.value); setFolder('') }}>{branches.isPending ? <option>{chosen || 'Loading…'}</option> : branches.data.branches.map(item => <option key={item.name} value={item.name}>{item.name}</option>)}</select></span></label>
             </div>}
+          {repo && !branches.isError && <div className="mt-6 border-t-2 border-dashed border-ink pt-5">
+            <p className="text-[13px] font-medium">Where does the agent live?</p>
+            <p className="mt-1 text-[13px] text-muted">Import the whole repository, or just the folder the agent is in. Pick a folder when the repo also holds a frontend or other apps.</p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button type="button" aria-pressed={!folder} onClick={() => setFolder('')} className={`chip min-h-9 ${!folder ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}>whole repo</button>
+              {folders.data?.folders.map(name => <button type="button" key={name} aria-pressed={folder === name} onClick={() => setFolder(name)} className={`chip min-h-9 ${folder === name ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}><FolderOpen size={13} aria-hidden="true" />{name}</button>)}
+              {folders.isPending && chosen && <span className="chip chip-quiet min-h-9">looking for folders…</span>}
+            </div>
+            <label className="mt-3 block max-w-md text-[13px] font-medium">Or type a path<input className="field mt-2 font-mono" placeholder="services/agent" maxLength={200} value={folder} onChange={event => setFolder(event.target.value)} /></label>
+            <div className="mt-6">              <button className="button-primary min-h-12 px-7 text-[16px]" disabled={busy || !chosen} onClick={() => void start()}>{busy ? 'Importing…' : folder.trim() ? `Import /${folder.trim().replace(/^\/+|\/+$/g, '')}` : 'Import this repo'} <ArrowRight size={18} aria-hidden="true" /></button></div>
+          </div>}
         </section>
       </>}
     {error && <p role="alert" className="mt-6 rounded-control border-2 border-ink bg-waste px-4 py-3 font-medium">{error}</p>}

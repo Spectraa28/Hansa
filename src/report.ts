@@ -37,20 +37,29 @@ export type Optimization = {
   comparison: Comparison | null; comparison_is_of: string | null; patch_available: boolean; tried_patch_available: boolean
   trace?: { status: string; trace_id?: string; trace_ids?: string[]; reason?: string }
 }
+export type Xray = {
+  runs: number; model_calls: number; calls_per_run: number; cost_usd: number | null
+  input: { system_percent: number | null; tool_schema_percent: number | null; conversation_percent: number | null; sent_before_percent: number | null }
+  time: { model_percent: number | null; outside_model_percent: number | null; seconds_per_call: number; slowest_call_seconds: number }
+  handoff_calls: { count: number; percent: number | null }; duplicate_calls: { count: number }
+  prompt_caching_estimate: { saving_usd: number; saving_percent: number | null; assumes: string } | null
+  readings: { area: string; headline: string; detail: string; strength: string }[]
+}
 export type StageKind = 'onboarding' | 'baseline' | 'investigation' | 'optimization'
 export type ActiveJob = { kind: StageKind; job_id: string; events?: string }
 export type ImportReport = {
-  import: { import_id: string; repository: string; branch: string; commit_sha: string }
+  import: { import_id: string; repository: string; branch: string; commit_sha: string; folder?: string | null; left_out?: string[] }
   adapter: { sha256: string; job_id: string; created_at: number } | null
   baseline: {
     baseline_id?: string
     status: string; model: string | null; repetitions: number | null
     passed: number | null; failed: number | null; needs_review: number | null
     per_pass: Measurements
-    tasks: (Measurements & { task_id: string | null; name: string | null; status: string | null; reason: string | null })[]
+    xray?: Xray | null
+    tasks: (Measurements & { task_id: string | null; name: string | null; status: string | null; reason: string | null; trace_ids?: (string | null)[] })[]
     note: string
   } | null
-  investigation: { job_id?: string; status: string; summary: string | null; incomplete: boolean; nothing_worth_changing: boolean | null; findings: Finding[]; coverage?: Coverage[]; note: string } | null
+  investigation: { job_id?: string; status: string; summary: string | null; incomplete: boolean; nothing_worth_changing: boolean | null; findings: Finding[]; coverage?: Coverage[]; note: string; trace?: { status: string; trace_id?: string; trace_ids?: string[]; reason?: string } | null } | null
   optimizations: Optimization[]
   accepted: string[]
   stages: { onboarded: boolean; baseline: boolean; investigated: boolean; optimized: boolean }
@@ -86,7 +95,9 @@ export function barWidth(value: number | null, other: number | null): number {
   return value / Math.max(value, other != null && Number.isFinite(other) ? other : 0, 1e-12) * 100
 }
 
-export function sourceUrl(repository: string, commit: string, source: SourceReference): string | null {
+export function sourceUrl(repository: string, commit: string, source: SourceReference, folder?: string | null): string | null {
+  // Paths are relative to the imported folder; GitHub wants them from the repository root.
+  if (folder) source = { ...source, path: `${folder}/${source.path}` }
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository) || !/^[a-f0-9]{40}$/i.test(commit)
       || source.path.includes('\\') || source.path.split('/').some(part => !part || part === '.' || part === '..')
       || !Number.isInteger(source.start_line) || source.start_line < 1 || !Number.isInteger(source.end_line) || source.end_line < source.start_line) return null

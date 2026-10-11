@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { apiText, ApiError } from './api'
 import { barWidth, measurement } from './report'
 import type { MetricComparison, Optimization } from './report'
+import { TraceLinks } from './Trace'
 
 const metrics = [['model_calls', 'Model calls', 'number'], ['cost_usd', 'Cost', 'usd'], ['wall_time_seconds', 'Wall time', 'seconds']] as const
 const outcomes: Record<string, string> = { passed: 'passed', failed: 'failed', needs_review: 'checks passed' }
@@ -39,7 +40,7 @@ function TestedFix({ attempt, importId, preview }: { attempt: Optimization; impo
     setBusy(kind); setError(''); setMessage(''); setManualPrompt('')
     try {
       let text: string
-      if (preview && import.meta.env.DEV) {
+      if (preview) {
         const data = kind === 'patch' ? (await import('./data/swarm-patches.json')).default : (await import('./data/swarm-handoffs.json')).default
         text = (data as Record<string, string>)[attempt.job_id]
         if (!text) throw new Error('No saved artifact')
@@ -75,6 +76,7 @@ function TestedFix({ attempt, importId, preview }: { attempt: Optimization; impo
     </section>
     {comparison ? <>
       <div className="mt-9 grid gap-6 md:grid-cols-3">{metrics.map(([key, label, unit]) => <Bars key={key} label={label} unit={unit} values={comparison.totals[key]} />)}</div>
+      {!preview && <p className="mt-4 flex flex-wrap items-center gap-2 font-mono text-[12px] text-muted"><span>how Hansa got here:</span><TraceLinks trace={attempt.trace} label="trace" /></p>}
       <p className="mt-4 font-mono text-[12px] text-muted">{comparison.all_tasks ? 'Full task set' : 'Partial task set'} · {comparison.tasks.length} task{comparison.tasks.length === 1 ? '' : 's'} · mean per pass{comparison.variation_measured ? '' : ' · baseline variation not measured'}</p>
       <div className="slab mt-9"><span className="slab-tab">task by task</span>
         <ul className="divide-y-2 divide-line overflow-hidden rounded-[14px] pt-3">{comparison.tasks.map(task => <li key={task.task_id} className={`grid items-center gap-x-5 gap-y-2 px-6 py-4 md:grid-cols-[minmax(0,1fr)_auto_auto] ${task.regressed ? 'bg-waste-soft' : ''}`}>
@@ -88,6 +90,8 @@ function TestedFix({ attempt, importId, preview }: { attempt: Optimization; impo
       <h3 className="font-display text-[30px] leading-none font-[780] tracking-[-.04em] sm:text-[40px]">{accepted ? 'Take it.' : 'Take it for review.'}</h3>
       <p className="mt-3 max-w-[56ch] text-paper/75">{accepted ? 'Download the patch, or copy a brief your coding agent can apply.' : 'Not accepted, so don\'t apply it as is. The prompt carries the rejection and the measurements with it.'}</p>
       {available ? <div className="mt-6 flex flex-wrap gap-4"><button className="button-primary shadow-[3px_3px_0_var(--paper)]" disabled={busy !== null} onClick={() => void artifact('patch')}>{busy === 'patch' ? 'Downloading…' : 'Download patch'}</button><button className="button-secondary shadow-[3px_3px_0_var(--waste)]" disabled={busy !== null} onClick={() => void artifact('handoff')}>{busy === 'handoff' ? 'Loading prompt…' : 'Copy prompt for my coding agent'}</button></div> : <p className="mt-4 text-[13px] text-paper/70">No patch or prompt is available for this attempt.</p>}
+      {!accepted && !preview && <div className="mt-7 border-t border-paper/25 pt-5"><p className="font-mono text-[12px] uppercase tracking-[.08em] text-paper/70">or keep going</p>
+        <div className="mt-2 flex flex-wrap gap-x-6 text-[15px] font-semibold"><Link to="?step=fix" className="inline-flex min-h-11 items-center underline decoration-waste decoration-2 underline-offset-4">Test it again to confirm →</Link><Link to="?step=findings" className="inline-flex min-h-11 items-center underline decoration-waste decoration-2 underline-offset-4">Try a different leak →</Link></div></div>}
       {message && <p role="status" className="mt-4 text-[13px]">{message}</p>}{error && <p role="alert" className="mt-4 text-[13px]">{error}</p>}
       {manualPrompt && <div className="mt-4"><label htmlFor="handoff-prompt" className="text-[13px] font-medium">Handoff prompt</label><textarea id="handoff-prompt" readOnly value={manualPrompt} onFocus={event => event.currentTarget.select()} className="field mt-2 h-64 font-mono text-xs text-ink" /></div>}
     </section>

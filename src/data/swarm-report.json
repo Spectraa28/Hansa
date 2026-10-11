@@ -275,7 +275,64 @@
     ]
    }
   ],
-  "note": "per_pass is the mean cost of running every task once. Cost is LiteLLM-reported, not invoice-reconciled."
+  "note": "per_pass is the mean cost of running every task once. Cost is LiteLLM-reported, not invoice-reconciled.",
+  "xray": {
+   "runs": 12,
+   "model_calls": 80,
+   "calls_per_run": 6.7,
+   "models": {
+    "claude-sonnet-4.6": 80
+   },
+   "input": {
+    "chars": 263405,
+    "system_percent": 45.3,
+    "tool_schema_percent": 23.1,
+    "conversation_percent": 31.6,
+    "sent_before_percent": 58.8
+   },
+   "time": {
+    "model_percent": 77.0,
+    "outside_model_percent": 23.0,
+    "seconds_per_call": 2.19,
+    "slowest_call_seconds": 3.96
+   },
+   "handoff_calls": {
+    "count": 9,
+    "percent": 11.2,
+    "cost_usd": 0.039989
+   },
+   "duplicate_calls": {
+    "count": 0,
+    "cost_usd": 0.0
+   },
+   "cost_usd": 0.448708,
+   "prompt_caching_estimate": {
+    "saving_usd": 0.188175,
+    "saving_percent": 41.9,
+    "assumes": "A cached read costs a tenth of normal input and output tokens cost five times input. Providers also set a minimum cacheable size and charge more to write a cache entry."
+   },
+   "note": "Measured from request sizes and hashes over every recorded baseline run. Sizes are characters, not tokens.",
+   "readings": [
+    {
+     "area": "Context",
+     "headline": "59% of what the agent sends, it already sent on the call before.",
+     "detail": "The same opening messages go out again on every step. Prompt caching bills repeated input at a fraction of the price; a rough estimate is 42% off the bill.",
+     "strength": "medium"
+    },
+    {
+     "area": "Tools",
+     "headline": "Tool definitions are 23% of every request.",
+     "detail": "Each call ships the full description of every tool. Shorter descriptions, or only the tools a step can use, cut this directly.",
+     "strength": "medium"
+    },
+    {
+     "area": "Context",
+     "headline": "The system prompt is 45% of what is sent.",
+     "detail": "A long fixed prompt is paid for on every call. It is the first thing worth trimming or caching.",
+     "strength": "medium"
+    }
+   ]
+  }
  },
  "investigation": {
   "job_id": "c165415d2904427c927104873eac44f4",

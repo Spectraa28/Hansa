@@ -42,7 +42,7 @@ export default function Imports({ session }: { session: UseQueryResult<Session |
                     <span className={`chip ${item.status === 'ready' ? 'chip-ok' : item.status === 'failed' ? 'bg-ink text-paper' : 'bg-surface'}`}>{item.status}</span>
                   </div>
                   <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-2 font-mono text-[13px]">
-                    <div className="min-w-0"><dt className="sr-only">Branch</dt><dd className="mt-1 break-words font-mono [overflow-wrap:anywhere]">{item.branch}</dd></div>
+                    <div className="min-w-0"><dt className="sr-only">Branch</dt><dd className="mt-1 break-words font-mono [overflow-wrap:anywhere]">{item.branch}{item.folder ? ` · /${item.folder}` : ''}</dd></div>
                     <div><dt className="sr-only">Commit</dt><dd className="mt-1 font-mono" title={item.commit_sha}>{item.commit_sha.slice(0, 12)}</dd></div>
                     <div><dt className="sr-only">Imported</dt><dd className="mt-1"><time dateTime={new Date(item.created_at * 1000).toISOString()}>{new Date(item.created_at * 1000).toLocaleDateString()}</time></dd></div>
                   </dl>
