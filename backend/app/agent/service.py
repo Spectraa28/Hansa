@@ -9,6 +9,7 @@ import ast
 import asyncio
 import hashlib
 import json
+import math
 from pathlib import Path
 import tempfile
 import threading
@@ -22,7 +23,7 @@ from ..runner.service import MAX_ADAPTER
 from ..sessions import token_hash
 from .tools import SnapshotTools
 
-MAX_TURNS = 30
+MAX_TURNS = 40
 MAX_SMOKE_RUNS = 8
 RESULT_LIMIT = 6000
 JOB_LOCK = threading.Lock()
@@ -43,6 +44,10 @@ exist in the sandbox.
 addresses are refused.
 - stdout must contain only the final JSON value. Send everything the agent prints to stderr by redirecting \
 stdout while it runs. stdin is one JSON object; never prompt for input.
+- The gateway accepts standard Chat Completions message fields: role, content, name, tool_calls, tool_call_id.
+  Use this exact allowlist for outgoing API messages: SDK model dumps also include function_call, refusal,
+  audio and other fields, even when null. Preserve local history and the returned transcript. This is
+  transport glue. tool_choice and parallel_tool_calls ARE supported; preserve the repository's values.
 
 How you work:
 - Start from the confirmed entrypoint and follow it to the function that actually runs the agent. Search before \
@@ -80,6 +85,49 @@ TOOLS = [
             "task_description": {"type": "string", "description": "The fields a task accepts and what each means."}},
             "required": ["outcome", "summary"]}}},
 ]
+
+
+# The agent's own context is managed the way it would advise a target to manage one. AGENT_CONTEXT=naive
+# turns all of this off so the two modes can be measured against each other.
+COMPACT_CHARS = 90_000
+KEEP_RESULTS = 4
+ELIDED = "\n[Rest of this result was removed to save context. Call the tool again if you need it.]"
+CONTEXT_RULES = """
+
+CONTEXT BUDGET
+- Older tool results are cut to their first lines once your context grows large. Only your most recent results \
+stay in full.
+- When a result contains numbers, run IDs, or file and line facts you will need later, call note with them \
+before moving on. Notes are never removed.
+- Prefer targeted reads over broad ones, and do not re-read what your notes already cover.
+- You will be told when your turns or budget are nearly used. Save what you have and finish when told."""
+NOTE = {"type": "function", "function": {"name": "note", "description": "Keep facts you will need later: numbers, run IDs, file and line references. Notes are never removed from your context.",
+        "parameters": {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}}}
+
+
+def compact(messages):
+    """Cut older tool results to their opening lines once the transcript is large. Returns how many were cut."""
+    size = sum(len(message.get("content") or "") for message in messages)
+    if size <= COMPACT_CHARS:
+        return 0, size
+    cut = 0
+    for index in [i for i, message in enumerate(messages) if message["role"] == "tool"][:-KEEP_RESULTS]:
+        content = messages[index]["content"]
+        if len(content) > 600 and not content.endswith(ELIDED):
+            messages[index] = {**messages[index], "content": content[:300] + ELIDED}
+            cut += 1
+    return cut, sum(len(message.get("content") or "") for message in messages)
+
+
+def with_cache_points(messages):
+    """Mark the fixed prefix and the newest message so the provider bills repeated context at its cached rate."""
+    marked = list(messages)
+    for index in {0, len(marked) - 1}:
+        content = marked[index].get("content")
+        if isinstance(content, str) and content:
+            marked[index] = {**marked[index], "content": [{"type": "text", "text": content,
+                                                           "cache_control": {"type": "ephemeral"}}]}
+    return marked
 
 
 class AgentFailure(Exception):
@@ -147,15 +195,17 @@ class AgentService:
 
     # -- lifecycle ---------------------------------------------------------------------------
 
-    def start_onboarding(self, user_id, import_id):
-        return self.start(user_id, import_id, "onboarding")
+    def start_onboarding(self, user_id, import_id, max_spend_usd=1.5):
+        return self.start(user_id, import_id, "onboarding", max_spend_usd=max_spend_usd)
 
-    def start_investigation(self, user_id, import_id, baseline_id=None):
+    def start_investigation(self, user_id, import_id, baseline_id=None, max_spend_usd=1.5):
         from .investigation import completed_baseline
         baseline = completed_baseline(self, user_id, import_id, baseline_id)
-        return self.start(user_id, import_id, "investigation", baseline)
+        return self.start(user_id, import_id, "investigation", baseline, max_spend_usd)
 
-    def start(self, user_id, import_id, kind, baseline=None):
+    def start(self, user_id, import_id, kind, baseline=None, max_spend_usd=1.5):
+        if type(max_spend_usd) not in {int, float} or not math.isfinite(max_spend_usd) or not 0 < max_spend_usd <= 1.5:
+            raise ValueError("Agent stage spend threshold must be greater than zero and at most $1.50.")
         if not self.settings.litellm_base_url or not self.settings.litellm_api_key:
             raise HTTPException(503, "Model gateway is not configured.")
         self.runner.configuration(user_id, import_id)
@@ -167,6 +217,7 @@ class AgentService:
             with self.database.connect() as db:
                 self.owned(db, user_id, import_id)
                 initial = {"baseline_id": baseline["baseline_id"]} if baseline else {}
+                initial["max_spend_usd"] = max_spend_usd
                 db.execute("INSERT INTO agent_jobs VALUES (?,?,?,'running',?,?,?)", (job_id, import_id, kind, json.dumps(initial), now, now))
             thread = threading.Thread(target=self.guarded, args=(job_id, user_id, import_id, kind, baseline), daemon=True)
             self.threads[job_id] = thread
@@ -179,7 +230,8 @@ class AgentService:
     def guarded(self, job_id, user_id, import_id, kind="onboarding", baseline=None):
         key, steps, started_ms = None, [], int(time.time() * 1000)
         try:
-            key = self.gateway.mint_key("hansa-" + kind + "-" + job_id, max_calls=MAX_TURNS + 6, max_spend_usd=1.5,
+            budget = self.job(user_id, import_id, job_id)["result"]["max_spend_usd"]
+            key = self.gateway.mint_key("hansa-" + kind + "-" + job_id, max_calls=MAX_TURNS + 6, max_spend_usd=budget,
                                         expires_at=int(time.time()) + 1800)
             status, result = (self.onboard(job_id, user_id, import_id, key, steps) if kind == "onboarding" else
                               self.investigate(job_id, user_id, import_id, key, steps, baseline))
@@ -191,10 +243,11 @@ class AgentService:
         except Exception as exc:
             status, result = "failed", {"reason": "Unexpected controller error: " + type(exc).__name__}
         try:
+            # Keep partial findings and smoke accounting even when a later call fails.
+            saved = self.job(user_id, import_id, job_id)["result"]
+            result = {**saved, **result, "max_spend_usd": budget}
             if baseline:
-                # Findings already persisted during a failed investigation are still reviewable.
-                saved = self.job(user_id, import_id, job_id)["result"]
-                result = {**saved, **result, "baseline_id": baseline["baseline_id"]}
+                result["baseline_id"] = baseline["baseline_id"]
             if key:
                 with self.database.connect() as db:
                     db.execute("UPDATE gateway_keys SET revoked=1 WHERE key_hash=?", (token_hash(key),))
@@ -215,8 +268,9 @@ class AgentService:
     # -- model -------------------------------------------------------------------------------
 
     def complete(self, key, messages, tools=None):
-        body = {"model": self.settings.agent_model, "messages": messages, "tools": TOOLS if tools is None else tools,
-                "max_tokens": 4096, "temperature": 0}
+        managed = self.settings.agent_context == "managed"
+        body = {"model": self.settings.agent_model, "messages": with_cache_points(messages) if managed else messages,
+                "tools": TOOLS if tools is None else tools, "max_tokens": 4096, "temperature": 0}
         for attempt in range(3):
             response = asyncio.run(self.gateway.forward(key, body))
             if response.status_code == 200:
@@ -250,11 +304,25 @@ class AgentService:
             self.event(job_id, "build", {"ok": True, "build_id": build["build_id"],
                                          "dependencies": len(build["resolved_dependencies"] or build["dependencies"])})
             state = {"draft": None, "passing": None, "smoke_runs": 0, "target_cost_usd": 0.0, "target_calls": 0,
-                     "example_task": None, "finish": None}
+                     "example_task": None, "finish": None, "key": key,
+                     "max_spend_usd": self.job(user_id, import_id, job_id)["result"]["max_spend_usd"]}
             brief = {"repository_files": tools.list_files(".")["entries"],
                      "confirmed_configuration": {name: config["configuration"].get(name) for name in
                          ("entrypoint", "python_version", "dependency_manifests", "model_provider", "model_id", "approved_tools")},
                      "smoke_runs_available": MAX_SMOKE_RUNS}
+            from ..contracts.service import ContractService
+            contract = ContractService(self.database, self.runner.inspection).get(user_id, import_id)
+            if contract.get("contract") and not contract["stale"]:
+                brief["development_contract"] = contract["contract"]
+                brief["adapter_requirements"] = "Support every development task's input and required output fields. For conversations, preserve the active agent, full history and context between user turns, execute real tools and return their actual ordered results. Do not use single-turn eval agents or invent outcomes. Smoke test a complete conversation."
+                brief["adapter_requirements"] += " When closure and last service action are separate output fields, track them independently: case_resolved changes closed, without replacing the preceding action/result."
+            with self.database.connect() as db:
+                previous = db.execute("""SELECT e.data FROM agent_events e JOIN agent_jobs j ON j.id=e.job_id
+                    WHERE j.import_id=? AND j.kind='onboarding' AND j.status='failed' AND e.kind='adapter'
+                    ORDER BY e.id DESC LIMIT 1""", (import_id,)).fetchone()
+            if previous:
+                brief["previous_failed_draft"] = json.loads(previous["data"])["code"]
+                brief["recovery_guidance"] = "Review this failed draft against source before using it. Correct transport by allowlisting message fields and restoring every original API parameter, then prove the revised adapter. Do not repeat guesses from the prior attempt."
             messages = [{"role": "system", "content": SYSTEM},
                         {"role": "user", "content": "Onboard this repository.\n" + json.dumps(brief, indent=1)}]
             self.loop(job_id, key, messages, steps, state,
@@ -275,12 +343,38 @@ class AgentService:
             return "ready", {"adapter_sha256": sha, "example_task": example, "snapshot_digest": digest, **result}
 
     def loop(self, job_id, key, messages, steps, state, dispatch, tools=None):
-        idle = 0
+        idle, warned = 0, False
         deadline = time.monotonic() + 1800
-        for _ in range(MAX_TURNS):
+        managed = self.settings.agent_context == "managed"
+        tools = TOOLS if tools is None else tools
+        if managed:
+            tools = [*tools, NOTE]
+            messages[0] = {**messages[0], "content": messages[0]["content"] + CONTEXT_RULES}
+        with self.database.connect() as db:
+            budget = db.execute("SELECT max_spend_usd FROM gateway_keys WHERE key_hash=?", (token_hash(key),)).fetchone()[0]
+        self.event(job_id, "context", {"mode": self.settings.agent_context})
+        for turn in range(MAX_TURNS):
             if time.monotonic() >= deadline:
                 raise AgentFailure("Agent job exceeded its 30-minute deadline.")
-            message = self.complete(key, messages) if tools is None else self.complete(key, messages, tools)
+            usage = self.gateway.summarize_key(key)
+            spent = usage["estimated_cost_usd"] or 0
+            if managed:
+                cut, size = compact(messages)
+                if cut:
+                    self.event(job_id, "context", {"compacted_results": cut, "characters_after": size})
+                # One warning while there is still room to write up, instead of a hard stop mid-thought.
+                if not warned and (MAX_TURNS - turn <= 6 or (budget and spent >= 0.7 * budget)):
+                    warned = True
+                    messages.append({"role": "user", "content":
+                        f"You have {MAX_TURNS - turn} turns left and have used ${spent:.2f} of ${budget or 0:.2f}. "
+                        "Stop exploring. Save what you have established and call finish."})
+                    self.event(job_id, "context", {"warning": "turns or budget nearly used", "turns_left": MAX_TURNS - turn,
+                                                   "spent_usd": round(spent, 4)})
+            if usage["unknown_cost_calls"]:
+                raise AgentFailure("Unknown agent cost; no further calls admitted.")
+            if "max_spend_usd" in state and (usage["estimated_cost_usd"] or 0) + state["target_cost_usd"] >= state["max_spend_usd"]:
+                raise AgentFailure("Onboarding stage budget exhausted; no further calls admitted.")
+            message = self.complete(key, messages, tools)
             messages.append(message)
             if message["content"].strip():
                 self.event(job_id, "note", {"text": message["content"].strip()[:2000]})
@@ -293,12 +387,16 @@ class AgentService:
             idle = 0
             for call in message["tool_calls"]:
                 began = int(time.time() * 1000)
-                outcome = dispatch(call)
+                if managed and call["function"]["name"] == "note":
+                    self.event(job_id, "ledger", {"text": call["function"]["arguments"][:2000]})
+                    outcome = {"saved": True}
+                else:
+                    outcome = dispatch(call)
                 described = dict(outcome) if isinstance(outcome, dict) else {"result": outcome}
                 steps.append({"name": call["function"]["name"], "input": call["function"]["arguments"],
                               "output": clip(described, 1500), "ok": "error" not in described,
                               "start_ms": began, "end_ms": int(time.time() * 1000), "trace_id": described.get("trace_id")})
-                messages.append({"role": "tool", "tool_call_id": call["id"], "content": clip(outcome, 16000 if tools else RESULT_LIMIT)})
+                messages.append({"role": "tool", "tool_call_id": call["id"], "content": clip(outcome, state.get("result_limit", RESULT_LIMIT))})
                 if state["finish"]:
                     return
         raise AgentFailure(f"The agent did not finish within {MAX_TURNS} turns.")
@@ -316,7 +414,8 @@ class AgentService:
                                            "commit_sha": config["commit_sha"], "model": self.settings.agent_model})
             messages = [{"role": "system", "content": INVESTIGATE},
                         {"role": "user", "content": "Investigate this completed baseline. The tools are already bound to it. "
-                         "First call read_baseline with empty arguments {}. Then inspect concentrated runs and their code. No changes or reruns."}]
+                         "First call read_baseline with empty arguments {}. Then inspect concentrated runs and their code. No changes or reruns. "
+                         "Save each finding with save_finding as soon as its run and source evidence is established; do not leave them all to the end."}]
             self.loop(job_id, key, messages, steps, tools.state, tools.dispatch,
                       toolset(TOOLS[:3], [task["task_id"] for task in baseline["tasks"]]))
             return "ready", {**tools.result(), **tools.state["finish"], "snapshot_digest": digest}
@@ -369,10 +468,14 @@ class AgentService:
         if not isinstance(task, dict):
             raise ValueError("The task must be a JSON object.")
         bounded_data(task, 16384)
+        agent_usage = self.gateway.summarize_key(state["key"])
+        remaining = state["max_spend_usd"] - state["target_cost_usd"] - (agent_usage["estimated_cost_usd"] or 0)
+        if agent_usage["unknown_cost_calls"] or remaining <= 0:
+            raise AgentFailure("Onboarding stage budget exhausted or cost unknown; no smoke run admitted.")
         state["smoke_runs"] += 1
         try:
             result = self.runner.run(user_id, import_id, build["build_id"], task, timeout_seconds=150, max_calls=30,
-                                     max_spend_usd=0.25, memory_mb=1024, pids=128, adapter_code=state["draft"],
+                                     max_spend_usd=min(0.25, remaining), memory_mb=1024, pids=128, adapter_code=state["draft"],
                                      internet=self.settings.runner_internet,
                                      labels={"kind": "smoke", "job_id": job_id})
         except HTTPException as exc:
@@ -380,6 +483,13 @@ class AgentService:
         usage, egress = result["gateway"], result.get("egress") or {}
         state["target_calls"] += usage["calls"]
         state["target_cost_usd"] += usage["estimated_cost_usd"] or 0
+        saved = self.job(user_id, import_id, job_id)["result"]
+        self.update(job_id, "running", {**saved, "smoke_runs": state["smoke_runs"],
+                    "target_usage": {"calls": state["target_calls"], "estimated_cost_usd": state["target_cost_usd"],
+                                     "unknown_cost_calls": usage.get("unknown_cost_calls", 0)}})
+        with self.database.connect() as db:
+            db.execute("UPDATE gateway_keys SET max_spend_usd=? WHERE key_hash=?",
+                       (max(0, state["max_spend_usd"] - state["target_cost_usd"]), token_hash(state["key"])))
         if result["stop_reason"] == "completed":
             state["passing"], state["example_task"] = state["draft"], task
         summary = {"run": state["smoke_runs"], "of": MAX_SMOKE_RUNS, "stop_reason": result["stop_reason"],
@@ -388,4 +498,6 @@ class AgentService:
                    "external_hosts": sorted(egress.get("hosts", {})), "external_denied": egress.get("denied", 0),
                    "trace_id": (result.get("trace") or {}).get("trace_id")}
         self.event(job_id, "smoke", {**summary, "task": task, "run_id": result["run_id"]})
+        if usage.get("unknown_cost_calls"):
+            raise AgentFailure("Unknown smoke cost; no further calls admitted.")
         return {**summary, "output": clip(result["output"], 2500), "stderr_tail": result["stderr_tail"][-3000:]}

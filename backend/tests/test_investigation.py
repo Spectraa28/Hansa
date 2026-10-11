@@ -5,7 +5,7 @@ import json
 from fastapi import HTTPException
 import pytest
 
-from backend.app.agent.investigation import InvestigationTools, toolset
+from backend.app.agent.investigation import CATEGORIES, InvestigationTools, SYSTEM, toolset
 from backend.app.agent.service import TOOLS, JOB_LOCK
 from backend.app.runner.baseline import measured
 from backend.app.sessions import token_hash
@@ -64,6 +64,13 @@ def reads():
             call("read_file", path="agent.py", start_line=1, max_lines=10)]
 
 
+
+def coverage(finding_ids=None):
+    return [{"category": category, "status": "finding" if category == "Context" and finding_ids else "checked, nothing found",
+             "observation": "Scripted test inspected the measured calls and three source lines.",
+             "run_ids": ["run-1"], "source": [{"path": "agent.py", "start_line": 1, "end_line": 3}],
+             "finding_ids": finding_ids if category == "Context" and finding_ids else []} for category in CATEGORIES]
+
 def test_investigation_uses_shared_loop_saves_ledger_and_code_evidence_with_missing_trace(investigation, imported_client, monkeypatch):
     state, tracer, owner, imported, baseline, root = investigation
     original = tracer.client.call
@@ -73,7 +80,7 @@ def test_investigation_uses_shared_loop_saves_ledger_and_code_evidence_with_miss
         return original(tool, args)
     tracer.client.call = client
     seen = scripted(state.agent, monkeypatch, [call("read_file", path="agent.py"), call("save_finding", **finding()),
-        *reads(), call("save_finding", **finding()), call("finish", summary="One small, untested instruction compression hypothesis, with behaviour risk.")])
+        *reads(), call("save_finding", **finding()), call("finish", coverage=coverage(["1"]), summary="One small, untested instruction compression hypothesis, with behaviour risk.")])
     client, _, headers = imported_client
     url = f"/github/imports/{imported}/investigation"
     assert client.post(url, json={}).status_code == 403
@@ -84,6 +91,8 @@ def test_investigation_uses_shared_loop_saves_ledger_and_code_evidence_with_miss
     saved = job["result"]["findings"][0]
     assert job["result"]["baseline_evidence"]["totals"]["cost_usd"] == 0.003
     assert job["result"]["source_evidence"][0]["lines_read"]
+    assert len(job["result"]["coverage"]) == 8
+    assert job["result"]["coverage"][0]["finding_ids"] == ["1"]
     run = saved["evidence"]["runs"][0]
     assert run["summary"]["cost_usd"] == 0.003 and run["summary"]["latency_ms"] == 1400
     assert run["calls"][1]["repeated_chars"] == 408 and run["gaps"][0]["gap_ms"] == 700
@@ -114,7 +123,7 @@ def test_investigation_uses_shared_loop_saves_ledger_and_code_evidence_with_miss
 def test_investigation_can_conclude_nothing_is_worth_changing(investigation, monkeypatch):
     state, _, owner, imported, _, _ = investigation
     scripted(state.agent, monkeypatch, [call("finish", summary="No changes needed."), *reads(),
-        call("finish", summary="The live fetch is required and the measured cost is too small to justify changing behaviour.")])
+        call("finish", coverage=coverage(), summary="The live fetch is required and the measured cost is too small to justify changing behaviour.")])
     job = finished(state.agent, owner, imported, state.agent.start_investigation(owner, imported))
     assert job["status"] == "ready" and job["result"]["findings"] == [] and job["result"]["nothing_worth_changing"]
 
@@ -205,3 +214,30 @@ def test_legacy_job_migration_preserves_jobs_events_and_cascade(investigation):
     with state.database.connect() as db:
         assert db.execute("SELECT count(*) FROM agent_jobs").fetchone()[0] == 0
         assert db.execute("SELECT count(*) FROM agent_events").fetchone()[0] == 0
+
+
+def test_finish_requires_complete_observed_coverage(investigation):
+    state, _, owner, imported, baseline, root = investigation
+    with state.database.connect() as db:
+        db.execute("INSERT INTO agent_jobs VALUES ('coverage',?,'investigation','running','{}',1,1)", (imported,))
+    tools = InvestigationTools(state.agent, "coverage", owner, imported, baseline, root)
+    for message in reads():
+        assert not tools.dispatch(message["tool_calls"][0]).get("error")
+    def finish(items):
+        return tools.dispatch(call("finish", summary="No change justified in these scripted calls.", coverage=items)["tool_calls"][0])
+    assert "error" in finish([])
+    items = coverage()
+    items[-1]["category"] = "Context"
+    assert "exactly once" in finish(items)["error"]
+    items = coverage()
+    items[0]["run_ids"] = ["unread"]
+    assert "already-read" in finish(items)["error"]
+    items = coverage()
+    items[0]["source"][0]["end_line"] = 100
+    assert "already read" in finish(items)["error"]
+    items = coverage(["missing"])
+    assert "valid saved" in finish(items)["error"]
+    assert tools.coverage == [] and tools.state["finish"] is None
+    assert finish(coverage())["accepted"]
+    assert len(state.agent.job(owner, imported, "coverage")["result"]["coverage"]) == 8
+    assert "WHAT TO LOOK FOR" in SYSTEM and "JUDGEMENT" in SYSTEM

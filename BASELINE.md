@@ -51,6 +51,27 @@ Validation: the Docker-enabled full suite passed 254 tests in 97.04 seconds; fin
 
 ## Swarm airline baseline
 
+### Full conversation development contract
+
+[`examples/contracts/swarm_airline.json`](examples/contracts/swarm_airline.json) defines six sequential conversations: refund cancellation, flight credits, baggage recovery, baggage-to-cancellation intent change, a different-flight escalation, and a change-flight escalation where seat/fare verification is unavailable. Each checks the exact ordered executed function sequence, terminal action/result and closure flag; full transcripts remain available for human policy review. Ordinary case inputs contain only user turns. Scoring rules remain in the controller. The upstream tools themselves return canned service results; this is real Swarm/model orchestration over demo service functions, not real airline operations or protected evaluation.
+
+The onboarding agent receives this contract and writes the multi-turn adapter. Its stored adapter must preserve active-agent, history and context state between turns, execute the imported tools and derive results from actual tool messages. It must not use the legacy `max_turns=1` adapter below. Review the stored adapter before baseline execution. The UI's per-import baseline model defaults to `claude-sonnet-4.6`; existing saved choices are preserved. Hansa's `AGENT_MODEL` remains separate. Baseline reports freeze and record the selected target model.
+
+The proof CLI uses the running API/controller, creating and revoking a temporary owner session locally. It refuses fixtures, other repositories and unreviewed SHAs. The six-task contract uses two repetitions, up to 160 calls, 300,000 tokens and 1,800 seconds across the baseline, with a $2 soft recorded-spend threshold. Onboarding and investigation each use $1 thresholds. A $1 reserve is left beneath the user's $5 total; this headroom is not a hard billing guarantee. Unknown costs prevent advancing, stage IDs and partial reports persist, and a started stage cannot be paid-rerun automatically. An explicit `--retry` permits a failed onboarding or investigation attempt; every prior report and its cost remains charged to the same $5 pipeline.
+
+```sh
+uv run python -m scripts.prove_airline_conversations IMPORT_ID --stage prepare
+uv run python -m scripts.prove_airline_conversations IMPORT_ID --stage onboarding
+# Review the stored adapter and smoke transcript before continuing.
+uv run python -m scripts.prove_airline_conversations IMPORT_ID --stage baseline
+uv run python -m scripts.prove_airline_conversations IMPORT_ID --stage investigation
+uv run python -m scripts.prove_airline_conversations IMPORT_ID --stage report
+```
+
+Private evidence is saved to ignored `var/airline-conversations-IMPORT_ID.json`. `report` refreshes job results and costs without model calls. Passing automatic checks still leaves the declared policy reviews pending.
+
+### Legacy upstream single-turn eval
+
 Status: adapter, binary dependency resolution, persisted per-task metrics and the read endpoint are implemented. No live Swarm baseline has been recorded yet: a real owner-scoped GitHub fork import is required. The controller never executes imported code on the host.
 
 ## Fit and evaluation scope

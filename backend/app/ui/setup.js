@@ -150,7 +150,7 @@ function render(result) {
   }
   options('config-litellm_model', result.litellm_models, m => m, m => m);
   $('config-litellm_model').firstChild.textContent = 'Choose a model';
-  $('config-litellm_model').value = confirmed?.litellm_model || '';
+  $('config-litellm_model').value = confirmed?.litellm_model || 'claude-sonnet-4.6';
   modelRouting();
   const manifests = [...new Set(scan.findings.filter(f => f.kind === 'dependency_manifest').map(f => f.value))];
   checkboxes('manifests', manifests, confirmed?.dependency_manifests || (manifests.length === 1 ? manifests : []));
@@ -162,7 +162,7 @@ function render(result) {
 function modelRouting() {
   const selected = $('config-litellm_model').value;
   $('model-routing').textContent = selected
-    ? `All model calls will use ${selected}. Reports record both the requested model and ${selected}. Execution is not enabled.`
+    ? `Target agent calls will use ${selected}. Reports record both the requested model and ${selected}. Saving this choice does not start a run.`
     : 'Choose a model to see how calls will be routed.';
 }
 action('config-litellm_model', 'change', modelRouting);

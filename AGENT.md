@@ -1,6 +1,6 @@
 # Hansa's agent: onboarding and investigation
 
-Status: onboarding and read-only baseline investigation are implemented. Onboarding was verified on October 11 against a local fixture with real model calls and real containers. Neither has been verified against a real GitHub import. Source editing, candidate execution and comparison are not built.
+Status: onboarding and read-only baseline investigation are implemented. On October 11, onboarding wrote and proved a full conversation adapter against the real fixed-SHA `Spectraa28/swarm` GitHub import. The first attempt exhausted its soft threshold; the second succeeded. Its smoke transcript contains a target policy failure, so runnable does not mean correct. Source editing, candidate execution and comparison are not built.
 
 ## What it does
 
@@ -15,13 +15,19 @@ The model decides what to read, what to write and how to respond to a failed run
 | `run_smoke` | Runs the draft in the isolated runner with one task object. Returns the stop reason, exit code, parsed output, the tail of stderr, model calls, cost and external hosts. At most 8 per job. |
 | `finish` | `ready` is accepted only when the current draft has a completed smoke run; otherwise the agent must run one or finish as `blocked` with a reason. |
 
-A job is limited to 30 model turns. The agent's model calls go through the gateway on their own key (`hansa-onboarding-<job>`, at most 36 calls and a $1.50 recorded-spend threshold), so its cost is reported separately from the target's. Each smoke run uses the runner's normal scoped key for the target. Both keys are revoked when the job ends. One agent job runs at a time.
+A job is limited to 30 model turns. The agent's model calls go through the gateway on their own key (`hansa-onboarding-<job>`, at most 36 calls). Both job endpoints accept optional `max_spend_usd`, greater than zero and at most $1.50 (default $1.50). Onboarding shares that recorded-spend threshold with its smoke runs: before a smoke run it subtracts agent and prior smoke spend, then reduces the agent key's remaining allowance. Unknown agent or smoke costs stop further work; partial smoke accounting survives a failed job. This is soft post-call accounting and can overshoot on the last admitted call. Each smoke run still has its own $0.25 maximum threshold. Keys are revoked when the job ends. One agent job runs at a time.
+
+A failed onboarding job retains every draft in its events. A later job receives the latest failed draft for review against the current source; it still must write and smoke-test its own revision. The gateway now identifies unsupported SDK message fields without echoing request data.
+
+When a current development contract exists, onboarding receives its task shapes and output requirements before writing the adapter. Conversation adapters must retain active agents, history and context across sequential user turns and report real executed tools. Onboarding chooses and writes the glue; the controller does not substitute the legacy single-turn airline adapter.
 
 Investigation shares this loop, metered gateway path, 4096-output-token request limit, retry policy, key expiry (30 minutes), event list, job storage, and process-local lock with onboarding and baselines. Its key is `hansa-investigation-<job>` with the same 36-call/$1.50 soft admission limits. It does not build dependencies, execute the target, or write an adapter. Keys are revoked and the lock remains held until usage, trace export, and final events are saved.
 
 ## Investigation
 
-`POST /github/imports/{id}/investigation` accepts `{}` for the latest baseline or `{"baseline_id":"..."}` for a particular report. It requires a completed, owner-scoped baseline, confirmed current configuration, and the same fixed SHA/source digest. A stale report fails before model calls. It returns `202`; status, findings, usage, and events use the existing `agent-jobs` endpoints. Onboarding remains unchanged at its endpoint.
+`POST /github/imports/{id}/investigation` accepts `{}` for the latest baseline or `{"baseline_id":"...","max_spend_usd":1.0}` for a particular report and lower threshold. It requires a completed, owner-scoped baseline, confirmed current configuration, and the same fixed SHA/source digest. A stale report fails before model calls. It returns `202`; status, findings, usage, and events use the existing `agent-jobs` endpoints.
+
+The user's long investigation system prompt lives in [`backend/app/agent/investigation_prompt.md`](backend/app/agent/investigation_prompt.md) and is loaded unchanged at startup. Finishing now requires all eight categories exactly once: Context, Memory, Orchestration, Model choice, Output, Tools, Latency and Wasted work. Every coverage entry records `finding` or `checked, nothing found`, an observation, already-read run IDs and source lines. Finding entries reference saved finding IDs; every saved finding must be covered. The controller validates provenance, not the truth or exhaustiveness of a negative conclusion. Coverage is persisted and emits a `coverage` event. Historical investigations are not retroactively marked covered.
 
 The agent starts with per-task numbers, then inspects the expensive runs and reads the responsible code. Its read-only tools are:
 
@@ -32,7 +38,7 @@ The agent starts with per-task numbers, then inspects the expensive runs and rea
 | `read_trace(run_id)` | One owner-scoped Neatlogs readback/recheck; queued/unavailable/error state is returned as evidence and does not stop investigation. |
 | `list_files`, `search_code`, `read_file` | The same bounded snapshot tools as onboarding. Source reads are refused until baseline numbers have been inspected. |
 | `save_finding` | Stores one untested proposal, with verified provenance. At most ten findings, each at most 128 KiB. |
-| `finish(summary)` | Saves a conclusion, including `nothing_worth_changing: true` if no findings were saved. It requires inspected run numbers, source lines, and an explanation. |
+| `finish(summary, coverage)` | Saves a conclusion and complete evidence-backed category coverage, including `nothing_worth_changing: true` if no findings were saved. |
 
 Each finding contains `waste`, `evidence`, `estimated_saving` with a calculation/assumptions, `behaviour_risk`, and `proposed_change`. The controller requires cited run IDs to belong to this baseline and to have been inspected, requires an attempted trace read for each, and requires every cited source line to have been returned by a source read/search. It attaches the ledger calls, timings, gaps, outside connections, run/trace IDs, trace availability/error, and source file/line/hash itself. Estimates are bounded by known totals over the cited runs; unknown measurements cannot become numeric savings. Findings persist immediately and produce `finding` events, so a later job failure retains already-saved evidence.
 
@@ -97,3 +103,11 @@ A real `claude-haiku` investigation of the saved `web_lookup` baseline finished 
 The final investigation used 13 model calls, 91,849 input and 2,568 output tokens, and $0.1151579; its persisted 34 events contain `started`, ten `note`, 22 `tool`, and `finished`, without tool errors. Earlier validation attempts remain saved: one failed after invalid task IDs and idle turns; another finished but its narrative confused repeated context and rounded totals. Tool validation/definitions were corrected before the final run. All three paid attempts cost $0.4260751. Private ignored proof files retain the results and complete events; final proof is `var/investigation-proof.json`.
 
 The two live-page Neatlogs IDs remained queued with readback errors `conflict` and `not_found`. The investigation's own trace export failed with HTTP 403 even after the existing content fallbacks, so it has no trace ID. Its job, measurements, source evidence and events remain in our database. This verifies operation without Neatlogs readback, not successful trace confirmation or compatibility with a third-party agent.
+
+### Swarm conversation onboarding, October 11
+
+The real GitHub import at `6af0b4caf37dca4526dfd98e9fbd8ce36e7eeb22` used `claude-sonnet-4.6` for both Hansa and target calls. Attempt `4f6c0316a9814aa19467c4d1e9e206c5` failed at the shared $1 threshold: 18 agent calls ($1.0730478) and four failed target smoke calls ($0.0158268), total $1.0888746. The final model call overshot the soft threshold. The gateway rejected SDK metadata after the first handoff; overly broad errors led the agent to guess at unrelated parameters.
+
+After actionable message-field errors, an explicit allowlist/preserved-parameter instruction, and failed-draft recovery, attempt `4df0cf667b7b4f72a763279aaf2b18a7` succeeded. It used nine agent calls, 126,387 input and 3,980 output tokens ($0.4827471), plus a seven-call full-conversation smoke ($0.0429429). Combined onboarding cost, including failure, was $1.6145646. Adapter SHA-256: `97adabe7c7d502f5f2e699da6fbe8d22719d719a69eacd28a17bd82b2b53aa6b`. Its source review confirmed original prompts/tools/model names and `tool_choice`/`parallel_tool_calls` were retained, history/active agents persisted between turns, and function/outcome fields came from real executed tool messages.
+
+The accepted smoke escalated a refund request after inventing a different flight, then closed it. That is a target correctness failure, not an invocation failure or passing baseline. Hansa trace export returned Neatlogs HTTP 403; costs and events remain in the local database. All **270 Docker-enabled tests passed in 101.19 seconds** after these changes.

@@ -35,12 +35,15 @@ class Settings:
     litellm_base_url: str = ""
     runner_internet: bool = True
     agent_model: str = "claude-sonnet-4.6"
+    agent_context: str = "managed"
     neatlogs_mcp_url: str = "https://ingest.neatlogs.com/mcp"
     neatlogs_api_key: str = field(default="", repr=False)
     trace_content: bool = True
     litellm_api_key: str = field(default="", repr=False)
 
     def __post_init__(self):
+        if self.agent_context not in {"managed", "naive"}:
+            raise ValueError("AGENT_CONTEXT must be managed or naive.")
         if not self.neatlogs_mcp_url.startswith("https://"):
             raise ValueError("NEATLOGS_MCP_URL must be HTTPS.")
         if self.litellm_base_url:
@@ -123,6 +126,7 @@ class Settings:
             litellm_base_url=config("LITELLM_BASE_URL", default="").rstrip("/"),
             runner_internet=config("RUNNER_INTERNET", cast=bool, default=True),
             agent_model=config("AGENT_MODEL", default="claude-sonnet-4.6"),
+            agent_context=config("AGENT_CONTEXT", default="managed"),
             neatlogs_mcp_url=config("NEATLOGS_MCP_URL", default="https://ingest.neatlogs.com/mcp"),
             neatlogs_api_key=config("NEATLOGS_API_KEY", default=""),
             trace_content=config("TRACE_CONTENT", cast=bool, default=True),

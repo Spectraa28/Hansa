@@ -146,13 +146,13 @@ class GatewayService:
             raise HTTPException(401, "Invalid or expired gateway key.")
         limited = key["max_spend_usd"] is not None
         if limited:
+            if any(set(message) - {"role", "content", "name", "tool_calls", "tool_call_id"}
+                   or not text_content(message.get("content")) for message in body["messages"]):
+                raise HTTPException(400, "Spend-limited messages support only role, content, name, tool_calls, tool_call_id and text content. Remove ALL other SDK message fields; null fields are still unsupported.")
             if (set(body) - {"model", "messages", "stream", "max_tokens", "max_completion_tokens",
                         "temperature", "top_p", "n", "stop", "seed", "presence_penalty", "frequency_penalty",
                         "tools", "tool_choice", "parallel_tool_calls", "response_format", "user",
                         "logprobs", "top_logprobs", "logit_bias", "store", "metadata"}
-                    or any(set(message) - {"role", "content", "name", "tool_calls", "tool_call_id"}
-                           or not text_content(message.get("content"))
-                           for message in body["messages"])
                     or not isinstance(body.get("tools", []), list)
                     or any(not isinstance(tool, dict) or tool.get("type") != "function"
                            for tool in body.get("tools", []))):

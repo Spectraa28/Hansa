@@ -32,7 +32,7 @@ def agent(configured_runner, monkeypatch):
 
 def script(service, monkeypatch, messages):
     queue, seen = list(messages), []
-    def complete(key, history):
+    def complete(key, history, tools=None):
         seen.append(json.loads(json.dumps(history)))
         return queue.pop(0)
     monkeypatch.setattr(service, "complete", complete)
@@ -186,3 +186,83 @@ def test_runner_adapter_modes_are_validated(configured_runner, tmp_path):
     with pytest.raises(HTTPException) as exc:
         state.runner.run(owner, imported, "build", {}, adapter="stored")
     assert exc.value.status_code == 409 and "onboarding" in exc.value.detail
+
+
+def test_onboarding_budget_includes_smoke_and_retains_failed_accounting(agent, monkeypatch):
+    state, service, owner, imported = agent
+    script(service, monkeypatch, [call("write_adapter", code=GOOD), call("run_smoke", task={"question": "hi"})])
+    monkeypatch.setattr(state.runner, "run", lambda *args, **kwargs: {
+        "run_id": "budget-run", "stop_reason": "completed", "exit_code": 0, "output": {"ok": True},
+        "stderr_tail": "", "wall_time_seconds": 1,
+        "gateway": {"calls": 1, "estimated_cost_usd": 0.02, "unknown_cost_calls": 0}})
+    job = finished(service, owner, imported, service.start_onboarding(owner, imported, max_spend_usd=0.01))
+    assert job["status"] == "failed" and "budget exhausted" in job["result"]["reason"]
+    assert job["result"]["target_usage"]["estimated_cost_usd"] == 0.02
+    with state.database.connect() as db:
+        assert db.execute("SELECT max_spend_usd FROM gateway_keys").fetchone()[0] == 0
+    for invalid in (0, -1, float("nan"), float("inf"), 2, True):
+        with pytest.raises(ValueError):
+            service.start_onboarding(owner, imported, max_spend_usd=invalid)
+
+
+def test_failed_draft_is_reviewable_input_for_new_onboarding(agent, monkeypatch):
+    state, service, owner, imported = agent
+    with state.database.connect() as db:
+        db.execute("INSERT INTO agent_jobs VALUES ('prior',?,'onboarding','failed','{}',1,1)", (imported,))
+    service.event('prior', 'adapter', {'code': GOOD, 'lines': 3})
+    seen = script(service, monkeypatch, [call('finish', outcome='blocked', summary='Review stopped; no imported code executed in this test.')])
+    job = finished(service, owner, imported, service.start_onboarding(owner, imported))
+    assert job['status'] == 'blocked'
+    brief = json.loads(seen[0][1]['content'].split('\n', 1)[1])
+    assert brief['previous_failed_draft'] == GOOD
+    assert 'restoring every original API parameter' in brief['recovery_guidance']
+    with pytest.raises(HTTPException):
+        service.adapter(owner, imported)
+
+
+def test_context_is_compacted_once_large_and_recent_results_stay_whole():
+    messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "go"}]
+    for index in range(8):
+        messages.append({"role": "assistant", "content": "", "tool_calls": [{"id": f"c{index}"}]})
+        messages.append({"role": "tool", "tool_call_id": f"c{index}", "content": f"result {index} " + "x" * 20000})
+    assert agent_service.compact(messages[:6]) == (0, 40021)
+    cut, size = agent_service.compact(messages)
+    assert cut == 4 and size < 90000
+    results = [message["content"] for message in messages if message["role"] == "tool"]
+    assert all(text.endswith(agent_service.ELIDED) and text.startswith("result") and len(text) < 500 for text in results[:4])
+    assert all(len(text) > 20000 for text in results[4:])
+    # Already-cut results are not cut again, so the cached prefix stays stable.
+    assert agent_service.compact(messages)[0] == 0
+
+
+def test_cache_points_mark_only_the_prefix_and_newest_message_without_changing_history():
+    messages = [{"role": "system", "content": "rules"}, {"role": "user", "content": "go"},
+                {"role": "assistant", "content": "", "tool_calls": [{"id": "c"}]}, {"role": "tool", "tool_call_id": "c", "content": "out"}]
+    marked = agent_service.with_cache_points(messages)
+    assert marked[0]["content"] == [{"type": "text", "text": "rules", "cache_control": {"type": "ephemeral"}}]
+    assert marked[3]["content"][0]["cache_control"] == {"type": "ephemeral"} and marked[3]["tool_call_id"] == "c"
+    assert marked[1] == messages[1] and marked[2] == messages[2]
+    assert all(isinstance(message["content"], str) for message in messages)
+
+
+def test_managed_context_adds_notes_and_warns_before_the_turn_limit(agent, monkeypatch):
+    state, service, owner, imported = agent
+    monkeypatch.setattr(agent_service, "MAX_TURNS", 8)
+    seen = script(service, monkeypatch, [call("note", text="core.py:140 re-sends history"), call("list_files"), call("list_files"),
+                                         call("finish", outcome="blocked", summary="Stopped when told the budget was nearly used.")])
+    job = finished(service, owner, imported, service.start_onboarding(owner, imported))
+    assert job["status"] == "blocked"
+    events = service.events(owner, imported, job["job_id"])["events"]
+    assert [e["data"] for e in events if e["kind"] == "ledger"] == [{"text": json.dumps({"text": "core.py:140 re-sends history"})}]
+    assert any(e["kind"] == "context" and e["data"].get("warning") for e in events)
+    assert "CONTEXT BUDGET" in seen[0][0]["content"]
+    # The warning arrives as a user message once, while turns remain.
+    assert sum("turns left" in m.get("content", "") for m in seen[-1] if m["role"] == "user") == 1
+
+
+def test_naive_context_mode_sends_the_transcript_unchanged(agent, monkeypatch):
+    state, service, owner, imported = agent
+    service.settings = dataclasses.replace(service.settings, agent_context="naive")
+    seen = script(service, monkeypatch, [call("finish", outcome="blocked", summary="Nothing to do in this test.")])
+    job = finished(service, owner, imported, service.start_onboarding(owner, imported))
+    assert job["status"] == "blocked" and "CONTEXT BUDGET" not in seen[0][0]["content"]

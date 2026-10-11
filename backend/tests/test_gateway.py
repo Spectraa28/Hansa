@@ -239,7 +239,8 @@ def test_unbounded_spend_request_rejected(gateway, changes):
 
 def test_local_function_tools_pass_through(gateway):
     client, service, key, state = gateway
-    body = {**BODY, "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
+    body = {**BODY, "parallel_tool_calls": False, "tool_choice": "auto",
+            "tools": [{"type": "function", "function": {"name": "lookup", "parameters": {"type": "object"}}}],
             "messages": [{"role": "assistant", "content": None, "tool_calls": [
                 {"id": "call_1", "type": "function", "function": {"name": "lookup", "arguments": "{}"}}]},
                 {"role": "tool", "tool_call_id": "call_1", "content": "found"}]}
@@ -640,3 +641,11 @@ def test_fixed_model_and_map_are_mutually_exclusive(gateway):
         service.mint_key('invalid', max_calls=1, max_spend_usd=1,
                          expires_at=int(time.time()) + 60, litellm_model='nova-lite',
                          model_map={'gpt-4o': 'nova-pro'})
+
+
+def test_sdk_bookkeeping_rejected_with_actionable_non_echoing_message(gateway):
+    client, service, key, state = gateway
+    response = client.post("/gateway/v1/chat/completions", headers={"Authorization": "Bearer " + key},
+        json={"model": "claude-sonnet-4.6", "messages": [{"role": "assistant", "content": None, "function_call": None, "refusal": None}]})
+    assert response.status_code == 400 and "Remove ALL other SDK message fields" in response.json()["error"]["message"]
+    assert not state["requests"]

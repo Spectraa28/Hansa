@@ -186,7 +186,7 @@ class BaselineService:
     def start(self, user_id, import_id, repetitions=1):
         if type(repetitions) is not int or not 1 <= repetitions <= 5:
             raise ValueError("Repetitions must be between 1 and 5.")
-        self.runner.configuration(user_id, import_id)
+        config = self.runner.configuration(user_id, import_id)
         contract = self.confirmed(user_id, import_id)
         with self.database.connect() as db:
             self.runner.inspection.ready(db, user_id, import_id)
@@ -199,6 +199,7 @@ class BaselineService:
             raise HTTPException(409, "Another agent or baseline job is running.")
         try:
             report = {"baseline_id": uuid.uuid4().hex, "import_id": import_id, "kind": "contract",
+                      "litellm_model": config["configuration"]["litellm_model"],
                       "commit_sha": contract["commit_sha"], "configuration_revision": contract["configuration_revision"],
                       "contract_version": contract["version"], "contract": contract["contract"],
                       "adapter_sha256": adapter["sha256"], "adapter_job_id": adapter["job_id"],
