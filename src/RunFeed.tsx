@@ -123,8 +123,11 @@ export default function RunFeed({ job, importId, ownerId, onFinished, tasks = []
         throw error
       }
     },
-    retry: false,
-    refetchInterval: query => query.state.data?.done || query.state.status === 'error' ? false : 1000,
+    // One dropped request must not stop the feed: the job carries on regardless, so keep asking. A refusal
+    // from the server (signed out, not found) is final; a network failure is retried, then polled more slowly.
+    retry: (count, error) => !(error instanceof ApiError) && count < 3,
+    retryDelay: attempt => Math.min(4000, 800 * 2 ** attempt),
+    refetchInterval: query => query.state.data?.done ? false : query.state.status === 'error' ? (query.state.error instanceof ApiError ? false : 5000) : 1000,
     refetchOnWindowFocus: false,
   })
   const log = useRef<HTMLDivElement>(null)
@@ -159,13 +162,13 @@ export default function RunFeed({ job, importId, ownerId, onFinished, tasks = []
   const status = feed.data?.done ? feed.data.job.status === 'ready' ? 'completed' : feed.data.job.status.replaceAll('_', ' ') : 'running'
 
   return <section aria-label="Live run" className="run-box slab mb-9 overflow-hidden" data-state={!feed.data?.done ? 'running' : finishedWell ? 'done' : 'stopped'}>
-    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-wash px-6 py-4 text-ink"><h2 className="flex items-center gap-3 font-display text-[22px] font-medium">{!feed.data?.done && !feed.isError && <span className="live-dot" aria-hidden="true" />}{stageLabels[job.kind]} · {status}</h2><p className="tabular text-[14px] text-muted">{feed.data?.done ? 'finished' : feed.isError ? 'feed paused' : 'live'}</p></div>
+    <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-wash px-6 py-4 text-ink"><h2 className="flex items-center gap-3 font-display text-[22px] font-medium">{!feed.data?.done && !feed.isError && <span className="live-dot" aria-hidden="true" />}{stageLabels[job.kind]} · {status}</h2><p className="tabular text-[14px] text-muted">{feed.data?.done ? 'finished' : feed.isError ? 'reconnecting…' : 'live'}</p></div>
     <ol ref={track} aria-label="Where this run is" className="run-journey">{journey.map(([label, StageIcon], index) => <li key={label} data-stage={index < at ? 'done' : index === at && !feed.data?.done ? 'now' : 'ahead'} aria-current={index === at && !feed.data?.done ? 'step' : undefined}>
       <span>{index < at ? <CircleCheck size={18} aria-hidden="true" /> : <StageIcon size={18} aria-hidden="true" />}</span><b>{label}</b></li>)}</ol>
     {!feed.data?.done && now && <p role="status" className="run-now flex items-start gap-3 border-b border-line bg-surface px-6 py-4 text-[20px] leading-snug font-semibold [overflow-wrap:anywhere]">{!feed.isError && <span className="live-dot mt-2 shrink-0" aria-hidden="true" />}<NowIcon size={22} className="mt-0.5 shrink-0 text-blue" aria-hidden="true" /><span key={latest?.id} className="run-now-text">{now}…</span></p>}
     {feed.data?.job.result?.decision && <p className="px-6 py-3 text-[15px]">Verdict: {feed.data.job.result.decision === 'reject' ? 'Fix rejected' : feed.data.job.result.decision === 'accept' ? 'Fix accepted' : feed.data.job.result.decision.replaceAll('_', ' ')}</p>}
     {feed.data?.done && (feed.data.job.reason || feed.data.job.result?.reason) && <p className="px-6 py-3 text-[15px]">{feed.data.job.reason || feed.data.job.result?.reason}{advice(feed.data.job.reason || feed.data.job.result?.reason || '') && <span className="mt-1 block font-medium">{advice(feed.data.job.reason || feed.data.job.result?.reason || '')}</span>}</p>}
-    {feed.isError && <div className="px-6 py-4"><p role="alert" className="text-[15px]">{feed.error instanceof ApiError ? feed.error.message : 'Live feed paused. Check your connection and try again.'}</p><button className="button-secondary mt-3" onClick={() => void feed.refetch()}>Resume feed</button></div>}
+    {feed.isError && <div className="px-6 py-4"><p role="alert" className="text-[15px]">{feed.error instanceof ApiError ? feed.error.message : 'Lost contact with Hansa for a moment. Your run is still going on the server; this feed reconnects by itself.'}</p><button className="button-secondary mt-3" onClick={() => void feed.refetch()}>Reconnect now</button></div>}
     {progress.length > 0 && <section aria-label="Task progress" className=""><h3 className="label px-6 pt-4">Task results as they arrive</h3><ul className="">{progress.map(task => <li key={task.task_id} data-task-id={task.task_id} className="task-row flex flex-wrap items-center justify-between gap-2 px-6 py-3 text-[14px]">
       <span className="min-w-0 font-medium [overflow-wrap:anywhere]">{task.name || `Task ${task.task_id}`}</span><span className="flex flex-wrap items-center gap-2"><span className="text-[14px] text-muted">{task.runs} / {task.repetitions} runs recorded</span><span key={task.status || 'waiting'} className={`chip ${task.status ? 'task-resolved' : ''} ${task.status === 'failed' ? 'chip-waste' : task.status === 'passed' ? 'chip-ok' : 'chip-quiet'}`}>{task.status ? outcome(task.status) : feed.data?.done ? 'incomplete' : 'waiting for results'}</span></span>
     </li>)}</ul></section>}

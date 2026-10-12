@@ -108,10 +108,10 @@ try {
   assert.equal(posts.length, launched, 'Reload only reattaches, never posts')
   assert.equal(await page.getByRole('button', { name: 'Start onboarding', exact: true }).count(), 0)
   eventsOffline = true
-  await visible('Live feed paused. Check your connection and try again.')
+  await visible('Lost contact with Hansa for a moment. Your run is still going on the server; this feed reconnects by itself.')
   await visible('<script>window.fixtureInjected = true</script>')
   eventsOffline = false
-  await page.getByRole('button', { name: 'Resume feed', exact: true }).click()
+  await page.getByRole('button', { name: 'Reconnect now', exact: true }).click()
   for (let i = 0; i < 40; i++) append('note', { text: `Synthetic scroll event ${i}` })
   await visible('Synthetic scroll event 39')
   await page.getByRole('log').evaluate(node => { node.scrollTop = 0 })
