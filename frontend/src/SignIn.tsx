@@ -47,10 +47,10 @@ export default function SignIn({ session }: { session: UseQueryResult<Session | 
   if (session.data) return <Navigate to="/app" replace />
   return (
     <main className="page max-w-lg">
-      <h1 className="page-title">Get your receipts.</h1>
-      <p className="mt-4 text-[17px] text-muted">Sign in to import an agent and see where it overspends.</p>
+      <h1 className="page-title">Meet your AI engineer.</h1>
+      <p className="mt-4 text-[17px] text-muted">Sign in to import an agent and get tested fixes that make it cheaper and faster.</p>
       <section aria-label="Sign-in methods" className="slab mt-10 p-6 pt-8 sm:p-8 sm:pt-9"><span className="slab-tab">sign in</span>
-        {provider && <p role="alert" className="mb-6 rounded-control border-2 border-ink bg-waste px-4 py-3 text-[14px] font-medium">{provider}</p>}
+        {provider && <p role="alert" className="mb-6 rounded-control bg-waste px-4 py-3 text-[14px] font-medium">{provider}</p>}
         {session.isPending || providers.isPending ? <p role="status">Checking sign-in methods…</p>
           : session.isError || providers.isError ? <div role="alert"><p>Could not load sign-in. Please try again.</p><button className="button-secondary mt-4" onClick={() => { void session.refetch(); void providers.refetch() }}>Try again</button></div>
           : providers.data && <>
@@ -58,12 +58,12 @@ export default function SignIn({ session }: { session: UseQueryResult<Session | 
               {providers.data.github && <a href="/auth/github/login" className="button-primary min-h-14 text-[16px]">Continue with GitHub</a>}
               {providers.data.google && <a href="/auth/google/login" className="button-secondary">Continue with Google</a>}
             </div>
-            {providers.data.email && <form onSubmit={signIn} className={providers.data.github || providers.data.google ? 'mt-7 border-t-2 border-dashed border-ink pt-6' : ''}>
-              <label className="block text-[13px] font-medium" htmlFor="email">Email</label>
+            {providers.data.email && <form onSubmit={signIn} className={providers.data.github || providers.data.google ? 'mt-7 pt-6' : ''}>
+              <label className="block text-[15px] font-medium" htmlFor="email">Email</label>
               <input className="field mt-2" id="email" name="email" type="email" autoComplete="username" maxLength={254} required />
-              <label className="mt-4 block text-[13px] font-medium" htmlFor="password">Password</label>
+              <label className="mt-4 block text-[15px] font-medium" htmlFor="password">Password</label>
               <input className="field mt-2" id="password" name="password" type="password" autoComplete="current-password" maxLength={128} required />
-              {error && <p role="alert" className="mt-4 text-[13px]">{error}</p>}
+              {error && <p role="alert" className="mt-4 text-[15px]">{error}</p>}
               <button className="button-primary mt-6 w-full" disabled={submitting}>{submitting ? 'Signing in…' : 'Sign in with email'}</button>
             </form>}
             {!providers.data.github && !providers.data.google && !providers.data.email && <p>No sign-in methods are enabled. Contact the person running Hansa.</p>}

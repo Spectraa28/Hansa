@@ -40,21 +40,25 @@ export default function Profile({ session }: { session: UseQueryResult<Session |
     <Link to="/app" className="back-link">← your agents</Link>
     <h1 className="page-title mt-2">Profile.</h1>
 
-    <section className="slab mt-10 flex flex-wrap items-center gap-5 p-6 pt-8 sm:p-8 sm:pt-9"><span className="slab-tab">you</span>
-      {user.avatar_url ? <img src={user.avatar_url} alt="" width="72" height="72" referrerPolicy="no-referrer" className="size-[72px] rounded-full border-2 border-ink object-cover" />
-        : <span aria-hidden="true" className="grid size-[72px] place-items-center rounded-full border-2 border-ink bg-waste font-display text-[34px] font-[800]">{user.name.slice(0, 1).toUpperCase()}</span>}
-      <div className="min-w-0 flex-1"><p className="font-display text-[30px] leading-none font-[780] tracking-[-.04em] [overflow-wrap:anywhere]">{user.name}</p>
-        <p className="mt-2 font-mono text-[13px] text-muted [overflow-wrap:anywhere]">{user.email || 'no email on file'}</p></div>
-      <button className="button-secondary" disabled={busy !== null} onClick={() => void leave('out')}><LogOut size={16} aria-hidden="true" /> {busy === 'out' ? 'Signing out…' : 'Sign out'}</button>
+    <section className="slab mt-10 p-5 sm:p-8" aria-labelledby="profile-account"><h2 id="profile-account" className="slab-tab">Your account</h2>
+      <div className="mt-4 flex flex-col gap-5 sm:flex-row sm:items-center">
+        <div className="flex min-w-0 flex-1 items-start gap-4 sm:items-center">
+          {user.avatar_url ? <img src={user.avatar_url} alt="" width="72" height="72" referrerPolicy="no-referrer" className="size-16 shrink-0 rounded-full border border-line object-cover sm:size-[72px]" />
+            : <span aria-hidden="true" className="grid size-16 shrink-0 place-items-center rounded-full border border-line bg-blue-soft font-display text-[30px] font-medium text-blue sm:size-[72px]">{user.name.slice(0, 1).toUpperCase()}</span>}
+          <div className="min-w-0 flex-1"><p className="font-display text-[24px] leading-tight font-medium [overflow-wrap:anywhere] sm:text-[30px]">{user.name}</p>
+            <p className="mt-2 text-[14px] leading-relaxed text-muted [overflow-wrap:anywhere]">{user.email || 'no email on file'}</p></div>
+        </div>
+        <button className="button-secondary w-full shrink-0 sm:w-auto" disabled={busy !== null} onClick={() => void leave('out')}><LogOut size={16} aria-hidden="true" /> {busy === 'out' ? 'Signing out…' : 'Sign out'}</button>
+      </div>
     </section>
 
-    <section className="mt-10 rounded-card border-2 border-dashed border-ink p-6 sm:p-8">
-      <h2 className="font-display text-[26px] font-[780] tracking-[-.03em]">Delete account</h2>
+    <section className="mt-10 rounded-card p-6 sm:p-8">
+      <h2 className="font-display text-[26px] font-medium">Delete account</h2>
       <p className="mt-2 max-w-[58ch] text-muted">This removes your account, your GitHub connection, every imported repository copy, and all baselines, findings and results. It can't be undone.</p>
-      <label htmlFor="confirm-delete" className="mt-5 block text-[13px] font-medium">Type <b className="font-mono">delete</b> to confirm</label>
-      <div className="mt-2 flex flex-wrap gap-3"><input id="confirm-delete" className="field max-w-[220px] font-mono" autoComplete="off" value={confirm} onChange={event => setConfirm(event.target.value)} />
-        <button className="button-primary bg-ink text-paper" disabled={busy !== null || confirm.trim().toLowerCase() !== 'delete'} onClick={() => void leave('delete')}><Trash2 size={16} aria-hidden="true" /> {busy === 'delete' ? 'Deleting…' : 'Delete everything'}</button></div>
+      <label htmlFor="confirm-delete" className="mt-5 block text-[15px] font-medium">Type <b className="tabular">delete</b> to confirm</label>
+      <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start"><input id="confirm-delete" className="field min-w-0 sm:max-w-xs sm:flex-1" autoComplete="off" value={confirm} onChange={event => setConfirm(event.target.value)} />
+        <button className="button-primary w-full shrink-0 enabled:bg-ink enabled:text-paper sm:w-auto" disabled={busy !== null || confirm.trim().toLowerCase() !== 'delete'} onClick={() => void leave('delete')}><Trash2 size={16} aria-hidden="true" /> {busy === 'delete' ? 'Deleting…' : 'Delete everything'}</button></div>
     </section>
-    {error && <p role="alert" className="mt-5 font-medium">{error}</p>}
+    {error && <p role="alert" className="mt-5 font-medium [overflow-wrap:anywhere]">{error}</p>}
   </main>
 }

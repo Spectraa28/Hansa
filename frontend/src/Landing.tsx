@@ -1,266 +1,215 @@
-import { useEffect, useRef } from 'react'
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { motion, MotionConfig } from 'motion/react'
-import { ArrowRight, ArrowUpRight, Box, GitBranch, KeyRound, Lock, Scissors, Wallet } from 'lucide-react'
+import { ArrowDown, ArrowRight, Braces, FileCode2, FlaskConical, GitBranch, GitCompareArrows, Gauge, ShieldCheck } from 'lucide-react'
 import savedReport from './data/swarm-report.json'
 import savedPatches from './data/swarm-patches.json'
-import type { ImportReport } from './report'
-import { areas } from './areas'
+import { measurement as preciseMeasurement, sourceUrl, type ImportReport } from './report'
+import { useReducedMotion } from './motionPreference'
 import './landing.css'
 
-// Everything on this page is read from one saved run of OpenAI's Swarm airline example.
+// The public demo reads saved evidence only; selecting a view never starts a run.
 const report = savedReport as unknown as ImportReport
 const baseline = report.baseline!
-const xray = baseline.xray
-const findings = report.investigation!.findings
 const attempt = report.optimizations.at(-1)!
-const totals = attempt.comparison!.totals
+const comparison = attempt.comparison!
+const totals = comparison.totals
+const regressions = comparison.tasks.filter(task => task.regressed)
+const needsReview = comparison.tasks.filter(task => task.candidate_status === 'needs_review').length
+const heroCost = measurement(baseline.per_pass.cost_usd, 'usd')
 const patch = (savedPatches as Record<string, string | null>)[attempt.job_id] || ''
-const sha = report.import.commit_sha.slice(0, 7)
-const ease = [0.2, 0.8, 0.2, 1] as const
-
-const usd = (value: number | null, digits = 4) => value == null ? '—' : `$${value.toFixed(digits)}`
-const file = (path: string) => path.split('/').at(-1)
-const short = ['Pass-through agent', 'Dead line in the prompt', 'No cap on turns']
-// The routing hop the first finding describes shows up in these tasks of the saved run.
-const leaking = new Set(['1', '2', '4', '5', '6'])
-
-function Stamp({ children, tone = 'waste', delay = 0 }: { children: ReactNode; tone?: 'waste' | 'ink'; delay?: number }) {
-  return <motion.span className={`stamp stamp-${tone}`} initial={{ opacity: 0, scale: 2.4, rotate: -24 }} whileInView={{ opacity: 1, scale: 1, rotate: -9 }}
-    viewport={{ once: true, amount: .6 }} transition={{ delay, type: 'spring', stiffness: 420, damping: 19 }}>{children}</motion.span>
+const diffLine = patch.split('\n').find(line => line.startsWith('+') && !line.startsWith('+++')) || 'No patch recorded.'
+const tabs = ['Baseline', 'Findings', 'Tested change', 'Verdict'] as const
+const demoSteps = ['baseline', 'findings&view=hunt', 'fix', 'result']
+const metrics = [
+  ['Model calls', 'model_calls', 'number'],
+  ['Recorded cost', 'cost_usd', 'usd'],
+  ['Run time', 'wall_time_seconds', 'seconds'],
+] as const
+const status = (value: string | null) => value === 'needs_review' ? 'Needs review' : value === 'failed' ? 'Checks failed' : value === 'passed' ? 'Checks passed' : value?.replaceAll('_', ' ') || 'Not recorded'
+// Round only homepage displays; the app keeps its shared precision and saved measurements.
+function measurement(value: number | null | undefined, unit: 'number' | 'usd' | 'seconds' = 'number') {
+  if (value == null || !Number.isFinite(value)) return preciseMeasurement(value, unit)
+  return unit === 'usd' ? value.toLocaleString('en-US', { style: 'currency', currency: 'USD' }) : preciseMeasurement(Math.round(value), unit)
+}
+function change(value: number | null) {
+  if (value == null || !Number.isFinite(value)) return 'Not recorded'
+  const rounded = Math.round(value)
+  return `${rounded > 0 ? '+' : rounded < 0 ? '−' : ''}${Math.abs(rounded)}%`
 }
 
-function Receipt() {
-  const line = { hidden: { opacity: 0, y: -8 }, show: { opacity: 1, y: 0, transition: { duration: .28, ease } } }
-  return <motion.div className="receipt-wrap" initial={{ opacity: 0, y: 60, rotate: 7 }} animate={{ opacity: 1, y: 0, rotate: 2.5 }} transition={{ duration: .9, ease, delay: .25 }}>
-    <motion.div className="receipt" initial="hidden" animate="show" variants={{ show: { transition: { staggerChildren: .075, delayChildren: .7 } } }} aria-label="Receipt for a saved run of the Swarm airline agent">
-      <motion.div variants={line} className="receipt-head"><img src="/brand/mark.svg" alt="" width="34" height="34" /><div><strong>HANSA</strong><span>agent receipt</span></div><code>#{sha}</code></motion.div>
-      <motion.p variants={line} className="receipt-meta">{report.import.repository} · airline example<br />{baseline.model} · {baseline.tasks.length} tasks × {baseline.repetitions} runs</motion.p>
-      <motion.hr variants={line} />
-      {baseline.tasks.map(task => <motion.div variants={line} className="receipt-row" key={task.task_id}>
-        <span>{task.task_id?.padStart(2, '0')} {task.name}</span><span>{task.model_calls} calls</span><span>{usd(task.cost_usd)}</span>
-      </motion.div>)}
-      <motion.hr variants={line} />
-      <motion.div variants={line} className="receipt-row receipt-total"><span>TOTAL / PASS</span><span>{baseline.per_pass.model_calls} calls</span><span>{usd(baseline.per_pass.cost_usd)}</span></motion.div>
-      <motion.hr variants={line} />
-      <motion.p variants={line} className="receipt-waste-title"><Scissors size={14} aria-hidden="true" /> WASTE FOUND</motion.p>
-      {findings.map((finding, index) => <motion.div variants={line} className="receipt-row receipt-waste" key={finding.finding_id}>
-        <span>{short[index]}<small>{file(finding.source[0].path)}:{finding.source[0].start_line}</small></span>
-        <span className="receipt-saving">{finding.estimated_saving?.cost_usd != null ? `−${usd(finding.estimated_saving.cost_usd, 3)}` : 'risk'}</span>
-      </motion.div>)}
-      <motion.p variants={line} className="receipt-foot">savings are estimates until tested</motion.p>
-      <motion.div variants={line} className="receipt-barcode" aria-hidden="true" />
-      <Stamp delay={2.6}>{findings.length} leaks found</Stamp>
-    </motion.div>
-  </motion.div>
-}
+const steps = [
+  { title: 'Bring your agent', text: 'Connect a repository and choose the tasks and changes you allow.' },
+  { title: 'Establish the baseline', text: 'Measure the original’s calls, cost and task outcomes.' },
+  { title: 'Test a targeted change', text: 'Investigate the source, edit a copy and rerun the same tasks.' },
+  { title: 'Review the trade-offs', text: 'Compare savings and regressions. Keep or reject the patch.' },
+]
+const recordedMetrics = [
+  { name: 'Cost', value: `${measurement(totals.cost_usd.baseline, 'usd')} → ${measurement(totals.cost_usd.candidate, 'usd')}`, delta: totals.cost_usd.change_percent, detail: 'Recorded model cost per pass' },
+  { name: 'Latency', value: `${measurement(totals.wall_time_seconds.baseline, 'seconds')} → ${measurement(totals.wall_time_seconds.candidate, 'seconds')}`, delta: totals.wall_time_seconds.change_percent, detail: 'Run time per pass' },
+  { name: 'Model calls', value: `${measurement(totals.model_calls.baseline)} → ${measurement(totals.model_calls.candidate)}`, delta: totals.model_calls.change_percent, detail: 'Model calls per pass' },
+  { name: 'Context', value: `${measurement(totals.tokens_in.baseline)} → ${measurement(totals.tokens_in.candidate)}`, delta: totals.tokens_in.change_percent, detail: `Input tokens; output ${measurement(totals.tokens_out.baseline)} → ${measurement(totals.tokens_out.candidate)}` },
+  { name: 'Task behavior', value: `${regressions.length} task regressed`, detail: `${needsReview} candidate answers need human review. Change ${attempt.decision === 'reject' ? 'rejected' : status(attempt.decision)}.` },
+  { name: 'Run conditions', value: `${baseline.tasks.length} tasks × ${measurement(baseline.repetitions)} repetitions`, detail: `${baseline.model || 'Model not recorded'}. Spend/runtime caps not recorded.` },
+]
 
-function Hero() {
-  const words = [['Your', 'agent'], ['overspends.'], ['We', 'bring']]
-  return <section className="hero">
-    <div className="hero-copy">
-      <motion.p className="hero-kicker" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .1 }}><span className="live-dot" /> for people who ship AI agents</motion.p>
-      <h1 className="hero-title">
-        {words.map((row, i) => <span className="hero-row" key={i}>{row.map((word, j) => <span className="hero-mask" key={word}>
-          <motion.span initial={{ y: '105%' }} animate={{ y: 0 }} transition={{ duration: .7, ease, delay: .08 * (i * 2 + j) }}>{word}</motion.span></span>)}</span>)}
-        <span className="hero-row"><motion.span className="hero-block" initial={{ scaleX: 0, rotate: 0 }} animate={{ scaleX: 1, rotate: -2 }} transition={{ duration: .55, ease, delay: .62 }}>
-          <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .9 }}>receipts.</motion.span></motion.span></span>
-      </h1>
-      <motion.p className="hero-sub" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .85, duration: .6, ease }}>
-        Point Hansa at your agent's repo. It runs the agent in a sandbox and finds what makes it slow and expensive: bloated prompts, heavy tool schemas, extra agent hops, the wrong model. Then it tests the fix against your own baseline and hands you the patch <em>only if the numbers hold.</em>
-      </motion.p>
-      <motion.div className="hero-actions" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1, duration: .6, ease }}>
-        <Link to="/app" className="button-primary hero-cta">Import a repo <ArrowRight size={18} aria-hidden="true" /></Link>
-        <Link to="/demo" className="hero-link">Look around a real run <ArrowRight size={16} aria-hidden="true" /></Link>
-      </motion.div>
-      <motion.p className="hero-terms" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.2 }}>no SDK · a few minutes · you set the spend cap before anything runs</motion.p>
-    </div>
-    <Receipt />
-  </section>
-}
-
-function Ticker() {
-  const items = ['Prompt structure', 'Tool schemas', 'Agent design', 'Model choice', 'Latency', 'Cost', 'File + line on every finding', 'Rejects its own bad fixes']
-  const row = <ul aria-hidden="true">{items.map(item => <li key={item}>{item}<span>✂</span></li>)}</ul>
-  return <div className="ticker" role="marquee" aria-label={items.join(', ')}><div className="ticker-track">{row}{row}</div></div>
-}
-
-// Marks an element once it scrolls into view, without re-rendering React.
-function useSeen<T extends HTMLElement>(amount: number, onSeen?: (node: T) => void) {
-  const ref = useRef<T>(null)
+function ExperimentDiagram() {
+  const reducedMotion = useReducedMotion()
+  const [stage, setStage] = useState(0)
+  const [hovered, setHovered] = useState(false)
+  const [focused, setFocused] = useState(false)
   useEffect(() => {
-    const node = ref.current
-    if (!node) return
-    const watch = new IntersectionObserver(([entry]) => {
-      if (!entry.isIntersecting) return
-      node.classList.add('is-seen'); onSeen?.(node); watch.disconnect()
-    }, { threshold: amount })
-    watch.observe(node)
-    return () => watch.disconnect()
-  }, [])
-  return ref
+    if (reducedMotion || hovered || focused) return
+    const timer = window.setInterval(() => setStage(current => (current + 1) % 6), 1200)
+    return () => window.clearInterval(timer)
+  }, [reducedMotion, hovered, focused])
+  const active = (index: number) => !reducedMotion && stage === index
+  return <figure className="experiment-diagram" tabIndex={0} aria-label="Recorded Swarm experiment: original model calls and cost, Hansa's tested change, and the rejection after a task regression. Animation pauses while focused."
+    onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
+    onFocus={() => setFocused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
+    <figcaption><span className="data-label">THE ENGINEERING LOOP</span><span className="diagram-label">SAVED SWARM RUN</span></figcaption>
+    <div className="diagram-input"><GitBranch size={23} aria-hidden="true" /><div><strong>Your agent</strong><span className="diagram-baseline">{measurement(baseline.per_pass.model_calls)} calls, {heroCost}</span><span>Swarm airline example · mean per pass</span></div><span className="diagram-label">IN</span></div>
+    <div className="diagram-connector" aria-hidden="true"><ArrowDown size={18} /></div>
+    <div className="diagram-engine"><div className="diagram-engine-title"><img src="/brand/mark.svg" width="44" height="44" alt="" /><div><strong>Hansa</strong><span>Your optimization engineer</span></div></div>
+      <div className="diagram-actions"><span data-active={active(0)}><FileCode2 size={18} aria-hidden="true" />Investigate</span><ArrowRight size={14} aria-hidden="true" /><span data-active={active(1)}><Braces size={18} aria-hidden="true" />Edit</span><ArrowRight size={14} aria-hidden="true" /><span data-active={active(2)}><FlaskConical size={18} aria-hidden="true" />Test</span></div>
+      <p><GitCompareArrows size={15} aria-hidden="true" /> Compare against the original. Keep or reject.</p>
+    </div>
+    <div className="diagram-connector" aria-hidden="true"><ArrowDown size={18} /></div>
+    <div className="diagram-output"><div data-active={active(3)}><span><FileCode2 size={18} aria-hidden="true" />Patch</span><small>Tested candidate</small></div><div data-active={active(4)}><span><Gauge size={18} aria-hidden="true" />Measurements</span><small>{baseline.tasks.length} tasks · {measurement(baseline.repetitions)} reps</small></div><div className="diagram-verdict" data-active={active(5)}><span><ShieldCheck size={18} aria-hidden="true" />Verdict</span><small>{change(totals.model_calls.change_percent)} calls<br />{regressions.length} task regressed<br /><b>{attempt.decision === 'reject' ? 'Rejected' : status(attempt.decision)}</b></small></div></div>
+    <p className="diagram-note">Recorded results. Automatic checks; human review still required.</p>
+  </figure>
 }
 
-function Blocks({ flag = false }: { flag?: boolean }) {
-  const ref = useSeen<HTMLDivElement>(.5)
-  let n = 0
-  return <div className="blocks" ref={ref}>{baseline.tasks.map(task => <div className="blocks-row" key={task.task_id}>
-    <span className="blocks-name">{task.task_id?.padStart(2, '0')} {task.name}</span>
-    <span className="blocks-cells">{Array.from({ length: task.model_calls || 0 }, (_, i) =>
-      <i key={i} className={flag && i === 1 && leaking.has(task.task_id || '') ? 'is-waste' : ''} style={{ '--i': n++ } as CSSProperties} />)}</span>
-    <span className="blocks-cost">{usd(task.cost_usd)}</span>
-  </div>)}</div>
-}
-
-function Diff() {
-  return <pre className="diff" aria-label="The change that was tested">{patch.trim().split('\n').filter(row => !row.startsWith('---') && !row.startsWith('+++')).map((row, i) =>
-    <span key={i} className={row.startsWith('@@') ? 'diff-hunk' : row.startsWith('+') ? 'diff-add' : row.startsWith('-') ? 'diff-del' : ''}>{row || ' '}{'\n'}</span>)}</pre>
-}
-
-// Counts up by writing text directly: one text node per frame, nothing else on the page moves.
-function Counter({ value, digits = 0, prefix = '', suffix = '', sign = false }: { value: number; digits?: number; prefix?: string; suffix?: string; sign?: boolean }) {
-  const text = (n: number) => `${sign && n > 0 ? '+' : ''}${n < 0 ? '−' : ''}${prefix}${Math.abs(n).toFixed(digits)}${suffix}`
-  const ref = useSeen<HTMLSpanElement>(.8, node => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) { node.textContent = text(value); return }
+function CandidateMeasurement({ from, to, unit }: { from: number | null; to: number | null; unit: 'number' | 'usd' | 'seconds' }) {
+  const reducedMotion = useReducedMotion()
+  const [value, setValue] = useState(from)
+  useEffect(() => {
+    if (reducedMotion || from == null || to == null || !Number.isFinite(from) || !Number.isFinite(to)) return
     const start = performance.now()
+    let frame: number
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / 900)
-      node.textContent = text(value * (1 - (1 - t) ** 3))
-      if (t < 1) requestAnimationFrame(tick)
+      const progress = Math.min((now - start) / 1100, 1)
+      setValue(progress === 1 ? to : from + (to - from) * (1 - (1 - progress) ** 3))
+      if (progress < 1) frame = requestAnimationFrame(tick)
     }
-    requestAnimationFrame(tick)
-  })
-  return <span ref={ref} className="tabular">{text(0)}</span>
+    frame = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(frame)
+  }, [from, to, reducedMotion])
+  const display = reducedMotion || from == null || to == null || !Number.isFinite(from) || !Number.isFinite(to) ? to : value
+  return <span className="candidate-measurement" data-value={display}><span aria-hidden="true">{measurement(display, unit)}</span><span className="sr-only">{measurement(to, unit)}</span></span>
 }
 
-function StackCard({ index, tone, title, body, children }: { index: number; tone: string; title: string; body: string; children: ReactNode }) {
-  // Sticky positioning does the stacking; no scroll listener is needed.
-  return <div className="stack-slot" style={{ top: `calc(84px + ${index * 18}px)` }}>
-    <article className={`stack-card tone-${tone}`}>
-      <div className="stack-copy"><span className="stack-number">0{index + 1}</span><h3>{title}</h3><p>{body}</p></div>
-      <div className="stack-visual">{children}</div>
-    </article>
+function SavedDemo() {
+  const reducedMotion = useReducedMotion()
+  const [view, setView] = useState(0)
+  const [autoplay, setAutoplay] = useState(true)
+  const [inView, setInView] = useState(false)
+  const [pageVisible, setPageVisible] = useState(!document.hidden)
+  const tablist = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const observer = new IntersectionObserver(([entry]) => setInView(entry.isIntersecting && entry.intersectionRatio >= 0.25), { threshold: 0.25 })
+    observer.observe(tablist.current!)
+    const visibility = () => setPageVisible(!document.hidden)
+    document.addEventListener('visibilitychange', visibility)
+    return () => { observer.disconnect(); document.removeEventListener('visibilitychange', visibility) }
+  }, [])
+  const advancing = autoplay && inView && pageVisible && !reducedMotion
+  useEffect(() => {
+    if (!advancing) return
+    const timer = window.setTimeout(() => setView(current => (current + 1) % tabs.length), 5000)
+    return () => window.clearTimeout(timer)
+  }, [advancing, view])
+  return <div className="saved-demo" onFocusCapture={() => setAutoplay(false)} onPointerDownCapture={() => setAutoplay(false)}>
+    <div className="demo-topline"><span><span className="recorded-dot" /> RECORDED EXPERIMENT</span><span>{report.import.repository} <span className="demo-commit">/ {report.import.commit_sha.slice(0, 7)}</span></span></div>
+    <div id="what-it-checks" className="recorded-measurements">
+      <h3>What we measured on Swarm</h3>
+      <p className="demo-note">Original → candidate. Mean per pass of the same {baseline.tasks.length} tasks. Rounded figures; percentages use full precision. LiteLLM-reported model cost excludes compute and is not invoice-reconciled.</p>
+      <dl className="recorded-metrics">{recordedMetrics.map(metric => <div key={metric.name}><dt>{metric.name}</dt><dd><div className="metric-figure"><span className={metric.delta !== undefined ? 'metric-value' : undefined}>{metric.value}</span>{metric.delta != null && <span className={`metric-change ${metric.delta < 0 ? 'text-ok' : metric.delta > 0 ? 'text-waste' : 'text-muted'}`}>{change(metric.delta)}</span>}</div><small>{metric.detail}</small></dd></div>)}</dl>
+    </div>
+    <div className="demo-tabs" ref={tablist} role="tablist" aria-label="Recorded experiment views" data-advancing={advancing} onKeyDown={event => {
+      const next = event.key === 'ArrowRight' ? (view + 1) % tabs.length : event.key === 'ArrowLeft' ? (view + tabs.length - 1) % tabs.length : event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : null
+      if (next == null) return
+      event.preventDefault(); setAutoplay(false); setView(next)
+      tablist.current?.querySelectorAll<HTMLButtonElement>('[role=tab]')[next]?.focus()
+    }}>{tabs.map((label, index) => <button key={label} id={`demo-tab-${index}`} role="tab" aria-label={label} aria-selected={view === index} aria-controls="demo-panel" tabIndex={view === index ? 0 : -1} onClick={() => { setAutoplay(false); setView(index) }}><span>{String(index + 1).padStart(2, '0')}</span>{index === 2 ? 'Change' : label}</button>)}</div>
+    <div className="demo-panel" role="tabpanel" id="demo-panel" aria-labelledby={`demo-tab-${view}`} tabIndex={0}>
+      {view === 0 && <>
+        <div className="demo-panel-heading"><div><span className="data-label">THE ORIGINAL</span><h3>First, establish what happens today.</h3></div><span className="demo-model">{baseline.model}</span></div>
+        <p className="demo-note">{baseline.tasks.length} tasks · {measurement(baseline.repetitions)} repetitions each · {measurement(baseline.failed)} tasks with failed checks · {measurement(baseline.needs_review)} needing review. A pass here means one run of the task set.</p>
+        <div className="task-list">{baseline.tasks.map(task => <div key={task.task_id}><span>{task.name}</span><span className={task.status === 'failed' ? 'outcome-warning' : ''}>{status(task.status)}</span></div>)}</div>
+      </>}
+      {view === 1 && <>
+        <div className="demo-panel-heading"><div><span className="data-label">SOURCE + EXECUTION</span><h3>Findings you can trace to the code.</h3></div></div>
+        <p className="demo-note">These are hypotheses, not measured gains. The investigation ended early; its saved findings remain available.</p>
+        <ol className="demo-findings">{report.investigation!.findings.map((finding, index) => <li key={finding.finding_id}>
+          <details><summary><span className="finding-number">{String(index + 1).padStart(2, '0')}</span><span>{finding.source[0]?.path || `Finding ${index + 1}`}</span><span className="finding-estimate">{finding.estimated_saving?.cost_usd == null ? 'Not quantified' : `${measurement(finding.estimated_saving.cost_usd, 'usd')} estimated`}</span></summary>
+            <p>{finding.waste}</p><p><b>Proposed change:</b> {finding.proposed_change}</p><p><b>Behavior risk:</b> {finding.behaviour_risk}</p>
+            <div className="finding-sources">{finding.source.map(source => {
+              const url = sourceUrl(report.import.repository, report.import.commit_sha, source, report.import.folder)
+              return url && <a key={`${source.path}:${source.start_line}`} href={url} target="_blank" rel="noopener noreferrer">{source.path}:{source.start_line} <ArrowRight size={14} aria-hidden="true" /></a>
+            })}</div>
+          </details>
+        </li>)}</ol>
+      </>}
+      {view === 2 && <>
+        <div className="demo-panel-heading"><div><span className="data-label">THE CANDIDATE</span><h3>A small change, tested on the same tasks.</h3></div><span className="outcome-warning">Not accepted</span></div>
+        <p className="demo-note">The saved patch is an experiment artifact. Its result includes a regression; review it before considering any change.</p>
+        <pre className="demo-patch" aria-label="Tested candidate patch">{patch ? patch.trim().split('\n').map((line, index) => <span key={index} className={line.startsWith('+') && !line.startsWith('+++') ? 'patch-add' : line.startsWith('-') && !line.startsWith('---') ? 'patch-remove' : ''}>{line || ' '}{'\n'}</span>) : 'No patch recorded.'}</pre>
+      </>}
+      {view === 3 && <>
+        <div className="demo-panel-heading"><div><span className="data-label">THE VERDICT</span><h3>Cheaper and faster. Still rejected.</h3></div><span className="verdict-label">Change rejected</span></div>
+        <div className="comparison-scroll"><table className="demo-comparison"><caption>Mean totals per pass of the same task set</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Original</th><th scope="col">Candidate</th><th scope="col">Change</th></tr></thead><tbody>{metrics.map(([label, key, unit]) => {
+          const value = comparison.totals[key]
+          return <tr key={key}><th scope="row">{label}</th><td>{measurement(value.baseline, unit)}</td><td><CandidateMeasurement from={value.baseline} to={value.candidate} unit={unit} /></td><td>{change(value.change_percent)}</td></tr>
+        })}</tbody></table></div>
+        <p className="demo-note">{regressions.length} task regressed. {comparison.note.replaceAll('needs_review', '“Needs review”')} Lower resource usage does not establish correct answers.</p>
+        <details className="regression-detail"><summary>Why this change was rejected</summary>{regressions.map(task => <p key={task.task_id}><b>{task.name || `Task ${task.task_id}`}:</b> {task.candidate_reason || 'No detailed reason recorded.'}</p>)}</details>
+        <div className="task-list">{comparison.tasks.map(task => <div key={task.task_id}><span>{task.name || `Task ${task.task_id}`}</span><span className={task.regressed ? 'outcome-warning' : ''}>{task.regressed ? 'Regressed' : status(task.candidate_status)}</span></div>)}</div>
+      </>}
+    </div>
+    <div className="demo-bottomline"><span>Saved results. Exploring this demo starts no jobs.</span><Link to={`/demo?step=${demoSteps[view]}`} className="text-link">Open full report <ArrowRight size={16} aria-hidden="true" /></Link></div>
   </div>
 }
 
-function How() {
-  return <section id="how-it-works" className="how">
-    <div className="how-head"><p className="eyebrow">How it works</p><h2>Four steps.<br />No dashboards to stare at.</h2></div>
-    <div className="stack">
-      <StackCard index={0} tone="paper" title="Point at a repo." body="Pick the repository and branch. Hansa pins one commit and reads it. Nothing runs yet, and you install nothing in your code.">
-        <div className="repo-card"><div className="repo-line"><GitBranch size={20} aria-hidden="true" /><span>github.com/<b>{report.import.repository}</b></span></div>
-          <div className="repo-pin"><span>pinned</span><code>{sha}</code><span>branch</span><code>{report.import.branch}</code></div>
-          <p>Hansa's own agent reads the source and writes the adapter that runs it.</p></div>
-      </StackCard>
-      <StackCard index={1} tone="ink" title="Run it for real." body="Your tasks run in a locked-down container on a throwaway key with a spend cap. Every model call is counted, timed and priced.">
-        <Blocks />
-        <dl className="meter"><div><dt>calls</dt><dd><Counter value={baseline.per_pass.model_calls || 0} /></dd></div>
-          <div><dt>cost</dt><dd><Counter value={baseline.per_pass.cost_usd || 0} digits={3} prefix="$" /></dd></div>
-          <div><dt>time</dt><dd><Counter value={baseline.per_pass.wall_time_seconds || 0} suffix="s" /></dd></div></dl>
-      </StackCard>
-      <StackCard index={2} tone="waste" title="Find the leak." body="Hansa lines every call up against the source: the prompt, the tool schemas, the hand-offs, the model. Then it points at the exact line. Here: an agent that only forwards to another agent.">
-        <Blocks flag />
-        <pre className="snippet"><span className="snippet-file">{findings[0].source[0].path}</span>
-          <span><i>46</i>    functions=[transfer_to_flight_modification, …],</span>
-          <span><i>47</i>{' )'}</span>
-          <span><i>48</i></span>
-          <span className="is-hot"><i>49</i> flight_modification = Agent(   <b>← 1 extra call, every task</b></span></pre>
-      </StackCard>
-      <StackCard index={3} tone="paper" title="Prove it, or bin it." body="The fix runs on a private copy against the same tasks. Cheaper and still passing: you get the patch. Cheaper but broken: it goes in the bin, and you see why.">
-        <Diff />
-        <div className="prove-row"><span className="chip chip-ok">cheaper ✓</span><span className="chip chip-ok">faster ✓</span><span className="chip chip-waste">still passes ?</span></div>
-      </StackCard>
-    </div>
-  </section>
-}
-
-function Looks() {
-  return <section id="what-it-checks" className="looks">
-    <p className="eyebrow">What it looks at</p>
-    <h2>Eight places<br />an agent leaks.</h2>
-    <p className="looks-sub">Cost is the symptom. Hansa goes through what the agent is made of, one area at a time, and tells you which are clean.</p>
-    <ol className="looks-grid">{areas.map((area, index) => <motion.li key={area.key} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .4 }} transition={{ duration: .45, ease, delay: (index % 4) * .06 }}>
-      <span>{String(index + 1).padStart(2, '0')}</span><h3>{area.name}</h3><p>{area.covers}</p></motion.li>)}</ol>
-    {xray && <Reveal className="looks-xray"><p className="looks-xray-title">Measured on Swarm's airline agent before any AI looked at it</p>
-      <dl>{[[xray.input.sent_before_percent, 'of every request had already been sent on the call before'], [xray.input.system_percent, 'of each request was the system prompt'], [xray.input.tool_schema_percent, 'of each request was tool definitions']].map(([value, label]) =>
-        <div key={label as string}><dt><Counter value={Math.round(value as number)} suffix="%" /></dt><dd>{label}</dd></div>)}</dl>
-      <Link to="/demo?step=baseline" className="hero-link">See the full x-ray <ArrowRight size={16} aria-hidden="true" /></Link></Reveal>}
-  </section>
-}
-
-function RealRun() {
-  const stats = [['model calls', totals.model_calls.change_percent], ['cost', totals.cost_usd.change_percent], ['wall time', totals.wall_time_seconds.change_percent]] as const
-  const tasks = attempt.comparison!.tasks
-  return <section id="real-run" className="real">
-    <p className="eyebrow">A real run · OpenAI Swarm, airline example</p>
-    <h2>We found a fix that saved 10%.<br /><span className="strike">Then we threw it out.</span></h2>
-    <div className="real-grid">
-      <div className="real-stats">{stats.map(([label, change]) => <div key={label}>
-        <strong className="big-number"><Counter value={change || 0} digits={Number.isInteger(change) ? 0 : 1} sign suffix="%" /></strong><span>{label}</span></div>)}
-        <Stamp tone="ink" delay={.5}>rejected</Stamp>
-      </div>
-      <div className="real-why">
-        <p className="real-lede">Skipping the pass-through agent made the run cheaper and faster. It also made <b>one task fail that used to pass.</b></p>
-        <ul className="task-strip" aria-label="Each task before and after the fix">{tasks.map(task => <li key={task.task_id} className={task.regressed ? 'is-broken' : task.fixed ? 'is-fixed' : ''}>
-          <span>{task.task_id.padStart(2, '0')}</span><b>{task.regressed ? 'broke' : task.fixed ? 'fixed' : 'same'}</b></li>)}</ul>
-        <p>Two failing tasks started passing. One passing task broke. Hansa doesn't trade a working answer for a cheaper bill, so the patch was reverted and marked for review.</p>
-        <p className="real-punch">A cheaper agent that breaks isn't cheaper.</p>
-        <div className="real-actions"><Link to="/demo?step=result" className="button-primary">Open this run <ArrowRight size={16} aria-hidden="true" /></Link><Link to="/app" className="hero-link">Try it on your agent <ArrowRight size={16} aria-hidden="true" /></Link></div>
-        <p className="real-small">{baseline.tasks.length} tasks × {baseline.repetitions} runs on {baseline.model} at commit {sha}. Automatic checks, provider-reported cost. Good for these tasks, not a promise for every input.</p>
-      </div>
-    </div>
-  </section>
-}
-
-function Reveal({ children, className = '', delay = 0 }: { children: ReactNode; className?: string; delay?: number }) {
-  return <motion.div className={className} initial={{ opacity: 0, y: 36 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: .3 }} transition={{ duration: .6, ease, delay }}>{children}</motion.div>
-}
-
-function Bars() {
-  const rows = [['calls', totals.model_calls], ['cost', totals.cost_usd], ['time', totals.wall_time_seconds]] as const
-  return <div className="bars">{rows.map(([label, row]) => <div className="bars-row" key={label}><span>{label}</span>
-    <div className="bars-track"><motion.i initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: .7, ease }} />
-      <motion.i style={{ width: `${(row.candidate || 0) / (row.baseline || 1) * 100}%` }} initial={{ scaleX: 0 }} whileInView={{ scaleX: 1 }} viewport={{ once: true }} transition={{ duration: .7, ease, delay: .15 }} /></div>
-    <b>{row.change_percent}%</b></div>)}
-    <p className="bars-key"><span>baseline</span><span>with the fix</span></p></div>
-}
-
-function Get() {
-  return <section className="get">
-    <p className="eyebrow">What you walk away with</p>
-    <h2>Not a chart. A change.</h2>
-    <div className="bento">
-      <Reveal className="bento-card bento-patch"><span className="slab-tab">the patch</span><h3>A diff you can apply today.</h3><p>Small, reviewable, made against your exact commit, with the before and after measured on the same tasks.</p><Diff /><Bars /></Reveal>
-      <Reveal className="bento-card bento-prompt" delay={.08}><span className="slab-tab">the prompt</span><h3>Or hand it to your coding agent.</h3>
-        <p>One brief with the reason, the numbers and the diff. Paste it into Claude Code, Codex or Cursor.</p>
-        <ol className="outline"><li># Change for you/agent</li><li>## Why</li><li>## What was measured</li><li>## The change</li><li>## Instructions</li></ol></Reveal>
-      <Reveal className="bento-card bento-proof" delay={.16}><span className="slab-tab">the receipts</span><h3>Every claim has a trace.</h3>
-        <p>Each run is logged call by call, so you can open the exact request behind any number.</p>
-        <div className="built"><span>traces by <b>Neatlogs</b></span><span>build history by <b>Entire</b></span></div></Reveal>
-    </div>
-    <ul className="safe">{[[Box, 'Sandboxed', 'Your code runs in a locked container. Never on our host.'], [KeyRound, 'Throwaway keys', 'Each run gets its own key that dies with it.'],
-      [Wallet, 'Spend cap first', 'You see the cap before anything starts.'], [Lock, 'Source stays put', 'A read-only copy of one commit. Nothing is pushed.']].map(([Icon, title, text]) => {
-      const Glyph = Icon as typeof Box
-      return <li key={title as string}><Glyph size={22} aria-hidden="true" /><b>{title as string}</b><span>{text as string}</span></li>
-    })}</ul>
-  </section>
-}
-
-function Closer() {
-  return <section className="closer">
-    <h2>Bring your agent.<br />Leave with receipts.</h2>
-    <Link to="/app" className="closer-cta">Import a repo <ArrowUpRight size={26} aria-hidden="true" /></Link>
-    <footer><span><img src="/brand/mark.svg" alt="" width="28" height="28" /> Hansa</span><span>Built for neatHack by <a href="https://x.com/sonuv_dev">@sonuv_dev</a></span></footer>
-  </section>
-}
-
 export default function Landing() {
-  // Arriving with a section in the address (from the nav on another page) lands on that section.
   useEffect(() => {
     const jump = () => { if (location.hash) document.getElementById(location.hash.slice(1))?.scrollIntoView() }
     jump(); window.addEventListener('hashchange', jump)
     return () => window.removeEventListener('hashchange', jump)
   }, [])
-  return <MotionConfig reducedMotion="user"><main className="landing"><Hero /><Ticker /><How /><Looks /><RealRun /><Get /><Closer /></main></MotionConfig>
+
+  return <main className="landing">
+    <section className="hero">
+      <div className="hero-copy">
+        <h1>An optimization engineer for your <span>AI agent.</span></h1>
+        <p className="hero-sub">Hansa investigates your agent, tests code changes on your tasks, and returns a reviewable patch with the measurements and regressions behind it.</p>
+        <div className="hero-actions"><Link to="/app/new" className="button-primary">Analyze my agent <ArrowRight size={17} aria-hidden="true" /></Link><a href="#real-run" className="text-link">Explore the demo <ArrowDown size={16} aria-hidden="true" /></a></div>
+        <p className="hero-footnote"><GitBranch size={15} aria-hidden="true" /> Saved Swarm run · {measurement(baseline.per_pass.model_calls)} calls · {heroCost} per pass</p>
+      </div>
+      <ExperimentDiagram />
+    </section>
+
+    <section id="real-run" className="real-run landing-section">
+      <div className="section-heading"><h2>One run. The whole story.</h2><p>OpenAI’s Swarm airline example. Explore the measurements, findings, patch and verdict.</p></div>
+      <SavedDemo />
+    </section>
+
+    <section id="how-it-works" className="how landing-section">
+      <div className="section-heading"><h2>From source to a tested change.</h2><p>You set the goal and boundaries. Follow the saved Swarm run from repository to verdict.</p></div>
+      <ol className="process-flow">{steps.map(({ title, text }, index) => <li key={title}>
+        <span className="process-node" aria-hidden="true" />
+        <div className="step-artifact">
+          {index === 0 && <a className="artifact-repo" href={`https://github.com/${report.import.repository}/tree/${report.import.commit_sha}`} target="_blank" rel="noopener noreferrer" title={`${report.import.repository} · ${report.import.commit_sha}`}><GitBranch size={16} aria-hidden="true" /><span>{report.import.repository}</span></a>}
+          {index === 1 && <div className="artifact-calls"><div className="artifact-call-bars" aria-hidden="true">{Array.from({ length: Math.round(baseline.per_pass.model_calls || 0) }, (_, call) => <i key={call} />)}</div><span>{measurement(baseline.per_pass.model_calls)} calls / pass</span></div>}
+          {index === 2 && <Link to="/demo?step=fix" className="artifact-diff" title={diffLine} aria-label="Open the saved tested patch"><code>{diffLine}</code></Link>}
+          {index === 3 && <div className="artifact-verdict"><span className="verdict-label"><ShieldCheck size={16} aria-hidden="true" />{attempt.decision === 'reject' ? 'Rejected' : status(attempt.decision)}</span><span>{regressions.length} task regressed</span></div>}
+        </div>
+        <h3>{title}</h3><p>{text}</p>
+      </li>)}</ol>
+    </section>
+
+    <footer className="landing-footer">
+      <div className="footer-invitation"><div><h2>Find your agent’s next improvement.</h2></div><Link to="/app/new" className="button-primary">Analyze my agent <ArrowRight size={17} aria-hidden="true" /></Link></div>
+      <div className="footer-bottom"><Link to="/" className="footer-brand"><img src="/brand/mark.svg" width="32" height="32" alt="" />Hansa</Link><span>Investigate. Experiment. Review.</span><Link to="/demo">Recorded demo <ArrowRight size={14} aria-hidden="true" /></Link><span>Built for neatHack by <a href="https://x.com/sonuv_dev" target="_blank" rel="noopener noreferrer">@sonuv_dev</a></span></div>
+    </footer>
+  </main>
 }

@@ -1,15 +1,8 @@
 @import "tailwindcss";
 
 @font-face {
-  font-family: "Bricolage Grotesque";
-  src: url("/fonts/bricolage-grotesque.woff2") format("woff2");
-  font-style: normal;
-  font-weight: 200 800;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Geist";
-  src: url("/fonts/geist.woff2") format("woff2");
+  font-family: "Hanken Grotesk";
+  src: url("/fonts/hanken-grotesk.woff2") format("woff2");
   font-style: normal;
   font-weight: 100 900;
   font-display: swap;
@@ -22,23 +15,38 @@
   font-display: swap;
 }
 
-/* Receipt paper, printer ink, one hot orange. Orange means waste or the thing to press. */
+/* Light laboratory: cool paper, ink, and blue actions. Green and amber carry results. */
 :root {
   color-scheme: light;
-  --paper: #F3EEE3;
-  --surface: #FFFDF8;
-  --wash: #EAE3D3;
-  --ink: #11141B;
-  --muted: #6A6557;
-  --line: #D6CDB9;
-  --blue: #2440FF;
-  --blue-soft: #DFE4FF;
-  --waste: #FF4A12;
-  --waste-soft: #FFE1D3;
-  --ok: #0B8F5F;
-  --ok-soft: #D5F2E3;
-  --hard: 5px 5px 0 var(--ink);
+  --milk: #F7F9FC;
+  --lake: #182432;
+  --deep: #182432;
+  --water: #2458CA;
+  --water-deep: #1B439C;
+  --mist: #D5DFEA;
+  --reed: #45556A;
+  --saffron: #A75013;
+  --lotus: #84603E;
+  --lotus-soft: #F4ECE3;
+  --on-accent: #FFFFFF;
+  --body: #37485D;
+  /* The names the app's markup already uses. */
+  --paper: var(--milk);
+  --surface: #FFFFFF;
+  --wash: #EDF2F8;
+  --ink: var(--lake);
+  --muted: var(--reed);
+  --line: var(--mist);
+  --blue: var(--water);
+  --blue-soft: #E9F0FF;
+  --waste: var(--saffron);
+  --waste-soft: #FFF0DD;
+  --ok: #15734F;
+  --ok-soft: #E4F3EC;
   --ease: cubic-bezier(.2, .8, .2, 1);
+  --proof-shadow: 0 2px 8px rgb(24 36 50 / .05), 0 20px 48px -16px rgb(24 36 50 / .16);
+  /* One side margin for the nav and every page: slim, and only growing once the content is 1600px wide. */
+  --gutter: max(20px, 4vw, calc((100vw - 1600px) / 2));
 }
 
 @theme inline {
@@ -46,6 +54,7 @@
   --color-surface: var(--surface);
   --color-wash: var(--wash);
   --color-ink: var(--ink);
+  --color-body: var(--body);
   --color-muted: var(--muted);
   --color-line: var(--line);
   --color-blue: var(--blue);
@@ -54,12 +63,13 @@
   --color-waste-soft: var(--waste-soft);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
-  --font-display: "Bricolage Grotesque", "Geist", sans-serif;
-  --font-sans: "Geist", system-ui, sans-serif;
+  --color-deep: var(--deep);
+  --font-display: "Hanken Grotesk", system-ui, sans-serif;
+  --font-sans: "Hanken Grotesk", system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
-  --radius-control: 10px;
-  --radius-card: 16px;
-  --radius-window: 22px;
+  --radius-control: 6px;
+  --radius-card: 8px;
+  --radius-window: 8px;
 }
 
 html { scroll-behavior: smooth; }
@@ -68,15 +78,20 @@ body {
   background: var(--paper);
   color: var(--ink);
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.55;
+  font-size: 17px;
+  line-height: 1.65;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
-::selection { background: var(--waste); color: var(--ink); }
-:focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; border-radius: 4px; }
+::selection { background: var(--blue-soft); color: var(--ink); }
+:focus-visible { outline: 2px solid var(--water); outline-offset: 3px; border-radius: 4px; }
+a, button, summary { cursor: pointer; transition: background-color 140ms, color 140ms, border-color 140ms, transform 120ms var(--ease); }
 h1, h2, h3 { text-wrap: balance; }
-code, pre, .tabular { font-variant-numeric: tabular-nums; }
+/* Code is the one place a monospace face belongs. */
+pre, code, textarea { font-family: var(--font-mono); }
+input.field, select.field, textarea.field { font-size: 16px; }
+.tabular, .big-number { font-variant-numeric: lining-nums tabular-nums; }
+.font-display { letter-spacing: -.025em; }
 
 @keyframes run-event-enter {
   from { opacity: 0; transform: translateY(8px); }
@@ -84,50 +99,81 @@ code, pre, .tabular { font-variant-numeric: tabular-nums; }
 }
 @keyframes pulse-dot {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.6); opacity: .4; }
+  50% { transform: scale(1.15); opacity: .65; }
 }
-.run-event { animation: run-event-enter 220ms var(--ease); }
+.run-event, .task-resolved { animation: run-event-enter 180ms var(--ease); }
+.task-row, .run-event { transition: background-color 140ms; }
+.task-row:hover, .run-event:hover { background-color: var(--wash); }
+.trace-backdrop { animation: trace-backdrop-enter 160ms var(--ease); }
+.trace-panel { animation: trace-panel-enter 220ms var(--ease); }
+@keyframes trace-backdrop-enter { from { background-color: transparent; } }
+@keyframes trace-panel-enter { from { transform: translateX(100%); } to { transform: none; } }
 
 @layer components {
-  .page { @apply mx-auto w-full max-w-[1240px] px-5 pt-10 pb-24 sm:px-8; }
-  .page-title { @apply font-display text-[40px] leading-[.95] font-[780] tracking-[-.04em] sm:text-[64px]; }
-  /* A text link sized for a thumb. */
-  .back-link { @apply -ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-control px-2 font-mono text-[13px] font-medium hover:underline; }
-  .report-prose { @apply max-w-[65ch] text-[14px] leading-relaxed; }
+  /* App pages share the nav's side margin, so the logo and the page content line up. */
+  /* The width limit is for the content itself, so a narrow page (profile, sign-in) keeps its full reading width
+     and the side margin is added outside it. */
+  .page { @apply mx-auto pt-10 pb-24; box-sizing: content-box; max-width: 1600px; padding-inline: var(--gutter); }
+  .page-title { @apply text-[36px] leading-[1.08] font-semibold sm:text-[48px]; letter-spacing: -.035em; }
+  .report-prose { @apply max-w-[65ch] text-[17px] leading-relaxed; }
 
   .button-primary,
   .button-secondary {
-    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-control border-2 border-ink px-5 text-[14px] font-semibold;
-    transition: transform 140ms var(--ease), box-shadow 140ms var(--ease), background-color 140ms;
-    box-shadow: 3px 3px 0 var(--ink);
+    @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-5 text-[16px] font-semibold;
+    transition: background-color 160ms, color 160ms, border-color 160ms, transform 120ms var(--ease);
   }
-  .button-primary { @apply bg-waste text-ink; }
-  .button-secondary { @apply bg-surface text-ink; }
-  .button-primary:hover:not(:disabled),
-  .button-secondary:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 5px 5px 0 var(--ink); }
+  .button-primary { background: var(--water); color: var(--on-accent); }
+  .button-primary:hover:not(:disabled) { background: var(--water-deep); }
+  .button-secondary { @apply border border-ink/25 bg-transparent text-ink; }
+  .button-secondary:hover:not(:disabled) { @apply border-ink bg-surface; }
   .button-primary:active:not(:disabled),
-  .button-secondary:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: 0 0 0 var(--ink); }
+  .button-secondary:active:not(:disabled) { transform: scale(.98); }
   .button-primary:disabled,
-  .button-secondary:disabled { @apply cursor-not-allowed border-line bg-wash text-muted; box-shadow: none; }
+  .button-secondary:disabled { @apply cursor-not-allowed border-transparent bg-wash text-muted; }
 
-  .field { @apply block min-h-11 w-full rounded-control border-2 border-ink bg-surface px-3 py-2 text-[14px]; }
-  .field:disabled { @apply border-line bg-wash text-muted; }
+  .field { @apply block min-h-11 w-full rounded-control border border-line bg-surface px-3.5 py-2 text-[16px]; transition: border-color 140ms; }
+  .field:hover:not(:disabled) { border-color: color-mix(in srgb, var(--lake) 35%, var(--mist)); }
+  .field:focus { border-color: var(--water); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--water) 22%, transparent); }
+  .field:disabled { @apply bg-wash text-muted; }
 
-  /* A slab: the app's one container. Ink outline, hard shadow, mono tab on top. */
-  .slab { @apply relative rounded-card border-2 border-ink bg-surface; box-shadow: var(--hard); }
-  .slab-tab {
-    @apply absolute -top-[14px] left-5 rounded-[6px] border-2 border-ink bg-ink px-2.5 py-0.5 font-mono text-[12px] font-medium uppercase tracking-[.06em] text-paper;
-  }
-  .label { @apply font-mono text-[12px] uppercase tracking-[.08em] text-muted; }
-  .chip { @apply inline-flex shrink-0 items-center gap-1.5 justify-self-start rounded-full whitespace-nowrap border-2 border-ink px-2.5 py-0.5 font-mono text-[12px] font-medium; }
-  .chip-waste { @apply bg-waste text-ink; }
-  .chip-ok { @apply bg-ok-soft text-ink; }
-  .chip-quiet { @apply border-line bg-wash text-muted; }
-  .live-dot { @apply inline-block size-2 rounded-full bg-waste; animation: pulse-dot 1.2s ease-in-out infinite; }
-  .big-number { @apply font-display font-[780] leading-none tracking-[-.045em] tabular-nums; }
+  /* App reading groups stay flat; padding and spacing define their boundaries. */
+  .slab { @apply relative bg-transparent; }
+  /* A quiet caption at the top of a sheet, in the reader's words. */
+  .slab-tab { @apply mb-2 block text-[14px] font-medium text-muted; }
+  .label { @apply text-[14px] font-medium text-muted; }
+  .chip { @apply inline-flex shrink-0 items-center gap-1.5 justify-self-start rounded-[4px] border border-line px-2 py-0.5 text-[15px] font-medium whitespace-nowrap; }
+  .chip-waste { @apply border-transparent bg-waste-soft text-ink; }
+  .chip-ok { @apply border-transparent bg-ok-soft text-ink; }
+  .chip-quiet { @apply border-transparent bg-wash text-muted; }
+  .live-dot { @apply inline-block size-2 rounded-full bg-waste; animation: pulse-dot 2.4s ease-in-out infinite; }
+  .big-number { @apply font-mono leading-none font-medium; letter-spacing: -.04em; }
+  /* A sheet whose content runs edge to edge still needs room around its caption. */
+  .slab:not([class*=" p-"]):not([class*=" px-"]) > .slab-tab { padding: 16px 24px 0; margin-bottom: 0; }
+  .back-link { @apply -ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-control px-2 text-[14px] font-medium text-muted hover:text-ink; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
+
+/* Export controls also appear inside dark verdict panels. */
+.bg-ink .button-secondary { color: var(--paper); border-color: var(--paper); }
+.bg-ink .button-secondary:hover:not(:disabled) { background: var(--paper); color: var(--ink); }
+/* Warning labels need a lighter accent on ink; dark labels need a pale warning fill. */
+.bg-ink .text-waste { color: #FFD09B; }
+.bg-waste.text-ink { background-color: var(--waste-soft); }
+
+/* Walkthroughs are reading surfaces; give their headings and prose a distinct scale. */
+.workflow-guide h2 { font-size: clamp(28px, 2.8vw, 36px); font-weight: 650; line-height: 1.2; letter-spacing: -.03em; }
+.workflow-guide summary h2 { font-size: 24px; }
+.workflow-guide h3 { font-size: 20px; font-weight: 600; line-height: 1.35; letter-spacing: -.015em; }
+.workflow-guide p { max-width: 65ch; font-size: 17px; line-height: 1.75; color: var(--body); }
+.workflow-guide ol p { margin-top: 12px; }
+.workflow-guide ol { row-gap: 32px; }
+.workflow-guide .guide-note { font-size: 16px; line-height: 1.7; }
+@media (min-width: 768px) {
+  .workflow-guide p { font-size: 18px; }
+  .workflow-guide h3 { font-size: 22px; }
+  .workflow-guide .guide-note { font-size: 16px; }
 }
