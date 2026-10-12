@@ -31,11 +31,27 @@ Hansa was built for **neatHack 2026** by [@sonuv_dev](https://x.com/sonuv_dev), 
 
 ## The problem
 
-An AI agent makes many model calls. Some of these calls are not necessary. You pay for each call, and you cannot see which calls to remove.
+An AI agent has many parts: prompts, tools, memory, context and a model. Each part can make the agent slow, expensive or unreliable. To find the cause, you need an engineer who measures the agent and reads its code.
 
 ## What Hansa does
 
-Hansa measures your agent, finds the unnecessary work, and tests a fix. It gives you the fix only if the agent still gives the same answers.
+Hansa does the work of that engineer. It measures your agent, examines each part, and tests a fix. It gives you the fix only if the agent still gives the same answers.
+
+## What Hansa examines
+
+| Area | What Hansa looks for |
+| --- | --- |
+| **Prompt and context** | Text that the agent sends again on each call. A system prompt that is too large. |
+| **Memory** | Data that the agent keeps between turns but does not use. A history that only grows. |
+| **Tools** | Tool definitions that go with each call but are not used. The same tool call made two times. |
+| **Agent design** | A step that only passes the request to a different agent. Loops that have no limit. |
+| **Model choice** | A large model that does a simple job. |
+| **Caching** | A stable part of the prompt that the provider can cache. |
+| **Output** | Answers that are longer than the next step needs. |
+| **Speed** | Calls that run one after the other but can run at the same time. |
+| **Reliability** | No limit on turns or on answer length. A change that makes a task fail. |
+
+## The steps
 
 1. **Import.** Select a GitHub repository. Hansa copies one commit. The copy is read-only.
 2. **Onboard.** The Hansa agent reads the code. It writes a small adapter that runs your agent.
@@ -49,6 +65,8 @@ Hansa measures your agent, finds the unnecessary work, and tests a fix. It gives
 ## Results
 
 These results are from real agents. The checks are automatic. A person did not examine the answers.
+
+So far, the fixes that Hansa tested changed the agent design. Hansa also reports findings in the other areas. For caching and model choice it gives an estimate, because the sandbox cannot measure them.
 
 | Agent | Result |
 | --- | --- |
@@ -68,7 +86,7 @@ Hansa cannot measure some changes in the sandbox. Examples are a different model
 
 | Tool | Use |
 | --- | --- |
-| **Neatlogs** | Hansa records each sandbox run and each agent job as a trace. The app shows these traces. |
+| **Neatlogs** | Hansa records each sandbox run and each agent job as a trace. The app shows these traces. Hansa also reads the Neatlogs detections as leads. |
 | **Entire** | Entire holds the repository and the recorded agent sessions for the commits. |
 | **CFO.ai** | CFO.ai holds the business model. The model uses the measured costs. |
 | **AWS EC2** | One server runs the API, the sandbox and the database. |
