@@ -86,25 +86,25 @@ function StageForm({ kind, data, session, preview, busy, disabled, onStarted, re
     ? [tasks != null && `${tasks} task${tasks === 1 ? '' : 's'}`, `${repetitions} run${repetitions === '1' ? '' : 's'} each`, `stops at ${measurement(contract.data?.contract?.limits?.max_spend_usd, 'usd')}`]
     : [`stops at ${measurement(kind === 'optimization' ? Number(cap) + Number(targetCap) : Number(cap), 'usd')}`, kind === 'investigation' ? 'reads only, runs nothing' : 'runs in the sandbox']
   return <section aria-label="Start a stage" className="slab mb-9 p-6 pt-8 md:p-8">
-    <span className="slab-tab">{stageLabels[kind]}</span><h2 className="font-display text-[32px] leading-none font-[780] tracking-[-.04em]">{title}</h2>
+    <span className="slab-tab">{stageLabels[kind]}</span><h2 className="font-display text-[32px] leading-none font-medium">{title}</h2>
     <p className="mt-3 max-w-[60ch] text-[15px] text-muted">{pitch}</p>
     <form onSubmit={event => void start(event)} className="mt-5">
       {kind === 'optimization' && <>
-        <label htmlFor="run-finding" className="block text-[13px] font-medium">What to fix</label><select id="run-finding" className="field mt-2" value={finding} disabled={disabledFields} onChange={event => setFinding(event.target.value)}>{data.investigation?.job_id && data.investigation.findings.map((item, index) => <option key={item.finding_id} value={item.finding_id}>Leak {String(index + 1).padStart(2, '0')} · {item.waste?.slice(0, 90)}</option>)}<option value="">Something else (describe it)</option></select>
-        {!finding && <><label htmlFor="run-goal" className="mt-4 block text-[13px] font-medium">Describe the change to try</label><textarea id="run-goal" className="field mt-2 min-h-24" minLength={10} maxLength={2000} required value={goal} disabled={disabledFields} onChange={event => setGoal(event.target.value)} /></>}
+        <label htmlFor="run-finding" className="block text-[15px] font-medium">What to fix</label><select id="run-finding" className="field mt-2" value={finding} disabled={disabledFields} onChange={event => setFinding(event.target.value)}>{data.investigation?.job_id && data.investigation.findings.map((item, index) => <option key={item.finding_id} value={item.finding_id}>Leak {String(index + 1).padStart(2, '0')} · {item.waste?.slice(0, 90)}</option>)}<option value="">Something else (describe it)</option></select>
+        {!finding && <><label htmlFor="run-goal" className="mt-4 block text-[15px] font-medium">Describe the change to try</label><textarea id="run-goal" className="field mt-2 min-h-24" minLength={10} maxLength={2000} required value={goal} disabled={disabledFields} onChange={event => setGoal(event.target.value)} /></>}
       </>}
-      {error && <div role="alert" className="mt-4 max-w-[65ch] rounded-control border-2 border-ink bg-waste px-4 py-3 text-[14px]"><p className="font-semibold">{error}</p>{advice(error) && <p className="mt-1">{advice(error)}</p>}</div>}
-      {!preview && prerequisite && <p className="mt-4 rounded-control border-2 border-dashed border-ink px-4 py-3 text-[14px]">{prerequisite}</p>}
+      {error && <div role="alert" className="mt-4 max-w-[65ch] rounded-control bg-waste px-4 py-3 text-[14px]"><p className="font-semibold">{error}</p>{advice(error) && <p className="mt-1">{advice(error)}</p>}</div>}
+      {!preview && prerequisite && <p className="mt-4 rounded-control px-4 py-3 text-[14px]">{prerequisite}</p>}
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
         {uncertain ? <button type="button" disabled={pending} className="button-secondary" onClick={() => void checkStatus()}>Check run status</button> : <button className="button-primary min-h-12 px-7 text-[16px]" disabled={locked}>{pending ? 'Starting…' : buttons[kind]}</button>}
-        <p className="font-mono text-[13px] text-muted">{terms.filter(Boolean).join(' · ')}</p>
+        <p className="tabular text-[15px] text-muted">{terms.filter(Boolean).join(' · ')}</p>
       </div>
-      <details className="mt-5 text-[13px]"><summary className="cursor-pointer font-mono text-muted underline decoration-line decoration-2 underline-offset-4">change options</summary>
+      <details className="mt-5 text-[15px]"><summary className="cursor-pointer tabular text-muted underline decoration-line decoration-2 underline-offset-4">change options</summary>
         <div className="mt-4 grid gap-4 sm:grid-cols-2">
           {kind === 'baseline' ? <div><label htmlFor="run-repetitions" className="block font-medium">Runs per task</label><select id="run-repetitions" className="field mt-2" value={repetitions} disabled={disabledFields} onChange={event => setRepetitions(event.target.value)}>{[1, 2, 3, 4, 5].map(value => <option key={value} value={value}>{value}{value === 1 ? ' (quick)' : value === 2 ? ' (shows variation)' : ''}</option>)}</select>
             <p className="mt-2 text-muted">The spend cap comes from your tasks in Setup.</p></div>
-          : <div><label htmlFor="run-cap" className="block font-medium">{kind === 'optimization' ? 'Cap for Hansa\'s own thinking (USD)' : 'Spend cap (USD)'}</label><input id="run-cap" className="field mt-2 font-mono" type="number" min="0.01" max="1.5" step="0.01" required value={cap} disabled={disabledFields} onChange={event => setCap(event.target.value)} /></div>}
-          {kind === 'optimization' && <div><label htmlFor="target-cap" className="block font-medium">Cap for rerunning your tasks (USD)</label><input id="target-cap" className="field mt-2 font-mono" type="number" min="0.01" max="3" step="0.01" required value={targetCap} disabled={disabledFields} onChange={event => setTargetCap(event.target.value)} /></div>}
+          : <div><label htmlFor="run-cap" className="block font-medium">{kind === 'optimization' ? 'Cap for Hansa\'s own thinking (USD)' : 'Spend cap (USD)'}</label><input id="run-cap" className="field mt-2 tabular" type="number" min="0.01" max="1.5" step="0.01" required value={cap} disabled={disabledFields} onChange={event => setCap(event.target.value)} /></div>}
+          {kind === 'optimization' && <div><label htmlFor="target-cap" className="block font-medium">Cap for rerunning your tasks (USD)</label><input id="target-cap" className="field mt-2 tabular" type="number" min="0.01" max="3" step="0.01" required value={targetCap} disabled={disabledFields} onChange={event => setTargetCap(event.target.value)} /></div>}
         </div>
         <p className="mt-3 max-w-[65ch] text-muted">A cap stops new work once recorded cost reaches it. A call already in flight can finish past it.</p>
         {contract.isError && <div className="mt-3"><p role="alert">Could not load the spend cap.</p><button type="button" className="button-secondary mt-2" onClick={() => void contract.refetch()}>Reload</button></div>}
@@ -122,8 +122,8 @@ export default function StageRunner({ data, step, session, preview, disabled, re
   const kind = kinds[step]
   const busy = Boolean(job) && !finished
   return <>
-    {busy && <p role="status" className="mb-4 flex items-center gap-2 font-mono text-[13px]"><span className="live-dot" /> A job is running. Live feed below.</p>}
+    {busy && <p role="status" className="mb-4 flex items-center gap-2 tabular text-[15px]"><span className="live-dot" /> A job is running. Live feed below.</p>}
     {kind && !busy && !preview && <StageForm key={`${kind}:${step === 'fix' ? data.investigation?.job_id || '' : ''}`} kind={kind} data={data} session={session} preview={preview} busy={busy} disabled={disabled} onStarted={onStarted} refresh={refresh} />}
-    {job && session && !preview && <RunFeed key={job.job_id} job={job} importId={data.import.import_id} ownerId={session.user.id} onFinished={onFinished} />}
+    {job && session && !preview && <RunFeed key={job.job_id} job={job} importId={data.import.import_id} ownerId={session.user.id} onFinished={onFinished} tasks={data.baseline?.tasks} />}
   </>
 }

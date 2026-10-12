@@ -76,13 +76,13 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
     return [...groups.values()].sort((x, y) => y.count - x.count).slice(0, 6)
   }
   const suggestions = (key: keyof typeof form, kind: string = key) => { const options = seen(kind)
-    return options.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1.5"><span className="font-mono text-[12px] text-muted">found in your code:</span>
+    return options.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1.5"><span className="tabular text-[14px] text-muted">found in your code:</span>
       {options.map(option => <button type="button" key={option.value} aria-pressed={form[key] === option.value} title={`Seen in ${option.where}${option.count > 1 ? ` and ${option.count - 1} more place${option.count > 2 ? 's' : ''}` : ''}`}
         onClick={() => setForm({ ...form, [key]: option.value })} className={`chip shrink max-w-full min-h-9 py-1 whitespace-normal [overflow-wrap:anywhere] text-left ${form[key] === option.value ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}>
         {option.value}<span className="opacity-60">{option.where}</span></button>)}</div> }
-  const field = (key: keyof typeof form, label: string, hint: string) => <div><label htmlFor={`setup-${key}`} className="block text-[13px] font-medium">{label}</label>
-    <input id={`setup-${key}`} className="field mt-2 font-mono" required value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} />
-    <span className="mt-1 block text-[13px] text-muted">{hint}</span>{suggestions(key)}</div>
+  const field = (key: keyof typeof form, label: string, hint: string) => <div><label htmlFor={`setup-${key}`} className="block text-[15px] font-medium">{label}</label>
+    <input id={`setup-${key}`} className="field mt-2 tabular" required value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} />
+    <span className="mt-1 block text-[15px] text-muted">{hint}</span>{suggestions(key)}</div>
 
   // A fresh read of the repository. Saved settings are kept only if you save them again afterwards.
   async function rescan() {
@@ -97,26 +97,26 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
   }
 
   return <form onSubmit={event => void save(event)} className="slab p-6 pt-8 sm:p-8 sm:pt-9"><span className="slab-tab">1 · how it runs</span>
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-display text-[28px] leading-none font-[780] tracking-[-.04em]">Check what Hansa detected.</h3>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-display text-[28px] leading-none font-medium">Check what Hansa detected.</h3>
       <p className="mt-2 text-muted">Read from {inspection.findings.scanned_files} files without running anything.{inspection.findings.partial ? ' The scan was cut short, so check these carefully.' : ''}</p></div>
       <div className="flex flex-wrap items-center gap-2">{done && <span className="chip chip-ok"><Check size={13} strokeWidth={3} aria-hidden="true" /> saved</span>}
         <button type="button" disabled={busy} className="chip min-h-9 bg-surface hover:bg-waste" onClick={() => void rescan()}>{busy ? 'scanning…' : 'scan the code again'}</button></div></div>
     <div className="mt-6 grid gap-5 sm:grid-cols-2">
       {field('entrypoint', 'Entrypoint', 'The command that starts the agent.')}
       <div>{field('python_version', 'Python version', 'Hansa\'s sandbox runs Python 3.12, so this has to allow 3.12.')}
-        {!pythonFits && <p role="alert" className="mt-2 rounded-control border-2 border-ink bg-waste px-3 py-2 text-[13px] font-medium">"{form.python_version}" rules out 3.12, so the agent can't be run. <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '3.12' })}>Use 3.12</button> or a range like <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '>=3.10' })}>{'>=3.10'}</button>.</p>}</div>
-      <div><label className="block text-[13px] font-medium">Provider the code calls<select className="field mt-2" value={form.model_provider} onChange={event => setForm({ ...form, model_provider: event.target.value })}>{providers.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">What the source is written against.</span></label>{suggestions('model_provider')}</div>
+        {!pythonFits && <p role="alert" className="mt-2 rounded-control bg-waste px-3 py-2 text-[15px] font-medium">"{form.python_version}" rules out 3.12, so the agent can't be run. <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '3.12' })}>Use 3.12</button> or a range like <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '>=3.10' })}>{'>=3.10'}</button>.</p>}</div>
+      <div><label className="block text-[15px] font-medium">Provider the code calls<select className="field mt-2" value={form.model_provider} onChange={event => setForm({ ...form, model_provider: event.target.value })}>{providers.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">What the source is written against.</span></label>{suggestions('model_provider')}</div>
       {field('model_id', 'Model the code asks for', 'Recorded next to the model actually used.')}
-      <label className="block text-[13px] font-medium sm:col-span-2">Model Hansa runs it on<select className="field mt-2 font-mono" value={form.litellm_model} onChange={event => setForm({ ...form, litellm_model: event.target.value })}>{inspection.litellm_models.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">Every call from your agent is routed to this model and metered.</span></label>
+      <label className="block text-[15px] font-medium sm:col-span-2">Model Hansa runs it on<select className="field mt-2 tabular" value={form.litellm_model} onChange={event => setForm({ ...form, litellm_model: event.target.value })}>{inspection.litellm_models.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">Every call from your agent is routed to this model and metered.</span></label>
     </div>
     {[['Dependencies to install', manifests, picked, setPicked, 'No dependency file found. The agent must run on the standard library alone.'], ['Tools the agent may use', tools, allowed, setAllowed, 'No tools detected.']].map(([title, values, list, set, empty]) =>
-      <fieldset key={title as string} className="mt-6"><legend className="text-[13px] font-medium">{title as string}</legend>
+      <fieldset key={title as string} className="mt-6"><legend className="text-[15px] font-medium">{title as string}</legend>
         {(values as string[]).length ? <div className="mt-2 flex flex-wrap gap-2">{(values as string[]).map(value => { const on = (list as string[]).includes(value)
           return <label key={value} className={`chip relative cursor-pointer py-1.5 ${on ? 'bg-ink text-paper' : 'bg-surface'}`}><input type="checkbox" className="absolute inset-0 size-full cursor-pointer opacity-0" checked={on} onChange={() => toggle(list as string[], set as (next: string[]) => void, value)} />{on && <Check size={13} strokeWidth={3} aria-hidden="true" />}{value}</label> })}</div>
-          : <p className="mt-2 text-[13px] text-muted">{empty as string}</p>}</fieldset>)}
+          : <p className="mt-2 text-[15px] text-muted">{empty as string}</p>}</fieldset>)}
     {error && <p role="alert" className="mt-5 font-medium">{error}</p>}
     <button className="button-primary mt-7" disabled={busy || !pythonFits}>{busy ? 'Saving…' : done ? 'Save changes' : 'Looks right, save'}</button>
-    {done && <p className="mt-3 text-[13px] text-muted">Changing these means the tasks below need confirming again.</p>}
+    {done && <p className="mt-3 text-[15px] text-muted">Changing these means the tasks below need confirming again.</p>}
   </form>
 }
 
@@ -189,64 +189,64 @@ function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { b
   }
 
   return <form onSubmit={event => void save(event)} className="slab mt-9 p-6 pt-8 sm:p-8 sm:pt-9"><span className="slab-tab">3 · what it must get right</span>
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-display text-[28px] leading-none font-[780] tracking-[-.04em]">Give it a few real tasks.</h3>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-display text-[28px] leading-none font-medium">Give it a few real tasks.</h3>
       <p className="mt-2 max-w-[60ch] text-muted">Hansa runs these to measure your agent, then again to prove a fix didn't break it. Three is plenty to start.</p></div>
       {confirmed ? <span className="chip chip-ok"><Check size={13} strokeWidth={3} aria-hidden="true" /> confirmed · v{record.version}</span> : record.version ? <span className="chip chip-waste">{record.stale ? 'needs confirming again' : 'not confirmed'}</span> : null}</div>
 
-    {!example && <aside className="mt-6 rounded-control border-2 border-dashed border-ink p-5">
-      <p className="flex items-center gap-2 font-display text-[19px] font-[760] tracking-[-.02em]"><Lightbulb size={18} aria-hidden="true" /> Not sure what to write?</p>
+    {!example && <aside className="mt-6 rounded-control p-5">
+      <p className="flex items-center gap-2 text-[19px] font-semibold"><Lightbulb size={18} aria-hidden="true" /> Not sure what to write?</p>
       <p className="mt-2 max-w-[70ch] text-[14px]">{adapter ? 'Write one task per thing your agent is for, or let Hansa draft them.' : 'Run step 2 first. While Hansa learns to run your agent it works out the input it takes, and offers it here as a ready-made task.'}</p>
       {adapter && <button type="button" className="button-primary mt-4" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing tasks…' : 'Write 3 tasks for me'}</button>}
       {drafted && <p role="status" className="mt-3 text-[14px] font-medium">{drafted}</p>}
-      {tools.length > 0 && <><p className="mt-4 font-mono text-[12px] text-muted">ideas from the tools you allowed, one task each:</p>
+      {tools.length > 0 && <><p className="mt-4 tabular text-[14px] text-muted">ideas from the tools you allowed, one task each:</p>
         <div className="mt-2 flex flex-wrap gap-1.5">{tools.slice(0, 8).map(tool => { const name = `Ends in ${tool}`, used = tasks.some(task => task.name === name)
           return <button type="button" key={tool} disabled={used} className={`chip py-1 ${used ? 'chip-quiet' : 'bg-surface hover:bg-waste'}`} onClick={() => { const draft = { ...blank(), name, description: `A request that should make the agent call ${tool}.` }
             setDirty(true); setTasks(tasks.length === 1 && !tasks[0].name && !tasks[0].source ? [draft] : [...tasks, draft]) }}><Plus size={12} aria-hidden="true" />{tool}</button> })}</div></>}
     </aside>}
-    {example && <aside className="mt-6 rounded-control border-2 border-ink bg-waste-soft p-5">
-      <p className="flex items-center gap-2 font-display text-[19px] font-[760] tracking-[-.02em]"><Lightbulb size={18} aria-hidden="true" /> Suggested from your code</p>
+    {example && <aside className="mt-6 rounded-control bg-waste-soft p-5">
+      <p className="flex items-center gap-2 text-[19px] font-semibold"><Lightbulb size={18} aria-hidden="true" /> Suggested from your code</p>
       <p className="mt-2 max-w-[70ch] text-[14px]">{example.description || 'Hansa worked out the input this agent takes while writing its adapter.'}</p>
-      <pre className="mt-3 max-h-44 overflow-auto rounded-control bg-ink p-4 font-mono text-[12.5px] leading-relaxed text-paper">{JSON.stringify(example.task, null, 2)}</pre>
+      <pre className="mt-3 max-h-44 overflow-auto rounded-control bg-ink p-4 tabular text-[14px] leading-relaxed text-paper">{JSON.stringify(example.task, null, 2)}</pre>
       <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" className="button-primary" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing tasks…' : 'Write 3 tasks for me'}</button>
         <button type="button" className="button-secondary" onClick={useExample}><Plus size={16} aria-hidden="true" /> Use just this example</button>
-        <span className="font-mono text-[12px] text-muted">one model call, a few cents</span></div>
+        <span className="tabular text-[14px] text-muted">one model call, a few cents</span></div>
       {drafted && <p role="status" className="mt-3 text-[14px] font-medium">{drafted}</p>}
-      {returns && <details className="mt-4 text-[13px]"><summary className="cursor-pointer font-semibold">What the agent returns, for writing checks</summary><pre className="mt-2 max-h-64 overflow-auto font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap">{returns}</pre></details>}
+      {returns && <details className="mt-4 text-[15px]"><summary className="cursor-pointer font-semibold">What the agent returns, for writing checks</summary><pre className="mt-2 max-h-64 overflow-auto tabular text-[14px] leading-relaxed whitespace-pre-wrap">{returns}</pre></details>}
     </aside>}
-    <ol className="mt-7 grid grid-cols-[minmax(0,1fr)] gap-6">{tasks.map((task, index) => <li key={index} className="min-w-0 rounded-control border-2 border-ink"><details open={!task.source} className="group p-5">
+    <ol className="mt-7 grid grid-cols-[minmax(0,1fr)] gap-6">{tasks.map((task, index) => <li key={index} className="min-w-0 rounded-control"><details open={!task.source} className="group p-5">
       <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden"><span className="label shrink-0">task {String(index + 1).padStart(2, '0')}</span>
-        <span className="min-w-0 flex-1 truncate font-semibold">{task.name || 'New task'}</span><span className="shrink-0 font-mono text-[12px] text-muted">{task.checks.filter(check => check.pointer.trim()).length} checks</span>
-        <span aria-hidden="true" className="shrink-0 font-mono text-[12px] group-open:hidden">edit ▾</span><span aria-hidden="true" className="hidden shrink-0 font-mono text-[12px] group-open:inline">close ▴</span></summary>
+        <span className="min-w-0 flex-1 truncate font-semibold">{task.name || 'New task'}</span><span className="shrink-0 tabular text-[14px] text-muted">{task.checks.filter(check => check.pointer.trim()).length} checks</span>
+        <span aria-hidden="true" className="shrink-0 tabular text-[14px] group-open:hidden">edit ▾</span><span aria-hidden="true" className="hidden shrink-0 tabular text-[14px] group-open:inline">close ▴</span></summary>
       <div className="mt-4 flex items-center justify-end gap-3">
         {tasks.length > 1 && <button type="button" aria-label={`Remove task ${index + 1}`} className="grid size-8 place-items-center rounded-control hover:bg-waste" onClick={() => { setDirty(true); setTasks(tasks.filter((_, i) => i !== index)) }}><Trash2 size={16} aria-hidden="true" /></button>}</div>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
-        <label className="block text-[13px] font-medium">Name<input className="field mt-2" required maxLength={120} placeholder="Cancel for refund" value={task.name} onChange={event => edit(index, { name: event.target.value })} /></label>
-        <label className="block text-[13px] font-medium">What it tests<input className="field mt-2" maxLength={2000} placeholder="A customer cancels and wants their money back" value={task.description} onChange={event => edit(index, { description: event.target.value })} /></label></div>
-      <label className="mt-4 block text-[13px] font-medium">Input your agent receives (JSON)<textarea className="field mt-2 min-h-28 font-mono text-[13px]" spellCheck={false} required value={task.input} onChange={event => edit(index, { input: event.target.value })} /></label>
-      <p className="mt-4 text-[13px] font-medium">The answer must have</p>
+        <label className="block text-[15px] font-medium">Name<input className="field mt-2" required maxLength={120} placeholder="Cancel for refund" value={task.name} onChange={event => edit(index, { name: event.target.value })} /></label>
+        <label className="block text-[15px] font-medium">What it tests<input className="field mt-2" maxLength={2000} placeholder="A customer cancels and wants their money back" value={task.description} onChange={event => edit(index, { description: event.target.value })} /></label></div>
+      <label className="mt-4 block text-[15px] font-medium">Input your agent receives (JSON)<textarea className="field mt-2 min-h-28 tabular text-[15px]" spellCheck={false} required value={task.input} onChange={event => edit(index, { input: event.target.value })} /></label>
+      <p className="mt-4 text-[15px] font-medium">The answer must have</p>
       <div className="mt-2 grid gap-2">{task.checks.map((check, at) => { const set = (change: Partial<Draft['checks'][number]>) => edit(index, { checks: task.checks.map((item, i) => i === at ? { ...item, ...change } : item) })
         return <div key={at} className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 sm:grid-cols-[minmax(0,1.1fr)_130px_minmax(0,1fr)_auto]">
-          <input aria-label="Field path" className="field font-mono text-[13px]" placeholder="/status" value={check.pointer} onChange={event => set({ pointer: event.target.value })} />
-          <select aria-label="Type" className="field text-[13px]" value={check.field_type} onChange={event => set({ field_type: event.target.value })}>{types.map(value => <option key={value}>{value}</option>)}</select>
-          <input aria-label="Exact value, optional" className="field col-span-2 font-mono text-[13px] sm:col-span-1" placeholder={'equal to… e.g. "refunded" (optional)'} value={check.exact} onChange={event => set({ exact: event.target.value })} />
+          <input aria-label="Field path" className="field tabular text-[15px]" placeholder="/status" value={check.pointer} onChange={event => set({ pointer: event.target.value })} />
+          <select aria-label="Type" className="field text-[15px]" value={check.field_type} onChange={event => set({ field_type: event.target.value })}>{types.map(value => <option key={value}>{value}</option>)}</select>
+          <input aria-label="Exact value, optional" className="field col-span-2 tabular text-[15px] sm:col-span-1" placeholder={'equal to… e.g. "refunded" (optional)'} value={check.exact} onChange={event => set({ exact: event.target.value })} />
           <button type="button" aria-label="Remove check" className="col-start-2 row-start-1 grid size-11 place-items-center rounded-control hover:bg-waste sm:col-start-auto sm:row-start-auto" onClick={() => edit(index, { checks: task.checks.filter((_, i) => i !== at) })}><Trash2 size={15} aria-hidden="true" /></button></div> })}</div>
-      <button type="button" className="mt-3 inline-flex items-center gap-1.5 font-mono text-[13px] font-medium underline decoration-waste decoration-2 underline-offset-4" onClick={() => edit(index, { checks: [...task.checks, { pointer: '', field_type: 'string', exact: '' }] })}><Plus size={14} aria-hidden="true" /> add a check</button>
-      {task.source && (task.source.required_facts.length > 0 || task.source.expected_output != null) && <p className="mt-3 font-mono text-[12px] text-muted">Also keeps {task.source.required_facts.length} review note{task.source.required_facts.length === 1 ? '' : 's'}{task.source.expected_output != null ? ' and an expected output' : ''} saved earlier.</p>}
+      <button type="button" className="mt-3 inline-flex items-center gap-1.5 tabular text-[15px] font-medium underline decoration-waste decoration-2 underline-offset-4" onClick={() => edit(index, { checks: [...task.checks, { pointer: '', field_type: 'string', exact: '' }] })}><Plus size={14} aria-hidden="true" /> add a check</button>
+      {task.source && (task.source.required_facts.length > 0 || task.source.expected_output != null) && <p className="mt-3 tabular text-[14px] text-muted">Also keeps {task.source.required_facts.length} review note{task.source.required_facts.length === 1 ? '' : 's'}{task.source.expected_output != null ? ' and an expected output' : ''} saved earlier.</p>}
     </details></li>)}</ol>
     {tasks.length < 20 && <button type="button" className="button-secondary mt-5" onClick={() => { setDirty(true); setTasks([...tasks, blank()]) }}><Plus size={16} aria-hidden="true" /> Add a task</button>}
-    <p className="mt-3 font-mono text-[12px] text-muted">A path like /status points into the JSON your agent returns. Leave "equal to" empty to only check the field exists with that type.</p>
+    <p className="mt-3 tabular text-[14px] text-muted">A path like /status points into the JSON your agent returns. Leave "equal to" empty to only check the field exists with that type.</p>
 
-    <fieldset className="mt-8 border-t-2 border-dashed border-ink pt-6"><legend className="pr-3 font-display text-[20px] font-[760] tracking-[-.03em]">Limits for one full run</legend>
-      <div className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-5">{limitFields.map(([key, label, , step]) => <label key={key} className="block text-[13px] font-medium">{label}
-        <input className="field mt-2 font-mono" type="number" min="0" step={step} required value={limits[key]} onChange={event => { setDirty(true); setLimits({ ...limits, [key]: event.target.value }) }} /></label>)}</div></fieldset>
+    <fieldset className="mt-8 pt-6"><legend className="pr-3 text-[20px] font-semibold">Limits for one full run</legend>
+      <div className="mt-2 grid grid-cols-2 gap-4 sm:grid-cols-5">{limitFields.map(([key, label, , step]) => <label key={key} className="block text-[15px] font-medium">{label}
+        <input className="field mt-2 tabular" type="number" min="0" step={step} required value={limits[key]} onChange={event => { setDirty(true); setLimits({ ...limits, [key]: event.target.value }) }} /></label>)}</div></fieldset>
 
-    <details className="mt-7"><summary className="cursor-pointer font-display text-[20px] font-[760] tracking-[-.03em]">Behaviour a fix must never break <span className="font-mono text-[12px] font-normal text-muted">· defaults filled in</span></summary>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2">{guards.map(([, key, label]) => <label key={key} className="block text-[13px] font-medium">{label}
+    <details className="mt-7"><summary className="cursor-pointer text-[20px] font-semibold">Behaviour a fix must never break <span className="tabular text-[14px] font-normal text-muted">· defaults filled in</span></summary>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">{guards.map(([, key, label]) => <label key={key} className="block text-[15px] font-medium">{label}
         <textarea className="field mt-2 min-h-20" required maxLength={2000} value={rules[key]} onChange={event => { setDirty(true); setRules({ ...rules, [key]: event.target.value }) }} /></label>)}</div>
-      <p className="mt-3 text-[13px] text-muted">A person checks these when reviewing a result. Hansa's automatic checks are the fields above.</p></details>
+      <p className="mt-3 text-[15px] text-muted">A person checks these when reviewing a result. Hansa's automatic checks are the fields above.</p></details>
 
-    {error && <p role="alert" className="mt-6 rounded-control border-2 border-ink bg-waste px-4 py-3 font-medium">{error}</p>}
-    {!confirmed && !dirty && record.missing_requirements.length > 0 && record.version != null && <ul className="mt-6 list-disc pl-5 text-[13px]">{record.missing_requirements.map(item => <li key={item}>{item}</li>)}</ul>}
+    {error && <p role="alert" className="mt-6 rounded-control bg-waste px-4 py-3 font-medium">{error}</p>}
+    {!confirmed && !dirty && record.missing_requirements.length > 0 && record.version != null && <ul className="mt-6 list-disc pl-5 text-[15px]">{record.missing_requirements.map(item => <li key={item}>{item}</li>)}</ul>}
     <button className="button-primary mt-7" disabled={busy || confirmed}>{busy ? 'Saving…' : confirmed ? 'Confirmed' : 'Save and confirm tasks'}</button>
   </form>
 }
@@ -270,18 +270,18 @@ export default function Setup({ importId, session, hasAdapter, onChanged, childr
   return <>
     <Settings key={inspection.data.revision} base={base} session={session} inspection={inspection.data} onSaved={next => { queryClient.setQueryData(inspectionKey, next); void queryClient.invalidateQueries({ queryKey: contractKey }); onChanged() }} />
     {children}
-    {!ready ? <p className="mt-9 rounded-card border-2 border-dashed border-ink p-8 text-muted">Save the settings above, then add the tasks.</p>
+    {!ready ? <p className="mt-9 rounded-card p-8 text-muted">Save the settings above, then add the tasks.</p>
       : contract.isPending ? <p role="status" className="slab mt-9 p-8">Loading tasks…</p>
       : contract.isError ? <div role="alert" className="slab mt-9 p-8"><p>{message(contract.error)}</p><button className="button-secondary mt-4" onClick={() => void contract.refetch()}>Try again</button></div>
       : <Tasks key={`${contract.data.version}:${inspection.data.configuration_revision}:${Boolean(adapter.data)}`} base={base} session={session} revision={inspection.data.configuration_revision!} record={contract.data} adapter={adapter.data || null} tools={inspection.data.configuration?.approved_tools || []} onSaved={next => { queryClient.setQueryData(contractKey, next); void queryClient.invalidateQueries({ queryKey: ['run-contract'] }); onChanged() }} />}
     {/* One line that always says what is still missing and what comes after. */}
-    <aside className="mt-9 rounded-card border-2 border-ink bg-ink p-6 text-paper sm:p-8"><p className="font-mono text-[12px] uppercase tracking-[.08em] text-paper/70">what's next</p>
+    <aside className="mt-9 rounded-card bg-ink p-6 text-paper sm:p-8"><p className="tabular text-[14px] text-paper/80">what's next</p>
       {(() => { const tasksDone = contract.data?.status === 'confirmed' && !contract.data.stale
         const fits = allowsSandboxPython(inspection.data.configuration?.python_version || '')
         const todo = !ready ? 'Save the settings in step 1.' : !fits ? 'Fix the Python version in step 1: it has to allow 3.12.' : !hasAdapter ? 'Start onboarding in step 2 so Hansa can run your agent.' : !tasksDone ? 'Save and confirm at least one task in step 3.' : null
         return <><ul className="mt-3 flex flex-wrap gap-2">{[['settings', ready && fits], ['adapter', hasAdapter], ['tasks', tasksDone]].map(([label, ok]) =>
           <li key={label as string} className={`chip ${ok ? 'border-paper bg-ok-soft text-ink' : 'border-dashed border-paper/60 text-paper/80'}`}>{ok && <Check size={13} strokeWidth={3} aria-hidden="true" />}{label as string}</li>)}</ul>
-          <p className="mt-4 font-display text-[24px] leading-tight font-[760] tracking-[-.03em]">{todo || 'Setup is done. Measure what the agent costs today.'}</p>{!todo && <div className="mt-5">{next}</div>}</> })()}
+          <p className="mt-4 font-display text-[24px] leading-tight font-medium">{todo || 'Setup is done. Measure what the agent costs today.'}</p>{!todo && <div className="mt-5">{next}</div>}</> })()}
     </aside>
   </>
 }
