@@ -64,10 +64,10 @@ try {
   await expectText(row('1'), 'needs review')
   assert.equal(await row('1').locator('.chip-ok').count(), 0, 'Human review never becomes an automatic pass')
   offline = true
-  await page.getByRole('button', { name: 'Resume feed', exact: true }).waitFor()
+  await page.getByRole('button', { name: 'Reconnect now', exact: true }).waitFor()
   assert.equal(await active.locator('.live-dot').count(), 0, 'A disconnected feed does not pulse as live')
   offline = false
-  await page.getByRole('button', { name: 'Resume feed', exact: true }).click()
+  await page.getByRole('button', { name: 'Reconnect now', exact: true }).click()
   await page.waitForFunction(() => document.querySelector('[aria-label="Live run"] .live-dot'))
   job.status = 'completed'; report.active = null; append('finished', { status: 'completed' })
   await expectText(row('3'), 'incomplete')
