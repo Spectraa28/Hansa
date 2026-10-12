@@ -2,7 +2,7 @@
 # Prepares a fresh Ubuntu 24.04 EC2 instance to run the Hansa API and sandbox.
 # Proposed and not yet run against a real server; read it before running it.
 #
-#   sudo bash setup-server.sh <git-repository-url> <api-host-name>
+#   sudo bash setup-server.sh <git-repository-url | folder-on-this-machine> <api-host-name>
 #   e.g. sudo bash setup-server.sh https://github.com/you/hansa.git hansa-api.svema.online
 #
 # Safe to run again: each step checks before it changes anything. It never writes secrets;
@@ -32,7 +32,12 @@ systemctl enable --now docker
 
 echo "== Code"
 mkdir -p "$APP" && chown hansa:hansa "$APP"
-if [ -d "$APP/.git" ]; then
+if [ -d "$REPO" ]; then
+  # A folder already on this machine (copied over by hand): mirror it, leaving settings and data alone.
+  apt-get install -y -q rsync
+  rsync -a --delete --exclude /.env --exclude /var --exclude /backend/.venv "$REPO"/ "$APP"/
+  chown -R hansa:hansa "$APP"
+elif [ -d "$APP/.git" ]; then
   sudo -u hansa git -C "$APP" pull --ff-only
 else
   sudo -u hansa git clone --branch main --single-branch "$REPO" "$APP"
