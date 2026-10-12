@@ -15,7 +15,7 @@ const ImportReportPage = lazy(() => import('./ImportReport'))
 const Profile = lazy(() => import('./Profile'))
 const NewImport = lazy(() => import('./NewImport'))
 
-const homeLinks = [['Demo run', '/#real-run'], ['Measurements', '/#what-it-checks'], ['How it works', '/#how-it-works'], ['For judges', '/judges']] as const
+const homeLinks = [['Demo run', '/#real-run'], ['Measurements', '/#what-it-checks'], ['How it works', '/#how-it-works']] as const
 const appLinks = [['Your agents', '/app'], ['Import an agent', '/app/new'], ['Recorded demo', '/demo'], ['Home', '/']] as const
 // Where the build history can be read (the Entire repository). Set VITE_BUILD_LOG_URL to show the link.
 const buildLog: string | undefined = import.meta.env.VITE_BUILD_LOG_URL
