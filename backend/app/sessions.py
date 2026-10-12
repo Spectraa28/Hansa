@@ -54,7 +54,18 @@ def current_session(request: Request) -> dict:
     return user
 
 
+INVITE_ONLY = "This Hansa server is invitation-only, and this address is not on its list. The recorded demo is open to everyone."
+
+
+def require_invited(request: Request, email: str | None) -> None:
+    """Refuse sign-in for addresses outside the server's list, when it has one."""
+    allowed = request.app.state.settings.allowed_emails
+    if allowed and (email or "").casefold() not in allowed:
+        raise HTTPException(403, INVITE_ONLY)
+
+
 def establish_session(request: Request, user: dict, response: Response) -> str:
+    require_invited(request, user.get("email"))
     token, csrf_token = create_session(request.app.state.database, user["id"], request.cookies.get(SESSION_COOKIE))
     response.set_cookie(SESSION_COOKIE, token, max_age=SESSION_SECONDS,
                         httponly=True, secure=request.app.state.settings.cookie_secure,

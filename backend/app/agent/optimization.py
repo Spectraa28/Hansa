@@ -256,7 +256,10 @@ class OptimizationTools:
             if latest["comparison"]["verdict"] == "regressed":
                 raise ValueError("The current candidate regressed tasks " + ", ".join(latest["comparison"]["regressed_tasks"]) + ". Revise, revert, or reject.")
             if latest["comparison"]["verdict"] != "improved":
-                raise ValueError("No saving beyond the baseline's own variation was measured. Finish as no_improvement, or revise.")
+                floor = latest["comparison"].get("minimum_effect_percent")
+                raise ValueError(("No saving beyond the baseline's own variation was measured." if not floor else
+                                  f"No saving of at least {floor:g}% was measured, and the baseline ran each task once so smaller differences may be noise.")
+                                 + " Finish as no_improvement, or revise.")
         self.state["finish"] = {"decision": decision, "summary": summary.strip(), "accepted_experiment": latest["experiment"] if decision == "accept" else None}
         return {"accepted": True, "decision": decision}
 

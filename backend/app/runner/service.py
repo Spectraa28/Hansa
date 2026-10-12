@@ -439,7 +439,49 @@ class RunnerService:
             digest = copy_snapshot(expected, directory / "snapshot", self.settings)
         return config, digest
 
+    def prune_images(self, keep_per_import=2, spare_seconds=3600):
+        """Remove dependency images no stored build needs. Returns how many were removed.
+
+        Every job builds a fresh image, so they pile up at tens of megabytes each. The newest few per
+        import are kept, as is anything made in the last hour (a build in progress is not recorded yet).
+        Docker refuses to remove an image a container is using, which is the right outcome.
+        """
+        with self.database.connect() as db:
+            rows = db.execute("SELECT id, import_id FROM runner_builds ORDER BY created_at DESC, rowid DESC").fetchall()
+        keep, seen = set(), {}
+        for row in rows:
+            seen[row["import_id"]] = seen.get(row["import_id"], 0) + 1
+            if seen[row["import_id"]] <= keep_per_import:
+                keep.add(row["id"])
+        removed = 0
+        try:
+            listed = docker("image", "ls", "ouro-deps", "--format", "{{.Tag}} {{.CreatedAt}}")
+        except RuntimeError:
+            return 0
+        for line in listed.splitlines():
+            tag, _, created = line.partition(" ")
+            try:
+                age = time.time() - time.mktime(time.strptime(created[:19], "%Y-%m-%d %H:%M:%S"))
+            except ValueError:
+                continue
+            if tag in keep or tag == "<none>" or age < spare_seconds:
+                continue
+            try:
+                docker("image", "rm", "ouro-deps:" + tag)
+                removed += 1
+            except RuntimeError:
+                pass  # in use, or already gone
+        return removed
+
     def build(self, user_id, import_id, *, wheelhouse=None):
+        built = self.build_image(user_id, import_id, wheelhouse=wheelhouse)
+        try:
+            self.prune_images()
+        except Exception:
+            pass  # housekeeping must never fail the build it follows
+        return built
+
+    def build_image(self, user_id, import_id, *, wheelhouse=None):
         with RUN_LOCK, tempfile.TemporaryDirectory(prefix="ouro-build-") as temporary:
             root = Path(temporary)
             config, digest = self.stage(user_id, import_id, root)

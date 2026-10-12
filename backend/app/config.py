@@ -18,6 +18,8 @@ class Settings:
     frontend_origin: str = "http://localhost:5173"
     cookie_secure: bool = False
     email_login_enabled: bool = True
+    # When set, only these addresses may sign in. Empty means anyone may.
+    allowed_emails: frozenset = frozenset()
     google_client_id: str = ""
     google_client_secret: str = ""
     github_client_id: str = ""
@@ -113,6 +115,7 @@ class Settings:
             frontend_origin=config("FRONTEND_ORIGIN", default="http://localhost:5173").rstrip("/"),
             cookie_secure=config("AUTH_COOKIE_SECURE", cast=bool, default=False),
             email_login_enabled=config("AUTH_EMAIL_LOGIN_ENABLED", cast=bool, default=True),
+            allowed_emails=frozenset(part.strip().casefold() for part in config("AUTH_ALLOWED_EMAILS", default="").split(",") if part.strip()),
             google_client_id=config("GOOGLE_CLIENT_ID", default=""),
             google_client_secret=config("GOOGLE_CLIENT_SECRET", default=""),
             github_client_id=config("GITHUB_CLIENT_ID", default=""),

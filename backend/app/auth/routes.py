@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
-from ..sessions import current_session, establish_session, logout_session, require_csrf
+from ..sessions import current_session, establish_session, logout_session, require_csrf, require_invited
 from ..users import public_user
 from .schemas import LoginInput, RegisterInput
 from .service import login_user, register_user, require_email_login
@@ -22,6 +22,8 @@ def providers(request: Request):
 
 @router.post("/register", status_code=201, dependencies=[Depends(require_email_login)])
 def register(body: RegisterInput, request: Request, response: Response):
+    # Checked first, so an uninvited address never gets an account row.
+    require_invited(request, str(body.email))
     user = register_user(request, body)
     csrf_token = establish_session(request, user, response)
     return {"user": public_user(user), "csrf_token": csrf_token}

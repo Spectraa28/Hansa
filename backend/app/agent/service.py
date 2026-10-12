@@ -19,6 +19,7 @@ import uuid
 from fastapi import HTTPException
 
 from ..contracts.schemas import bounded_data
+from ..gateway.service import ALLOWANCE_MESSAGE, allowance_spent
 from ..runner.service import MAX_ADAPTER
 from ..sessions import token_hash
 from .tools import SnapshotTools
@@ -27,6 +28,21 @@ MAX_TURNS = 40
 MAX_SMOKE_RUNS = 8
 RESULT_LIMIT = 6000
 JOB_LOCK = threading.Lock()
+# What holds the lock, so a refused request can say so. Never names the owner or the repository.
+RUNNING = {"kind": None, "since": 0}
+
+
+def claim(kind):
+    """Take the one job slot, or refuse with what is running and for how long."""
+    if allowance_spent():
+        # Do not start something that can only fail; the check lapses after a few minutes so a top-up is noticed.
+        raise HTTPException(503, ALLOWANCE_MESSAGE)
+    if not JOB_LOCK.acquire(blocking=False):
+        minutes = max(0, int(time.time()) - RUNNING["since"]) // 60
+        raise HTTPException(409, f"Hansa runs one job at a time, and a {RUNNING['kind'] or 'job'} started "
+                                 f"{'less than a minute' if minutes < 1 else f'{minutes} min'} ago is still running. "
+                                 "Yours was not queued; start it again when that one finishes.")
+    RUNNING.update(kind=kind, since=int(time.time()))
 
 SYSTEM = """You are Hansa's onboarding engineer. Another team's AI agent has been imported as a read-only \
 repository snapshot. Make it runnable as a batch program: write one adapter file that reads a single task as a \
@@ -216,8 +232,7 @@ class AgentService:
                 if result.get("exit_code") == 0 and isinstance(result.get("output"), (dict, list)):
                     sample = result["output"]
                     break
-        if not JOB_LOCK.acquire(blocking=False):
-            raise HTTPException(409, "Another agent job is running. Try again when it finishes.")
+        claim("task-drafting step")
         key = None
         try:
             key = self.gateway.mint_key("hansa-suggest-" + uuid.uuid4().hex, max_calls=2, max_spend_usd=0.25, expires_at=int(time.time()) + 300)
@@ -281,8 +296,7 @@ class AgentService:
             raise HTTPException(503, "Model gateway is not configured.")
         self.runner.configuration(user_id, import_id)
         # One job at a time: runs share one host, one Docker daemon and one model allowance.
-        if not JOB_LOCK.acquire(blocking=False):
-            raise HTTPException(409, "Another agent job is running. Try again when it finishes.")
+        claim({"onboarding": "onboarding", "investigation": "deep hunt", "optimization": "fix test"}.get(kind, kind))
         try:
             job_id, now = uuid.uuid4().hex, int(time.time())
             with self.database.connect() as db:
@@ -316,6 +330,9 @@ class AgentService:
             status, result = "failed", {"reason": str(exc)}
         except Exception as exc:
             status, result = "failed", {"reason": "Unexpected controller error: " + type(exc).__name__}
+        if status != "ready" and allowance_spent(since=started_ms // 1000):
+            # A sandbox run that died for this reason reports only its own error; say the real cause.
+            status, result = "failed", {**result, "reason": ALLOWANCE_MESSAGE}
         try:
             # Keep partial findings and smoke accounting even when a later call fails.
             saved = self.job(user_id, import_id, job_id)["result"]
@@ -357,6 +374,8 @@ class AgentService:
                 if calls:
                     clean["tool_calls"] = calls
                 return clean
+            if response.status_code == 402 and allowance_spent(within=30):
+                raise AgentFailure(ALLOWANCE_MESSAGE)
             if response.status_code not in {429, 500, 502, 503, 504} or attempt == 2:
                 raise AgentFailure(f"The agent's model call failed with status {response.status_code}.")
             time.sleep(2 * (attempt + 1))

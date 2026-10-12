@@ -314,6 +314,7 @@ class GitHubService:
                 db.execute("DELETE FROM agent_jobs WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM import_adapters WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM traces WHERE import_id=?", (import_id,))
+                db.execute("DELETE FROM trace_steps WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM baselines WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM runner_runs WHERE import_id=?", (import_id,))
                 db.execute("DELETE FROM runner_builds WHERE import_id=?", (import_id,))

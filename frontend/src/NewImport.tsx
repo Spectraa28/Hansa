@@ -80,14 +80,14 @@ export default function NewImport({ session }: { session: UseQueryResult<Session
           <div className="flex flex-wrap items-center gap-3">
             {(installs.data?.installations.length || 0) > 1 && <select aria-label="GitHub account" className="field w-auto" value={account ?? ''} onChange={event => { setInstallation(Number(event.target.value)); setRepo(null); setBranch('') }}>{installs.data!.installations.map(item => <option key={item.id} value={item.id}>{item.account}</option>)}</select>}
             <label className="relative min-w-[200px] flex-1"><span className="sr-only">Filter repositories</span><Search size={16} aria-hidden="true" className="absolute top-1/2 left-3 -translate-y-1/2 text-muted" /><input className="field pl-9" placeholder="Filter repositories" value={filter} onChange={event => setFilter(event.target.value)} /></label>
-            {installs.data && <a href={installs.data.installation_url} className="tabular text-[15px] font-medium underline decoration-waste decoration-2 underline-offset-4">don't see it? grant access</a>}
+            {installs.data && <a href={installs.data.installation_url} className="tabular text-[15px] font-medium link-action">don't see it? grant access</a>}
           </div>
           {installs.isError || repos.isError ? <p role="alert" className="mt-5">{message(installs.error || repos.error)}</p>
             : installs.isPending || (account != null && repos.isPending) ? <p role="status" className="mt-5 text-muted">Loading repositories…</p>
             : account == null ? <p className="mt-5">The Hansa GitHub App isn't installed on any account you can reach. <a className="font-semibold underline" href={installs.data?.installation_url}>Install it on a repository</a>, then come back.</p>
             : shown.length === 0 ? <p className="mt-5 text-muted">{filter ? 'No repository matches that filter.' : 'The app has no repositories yet. Grant access to one.'}</p>
             : <ul className="mt-5 max-h-[340px] divide-y divide-line overflow-y-auto rounded-control border border-line">{shown.map(item => <li key={item.id}>
-              <button aria-pressed={repo?.id === item.id} onClick={() => { setRepo(item); setBranch(''); setFolder('') }} className={`flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left tabular text-[14px] transition-colors ${repo?.id === item.id ? 'bg-ink text-paper' : 'hover:bg-waste'}`}>
+              <button aria-pressed={repo?.id === item.id} onClick={() => { setRepo(item); setBranch(''); setFolder('') }} className={`flex min-h-12 w-full items-center gap-3 px-4 py-2 text-left tabular text-[14px] transition-colors ${repo?.id === item.id ? 'is-selected' : 'hover:bg-blue-soft'}`}>
                 <span className="min-w-0 flex-1 [overflow-wrap:anywhere]">{item.full_name}</span>{item.private && <Lock size={14} aria-label="private" />}</button></li>)}</ul>}
           {repos.data?.has_next && <p className="mt-3 tabular text-[14px] text-muted">Showing the first 100. Use the filter, or limit the app to fewer repositories.</p>}
         </section>
@@ -104,8 +104,8 @@ export default function NewImport({ session }: { session: UseQueryResult<Session
             <p className="text-[15px] font-medium">Where does the agent live?</p>
             <p className="mt-1 text-[15px] text-muted">Import the whole repository, or just the folder the agent is in. Pick a folder when the repo also holds a frontend or other apps.</p>
             <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" aria-pressed={!folder} onClick={() => setFolder('')} className={`chip min-h-9 ${!folder ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}>whole repo</button>
-              {folders.data?.folders.map(name => <button type="button" key={name} aria-pressed={folder === name} onClick={() => setFolder(name)} className={`chip min-h-9 ${folder === name ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}><FolderOpen size={13} aria-hidden="true" />{name}</button>)}
+              <button type="button" aria-pressed={!folder} onClick={() => setFolder('')} className={`chip min-h-9 ${!folder ? 'is-selected' : 'bg-surface hover:bg-blue-soft'}`}>whole repo</button>
+              {folders.data?.folders.map(name => <button type="button" key={name} aria-pressed={folder === name} onClick={() => setFolder(name)} className={`chip min-h-9 ${folder === name ? 'is-selected' : 'bg-surface hover:bg-blue-soft'}`}><FolderOpen size={13} aria-hidden="true" />{name}</button>)}
               {folders.isPending && chosen && <span className="chip chip-quiet min-h-9">looking for folders…</span>}
             </div>
             <label className="mt-3 block max-w-md text-[15px] font-medium">Or type a path<input className="field mt-2 tabular" placeholder="services/agent" maxLength={200} value={folder} onChange={event => setFolder(event.target.value)} /></label>

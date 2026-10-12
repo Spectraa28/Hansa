@@ -27,12 +27,13 @@ This workspace contains the Autonomous Agent Optimization Engineer plans, authen
 - `backend/app/sessions.py`: session storage, cookie handling, and logout CSRF checks.
 - `backend/app/database.py`: shared SQLite connection and schema initialization.
 - `backend/app/config.py` and `backend/app/main.py`: settings and FastAPI application setup.
-- `backend/tests/`: 281 passing regression tests with Docker checks enabled; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures. Docker lifecycle and offline-wheel checks use real containers; separate live Haiku proof uses the labelled local sample.
+- `backend/tests/`: 292 passing regression tests (3 skipped without Docker checks) as of October 12; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures. Docker lifecycle and offline-wheel checks use real containers; separate live Haiku proof uses the labelled local sample.
 - `README.md`: setup, authentication contract, and current limitations.
 - `backend/pyproject.toml` and `backend/uv.lock`: Python dependencies.
 - `backend/docs/`: technical documentation for each backend stage.
 - `backend/scripts/` and `backend/examples/`: proof scripts and labelled fixture agents.
 - `frontend/`: the product interface; see `frontend/README.md`.
+- `deploy/`: proposed hosting layout (Vercel frontend, one EC2 API host behind Caddy), invite list and security settings. Not yet exercised against a real server; see `deploy/README.md`.
 
 Read both planning documents before extending the product. Python/FastAPI is used for authentication, imports, inspection and the runner; a simple testing UI is written. The optimizer and full product frontend remain planned. Keep new modules focused on the supported workflow. Run only one API process for the import queue and one runner/controller process; multi-process runner scheduling and controller-crash cleanup are not implemented.
 

@@ -224,6 +224,13 @@ class Database:
                     last_error TEXT
                 );
                 CREATE INDEX IF NOT EXISTS traces_import ON traces(import_id, created_at);
+                CREATE TABLE IF NOT EXISTS trace_steps (
+                    job_id TEXT NOT NULL,
+                    import_id TEXT NOT NULL REFERENCES repository_imports(id) ON DELETE CASCADE,
+                    span_id TEXT NOT NULL,
+                    detail TEXT NOT NULL,
+                    PRIMARY KEY (job_id, span_id)
+                );
                 CREATE INDEX IF NOT EXISTS model_calls_key ON model_calls(key_hash);
             """)
             # SQLite cannot widen a CHECK constraint in place; copy both tables with their IDs intact.

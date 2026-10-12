@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { apiText, ApiError } from './api'
-import { barWidth, measurement } from './report'
-import type { MetricComparison, Optimization } from './report'
+import { CircleCheck, CircleDashed, CircleX } from 'lucide-react'
+import { measurement } from './report'
+import type { Optimization } from './report'
 import { TraceLinks } from './Trace'
 
 const metrics = [['cost_usd', 'Cost', 'usd'], ['wall_time_seconds', 'Time', 'seconds'], ['model_calls', 'Model calls', 'number'], ['tokens_in', 'Input tokens', 'number']] as const
@@ -14,19 +15,6 @@ const outcomes: Record<string, string> = { passed: 'passed', failed: 'failed', n
 
 function TaskOutcome({ status }: { status: string | null }) {
   return <span>{status ? outcomes[status] || status.replaceAll('_', ' ') : 'not recorded'}</span>
-}
-
-function Bars({ label, values, unit }: { label: string; values: MetricComparison; unit: 'number' | 'usd' | 'seconds' }) {
-  const change = values.change_percent
-  const round = (value: number | null) => value == null ? value : unit === 'usd' ? Number(value.toFixed(4)) : Number(value.toFixed(1))
-  return <div className="slab min-w-0 px-5 pt-7 pb-5"><span className="slab-tab">{label}</span>
-    <p className={`big-number text-[44px] ${change != null && change >= FLAT ? 'text-waste' : change != null && Math.abs(change) < FLAT ? 'text-muted' : ''}`}>{change == null || !Number.isFinite(change) ? '—' : Math.abs(change) < FLAT ? 'same' : percent(change)}</p>
-    {change != null && Math.abs(change) < FLAT && change !== 0 && <p className="tabular text-[14px] text-muted">{percent(change)}, within normal variation</p>}
-    <dl className="mt-5 space-y-3">{(['baseline', 'candidate'] as const).map(side => <div key={side}>
-      <div className="flex flex-wrap justify-between gap-x-2 tabular text-[14px]"><dt className="tracking-[.06em] text-muted">{side === 'baseline' ? 'before' : 'with fix'}</dt><dd>{measurement(round(values[side]), unit)}</dd></div>
-      <div aria-hidden="true" className="mt-1.5 h-4"><div hidden={barWidth(values[side], values[side === 'baseline' ? 'candidate' : 'baseline']) === 0} className={`h-full rounded-[4px] ${side === 'baseline' ? 'bg-ink' : 'bg-blue'}`} style={{ width: `${barWidth(values[side], values[side === 'baseline' ? 'candidate' : 'baseline'])}%` }} /></div>
-    </div>)}</dl>
-  </div>
 }
 
 function TestedFix({ attempt, importId, preview }: { attempt: Optimization; importId: string; preview: boolean }) {
@@ -77,15 +65,24 @@ function TestedFix({ attempt, importId, preview }: { attempt: Optimization; impo
   const broken = comparison?.tasks.filter(task => task.regressed).length || 0
   const headline = !comparison ? 'No measured comparison was saved for this attempt.'
     : accepted ? `${better.length ? `Measured: ${better.join(', ')}.` : 'No measurable saving on these tasks.'}${worse.length ? ` Up: ${worse.join(', ')}.` : ''} No task got worse.${comparison.variation_measured ? '' : ' The baseline ran each task once, so a difference in time may just be run-to-run noise.'} The patch is yours.`
-    : rejected ? `${broken ? `${broken} task${broken === 1 ? '' : 's'} that used to pass now fail${broken === 1 ? 's' : ''}` : 'It did not hold up'}${better.length ? `, even though it measured ${better.join(', ')}` : ''}. Hansa reverted it. The numbers are below so you can judge it yourself.`
+    : rejected ? `${broken ? `${broken} task${broken === 1 ? '' : 's'} that used to pass now fail${broken === 1 ? 's' : ''}` : 'It did not hold up'}${better.length ? `, even though it measured ${better.join(', ')}` : ''}. Hansa reverted it. The numbers are above so you can judge it yourself.`
     : 'No accepted patch is recorded for this attempt.'
   const reason = attempt.summary?.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1')
   return <>
-    <section className={`relative overflow-hidden rounded-card px-6 py-8 md:px-9 md:py-10 ${accepted ? 'bg-ok-soft' : rejected ? 'bg-waste-soft' : 'bg-wash'}`}>
-      <p className="label text-ink">{comparison ? 'tested against your baseline' : 'stored attempt'}</p>
-      <h3 className="mt-2 font-display text-[52px] leading-[.9] font-medium sm:text-[84px]">{verdict}.</h3>
-      <p className="mt-4 max-w-[60ch] text-[17px] font-medium">{headline}</p>
-      {attempt.incomplete && <p className="mt-2 text-[15px]">This attempt ended before completing its work.</p>}
+    <section className="slab overflow-hidden">
+      <div className={`flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-6 py-4 ${accepted ? 'bg-ok-soft' : rejected ? 'bg-waste-soft' : 'bg-wash'}`}>
+        <h3 className="flex items-center gap-2.5 text-[20px] leading-tight font-semibold">{accepted ? <CircleCheck size={22} className="text-ok" aria-hidden="true" /> : rejected ? <CircleX size={22} className="text-waste" aria-hidden="true" /> : <CircleDashed size={22} className="text-muted" aria-hidden="true" />}{verdict}</h3>
+        <p className="tabular text-[14px] text-muted">{comparison ? `tested against your baseline · ${comparison.tasks.length} task${comparison.tasks.length === 1 ? '' : 's'}${broken ? ` · ${broken} got worse` : ' · none got worse'}` : 'stored attempt'}</p>
+      </div>
+      {/* Before and after first: the verdict is only as good as these four rows. */}
+      {comparison && <table className="w-full text-[15px] tabular-nums">
+        <thead><tr className="text-left text-[13px] text-muted"><th scope="col" className="px-6 py-2.5 font-medium">measured</th><th scope="col" className="px-3 py-2.5 text-right font-medium">before</th><th scope="col" className="px-3 py-2.5 text-right font-medium">with fix</th><th scope="col" className="px-6 py-2.5 text-right font-medium">change</th></tr></thead>
+        <tbody>{metrics.map(([key, label, unit]) => { const values = comparison.totals[key], change = values?.change_percent
+          const round = (value: number | null) => value == null ? value : unit === 'usd' ? Number(value.toFixed(4)) : Number(value.toFixed(1))
+          return <tr key={key} className="border-t border-line"><th scope="row" className="px-6 py-3 text-left font-medium">{label}</th><td className="px-3 py-3 text-right text-muted">{measurement(round(values?.baseline ?? null), unit)}</td><td className="px-3 py-3 text-right font-semibold">{measurement(round(values?.candidate ?? null), unit)}</td>
+            <td className={`px-6 py-3 text-right text-[17px] font-semibold ${change == null || Math.abs(change) < FLAT ? 'text-muted' : change > 0 ? 'text-waste' : 'text-ok'}`}>{change == null || !Number.isFinite(change) ? '—' : Math.abs(change) < FLAT ? 'same' : percent(change)}</td></tr> })}</tbody>
+      </table>}
+      <div className="border-t border-line px-6 py-4"><p className="max-w-[72ch] text-[15px]">{headline}{attempt.incomplete ? ' This attempt ended before completing its work.' : ''}</p></div>
     </section>
     {attempt.proof && <section className={`mt-6 rounded-control p-5 ${attempt.proof.strength === 'thin' ? 'bg-waste-soft' : 'bg-surface'}`}>
       <p className="flex flex-wrap items-center gap-2 text-[20px] font-semibold">How strong is this proof? <span className={`chip ${attempt.proof.strength === 'solid' ? 'chip-ok' : attempt.proof.strength === 'thin' ? 'chip-waste' : 'bg-surface'}`}>{attempt.proof.strength}</span></p>
@@ -93,7 +90,6 @@ function TestedFix({ attempt, importId, preview }: { attempt: Optimization; impo
       {attempt.proof.strength === 'thin' && <p className="mt-3 text-[14px] font-medium">Treat this as a strong lead to review, not a finished change. Add tasks or exact checks in Setup and test it again to firm it up.</p>}
     </section>}
     {comparison ? <>
-      <div className="mt-9 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">{metrics.map(([key, label, unit]) => <Bars key={key} label={label} unit={unit} values={comparison.totals[key]} />)}</div>
       {!preview && <p className="mt-4 flex flex-wrap items-center gap-2 tabular text-[14px] text-muted"><span>how Hansa got here:</span><TraceLinks trace={attempt.trace} label="trace" /></p>}
       <p className="mt-4 tabular text-[14px] text-muted">{comparison.all_tasks ? 'Full task set' : 'Partial task set'} · {comparison.tasks.length} task{comparison.tasks.length === 1 ? '' : 's'} · mean per pass{comparison.variation_measured ? '' : ' · baseline variation not measured'}</p>
       <div className="slab mt-9"><span className="slab-tab">task by task</span>
@@ -104,12 +100,12 @@ function TestedFix({ attempt, importId, preview }: { attempt: Optimization; impo
         </li>)}</ul></div>
     </> : <p className="mt-9 rounded-card p-6 text-[14px]">No tested comparison was saved for this attempt.</p>}
     {reason && <details className="slab mt-9 p-6 pt-7"><span className="slab-tab">why</span><summary className="cursor-pointer font-display text-[22px] font-medium">Read Hansa's full reasoning</summary><p className="report-prose mt-4">{reason}</p></details>}
-    <section className="mt-9 rounded-card bg-ink p-6 text-paper md:p-9">
-      <h3 className="font-display text-[30px] leading-none font-medium sm:text-[40px]">{accepted ? 'Take it.' : 'Take it for review.'}</h3>
-      <p className="mt-3 max-w-[56ch] text-paper/80">{accepted ? 'Download the patch, or copy a brief your coding agent can apply.' : 'Not accepted, so don\'t apply it as is. The prompt carries the rejection and the measurements with it.'}</p>
-      {available ? <div className="mt-6 flex flex-wrap gap-4"><button className="button-primary" disabled={busy !== null} onClick={() => void artifact('patch')}>{busy === 'patch' ? 'Downloading…' : 'Download patch'}</button><button className="button-secondary" disabled={busy !== null} onClick={() => void artifact('handoff')}>{busy === 'handoff' ? 'Loading prompt…' : 'Copy prompt for my coding agent'}</button></div> : <p className="mt-4 text-[15px] text-paper/80">No patch or prompt is available for this attempt.</p>}
-      {!accepted && !preview && <div className="mt-7 pt-5"><p className="tabular text-[14px] text-paper/80">or keep going</p>
-        <div className="mt-2 flex flex-wrap gap-x-6 text-[15px] font-semibold"><Link to="?step=fix" className="inline-flex min-h-11 items-center underline decoration-waste decoration-2 underline-offset-4">Test it again to confirm →</Link><Link to="?step=findings" className="inline-flex min-h-11 items-center underline decoration-waste decoration-2 underline-offset-4">Try a different leak →</Link></div></div>}
+    <section className="slab mt-9 p-6 md:p-8">
+      <h3 className="text-[22px] leading-tight font-semibold">{accepted ? 'Take it.' : 'Take it for review.'}</h3>
+      <p className="mt-2 max-w-[56ch] text-muted">{accepted ? 'Download the patch, or copy a brief your coding agent can apply.' : 'Not accepted, so don\'t apply it as is. The prompt carries the rejection and the measurements with it.'}</p>
+      {available ? <div className="mt-6 flex flex-wrap gap-4"><button className="button-primary" disabled={busy !== null} onClick={() => void artifact('patch')}>{busy === 'patch' ? 'Downloading…' : 'Download patch'}</button><button className="button-secondary" disabled={busy !== null} onClick={() => void artifact('handoff')}>{busy === 'handoff' ? 'Loading prompt…' : 'Copy prompt for my coding agent'}</button></div> : <p className="mt-4 text-[15px] text-muted">No patch or prompt is available for this attempt.</p>}
+      {!accepted && !preview && <div className="mt-7 pt-5"><p className="tabular text-[14px] text-muted">or keep going</p>
+        <div className="mt-2 flex flex-wrap gap-x-6 text-[15px] font-semibold"><Link to="?step=fix" className="inline-flex min-h-11 items-center link-action">Test it again to confirm →</Link><Link to="?step=findings" className="inline-flex min-h-11 items-center link-action">Try a different leak →</Link></div></div>}
       {message && <p role="status" className="mt-4 text-[15px]">{message}</p>}{error && <p role="alert" className="mt-4 text-[15px]">{error}</p>}
       {manualPrompt && <div className="mt-4"><label htmlFor="handoff-prompt" className="text-[15px] font-medium">Handoff prompt</label><textarea id="handoff-prompt" readOnly value={manualPrompt} onFocus={event => event.currentTarget.select()} className="field mt-2 h-64 tabular text-[14px] text-ink" /></div>}
     </section>
@@ -122,7 +118,7 @@ export default function Result({ attempts, importId, preview }: { attempts: Opti
   if (!attempt) return <section className="rounded-card px-8 py-14 text-center"><p className="font-display text-[30px] font-medium">No result yet.</p><p className="mt-2 text-muted">Test a fix and the verdict lands here.</p></section>
   return <>
     {attempts.length > 1 && <div role="tablist" aria-label="Tested fixes" className="mb-6 flex flex-wrap gap-2">{attempts.map((item, index) => <button key={item.job_id} role="tab" aria-selected={item.job_id === attempt.job_id}
-      className={`chip min-h-9 px-4 text-[15px] ${item.job_id === attempt.job_id ? 'bg-ink text-paper' : 'bg-surface hover:bg-wash'}`} onClick={() => setParams({ step: 'result', attempt: item.job_id })}>attempt {index + 1} · {item.decision === 'accept' ? 'accepted' : item.decision === 'reject' ? 'rejected' : item.decision?.replaceAll('_', ' ') || item.status}</button>)}</div>}
+      className={`chip min-h-9 px-4 text-[15px] ${item.job_id === attempt.job_id ? 'is-selected' : 'bg-surface hover:bg-wash'}`} onClick={() => setParams({ step: 'result', attempt: item.job_id })}>attempt {index + 1} · {item.decision === 'accept' ? 'accepted' : item.decision === 'reject' ? 'rejected' : item.decision?.replaceAll('_', ' ') || item.status}</button>)}</div>}
     <TestedFix key={attempt.job_id} attempt={attempt} importId={importId} preview={preview} />
   </>
 }

@@ -78,7 +78,7 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
   const suggestions = (key: keyof typeof form, kind: string = key) => { const options = seen(kind)
     return options.length > 0 && <div className="mt-2 flex flex-wrap items-center gap-1.5"><span className="tabular text-[14px] text-muted">found in your code:</span>
       {options.map(option => <button type="button" key={option.value} aria-pressed={form[key] === option.value} title={`Seen in ${option.where}${option.count > 1 ? ` and ${option.count - 1} more place${option.count > 2 ? 's' : ''}` : ''}`}
-        onClick={() => setForm({ ...form, [key]: option.value })} className={`chip shrink max-w-full min-h-9 py-1 whitespace-normal [overflow-wrap:anywhere] text-left ${form[key] === option.value ? 'bg-ink text-paper' : 'bg-surface hover:bg-waste'}`}>
+        onClick={() => setForm({ ...form, [key]: option.value })} className={`chip shrink max-w-full min-h-9 py-1 whitespace-normal [overflow-wrap:anywhere] text-left ${form[key] === option.value ? 'is-selected' : 'bg-surface hover:bg-blue-soft'}`}>
         {option.value}<span className="opacity-60">{option.where}</span></button>)}</div> }
   const field = (key: keyof typeof form, label: string, hint: string) => <div><label htmlFor={`setup-${key}`} className="block text-[15px] font-medium">{label}</label>
     <input id={`setup-${key}`} className="field mt-2 tabular" required value={form[key]} onChange={event => setForm({ ...form, [key]: event.target.value })} />
@@ -100,11 +100,11 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h3 className="font-display text-[28px] leading-none font-medium">Check what Hansa detected.</h3>
       <p className="mt-2 text-muted">Read from {inspection.findings.scanned_files} files without running anything.{inspection.findings.partial ? ' The scan was cut short, so check these carefully.' : ''}</p></div>
       <div className="flex flex-wrap items-center gap-2">{done && <span className="chip chip-ok"><Check size={13} strokeWidth={3} aria-hidden="true" /> saved</span>}
-        <button type="button" disabled={busy} className="chip min-h-9 bg-surface hover:bg-waste" onClick={() => void rescan()}>{busy ? 'scanning…' : 'scan the code again'}</button></div></div>
+        <button type="button" disabled={busy} className="chip min-h-9 bg-surface hover:bg-blue-soft" onClick={() => void rescan()}>{busy ? 'scanning…' : 'scan the code again'}</button></div></div>
     <div className="mt-6 grid gap-5 sm:grid-cols-2">
       {field('entrypoint', 'Entrypoint', 'The command that starts the agent.')}
       <div>{field('python_version', 'Python version', 'Hansa\'s sandbox runs Python 3.12, so this has to allow 3.12.')}
-        {!pythonFits && <p role="alert" className="mt-2 rounded-control bg-waste px-3 py-2 text-[15px] font-medium">"{form.python_version}" rules out 3.12, so the agent can't be run. <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '3.12' })}>Use 3.12</button> or a range like <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '>=3.10' })}>{'>=3.10'}</button>.</p>}</div>
+        {!pythonFits && <p role="alert" className="notice-problem mt-2 text-[15px] font-medium">"{form.python_version}" rules out 3.12, so the agent can't be run. <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '3.12' })}>Use 3.12</button> or a range like <button type="button" className="underline" onClick={() => setForm({ ...form, python_version: '>=3.10' })}>{'>=3.10'}</button>.</p>}</div>
       <div><label className="block text-[15px] font-medium">Provider the code calls<select className="field mt-2" value={form.model_provider} onChange={event => setForm({ ...form, model_provider: event.target.value })}>{providers.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">What the source is written against.</span></label>{suggestions('model_provider')}</div>
       {field('model_id', 'Model the code asks for', 'Recorded next to the model actually used.')}
       <label className="block text-[15px] font-medium sm:col-span-2">Model Hansa runs it on<select className="field mt-2 tabular" value={form.litellm_model} onChange={event => setForm({ ...form, litellm_model: event.target.value })}>{inspection.litellm_models.map(value => <option key={value}>{value}</option>)}</select><span className="mt-1 block font-normal text-muted">Every call from your agent is routed to this model and metered.</span></label>
@@ -112,7 +112,7 @@ function Settings({ base, session, inspection, onSaved }: { base: string; sessio
     {[['Dependencies to install', manifests, picked, setPicked, 'No dependency file found. The agent must run on the standard library alone.'], ['Tools the agent may use', tools, allowed, setAllowed, 'No tools detected.']].map(([title, values, list, set, empty]) =>
       <fieldset key={title as string} className="mt-6"><legend className="text-[15px] font-medium">{title as string}</legend>
         {(values as string[]).length ? <div className="mt-2 flex flex-wrap gap-2">{(values as string[]).map(value => { const on = (list as string[]).includes(value)
-          return <label key={value} className={`chip relative cursor-pointer py-1.5 ${on ? 'bg-ink text-paper' : 'bg-surface'}`}><input type="checkbox" className="absolute inset-0 size-full cursor-pointer opacity-0" checked={on} onChange={() => toggle(list as string[], set as (next: string[]) => void, value)} />{on && <Check size={13} strokeWidth={3} aria-hidden="true" />}{value}</label> })}</div>
+          return <label key={value} className={`chip relative cursor-pointer py-1.5 ${on ? 'is-selected' : 'bg-surface'}`}><input type="checkbox" className="absolute inset-0 size-full cursor-pointer opacity-0" checked={on} onChange={() => toggle(list as string[], set as (next: string[]) => void, value)} />{on && <Check size={13} strokeWidth={3} aria-hidden="true" />}{value}</label> })}</div>
           : <p className="mt-2 text-[15px] text-muted">{empty as string}</p>}</fieldset>)}
     {error && <p role="alert" className="mt-5 font-medium">{error}</p>}
     <button className="button-primary mt-7" disabled={busy || !pythonFits}>{busy ? 'Saving…' : done ? 'Save changes' : 'Looks right, save'}</button>
@@ -200,13 +200,13 @@ function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { b
       {drafted && <p role="status" className="mt-3 text-[14px] font-medium">{drafted}</p>}
       {tools.length > 0 && <><p className="mt-4 tabular text-[14px] text-muted">ideas from the tools you allowed, one task each:</p>
         <div className="mt-2 flex flex-wrap gap-1.5">{tools.slice(0, 8).map(tool => { const name = `Ends in ${tool}`, used = tasks.some(task => task.name === name)
-          return <button type="button" key={tool} disabled={used} className={`chip py-1 ${used ? 'chip-quiet' : 'bg-surface hover:bg-waste'}`} onClick={() => { const draft = { ...blank(), name, description: `A request that should make the agent call ${tool}.` }
+          return <button type="button" key={tool} disabled={used} className={`chip py-1 ${used ? 'chip-quiet' : 'bg-surface hover:bg-blue-soft'}`} onClick={() => { const draft = { ...blank(), name, description: `A request that should make the agent call ${tool}.` }
             setDirty(true); setTasks(tasks.length === 1 && !tasks[0].name && !tasks[0].source ? [draft] : [...tasks, draft]) }}><Plus size={12} aria-hidden="true" />{tool}</button> })}</div></>}
     </aside>}
     {example && <aside className="mt-6 rounded-control bg-waste-soft p-5">
       <p className="flex items-center gap-2 text-[19px] font-semibold"><Lightbulb size={18} aria-hidden="true" /> Suggested from your code</p>
       <p className="mt-2 max-w-[70ch] text-[14px]">{example.description || 'Hansa worked out the input this agent takes while writing its adapter.'}</p>
-      <pre className="mt-3 max-h-44 overflow-auto rounded-control bg-ink p-4 tabular text-[14px] leading-relaxed text-paper">{JSON.stringify(example.task, null, 2)}</pre>
+      <pre className="mt-3 max-h-44 overflow-auto ink-block rounded-control bg-ink p-4 tabular text-[14px] leading-relaxed text-paper">{JSON.stringify(example.task, null, 2)}</pre>
       <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" className="button-primary" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing tasks…' : 'Write 3 tasks for me'}</button>
         <button type="button" className="button-secondary" onClick={useExample}><Plus size={16} aria-hidden="true" /> Use just this example</button>
         <span className="tabular text-[14px] text-muted">one model call, a few cents</span></div>
@@ -218,7 +218,7 @@ function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { b
         <span className="min-w-0 flex-1 truncate font-semibold">{task.name || 'New task'}</span><span className="shrink-0 tabular text-[14px] text-muted">{task.checks.filter(check => check.pointer.trim()).length} checks</span>
         <span aria-hidden="true" className="shrink-0 tabular text-[14px] group-open:hidden">edit ▾</span><span aria-hidden="true" className="hidden shrink-0 tabular text-[14px] group-open:inline">close ▴</span></summary>
       <div className="mt-4 flex items-center justify-end gap-3">
-        {tasks.length > 1 && <button type="button" aria-label={`Remove task ${index + 1}`} className="grid size-8 place-items-center rounded-control hover:bg-waste" onClick={() => { setDirty(true); setTasks(tasks.filter((_, i) => i !== index)) }}><Trash2 size={16} aria-hidden="true" /></button>}</div>
+        {tasks.length > 1 && <button type="button" aria-label={`Remove task ${index + 1}`} className="grid size-8 place-items-center rounded-control hover:bg-blue-soft" onClick={() => { setDirty(true); setTasks(tasks.filter((_, i) => i !== index)) }}><Trash2 size={16} aria-hidden="true" /></button>}</div>
       <div className="mt-3 grid gap-4 sm:grid-cols-2">
         <label className="block text-[15px] font-medium">Name<input className="field mt-2" required maxLength={120} placeholder="Cancel for refund" value={task.name} onChange={event => edit(index, { name: event.target.value })} /></label>
         <label className="block text-[15px] font-medium">What it tests<input className="field mt-2" maxLength={2000} placeholder="A customer cancels and wants their money back" value={task.description} onChange={event => edit(index, { description: event.target.value })} /></label></div>
@@ -229,8 +229,8 @@ function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { b
           <input aria-label="Field path" className="field tabular text-[15px]" placeholder="/status" value={check.pointer} onChange={event => set({ pointer: event.target.value })} />
           <select aria-label="Type" className="field text-[15px]" value={check.field_type} onChange={event => set({ field_type: event.target.value })}>{types.map(value => <option key={value}>{value}</option>)}</select>
           <input aria-label="Exact value, optional" className="field col-span-2 tabular text-[15px] sm:col-span-1" placeholder={'equal to… e.g. "refunded" (optional)'} value={check.exact} onChange={event => set({ exact: event.target.value })} />
-          <button type="button" aria-label="Remove check" className="col-start-2 row-start-1 grid size-11 place-items-center rounded-control hover:bg-waste sm:col-start-auto sm:row-start-auto" onClick={() => edit(index, { checks: task.checks.filter((_, i) => i !== at) })}><Trash2 size={15} aria-hidden="true" /></button></div> })}</div>
-      <button type="button" className="mt-3 inline-flex items-center gap-1.5 tabular text-[15px] font-medium underline decoration-waste decoration-2 underline-offset-4" onClick={() => edit(index, { checks: [...task.checks, { pointer: '', field_type: 'string', exact: '' }] })}><Plus size={14} aria-hidden="true" /> add a check</button>
+          <button type="button" aria-label="Remove check" className="col-start-2 row-start-1 grid size-11 place-items-center rounded-control hover:bg-blue-soft sm:col-start-auto sm:row-start-auto" onClick={() => edit(index, { checks: task.checks.filter((_, i) => i !== at) })}><Trash2 size={15} aria-hidden="true" /></button></div> })}</div>
+      <button type="button" className="mt-3 inline-flex items-center gap-1.5 tabular text-[15px] font-medium link-action" onClick={() => edit(index, { checks: [...task.checks, { pointer: '', field_type: 'string', exact: '' }] })}><Plus size={14} aria-hidden="true" /> add a check</button>
       {task.source && (task.source.required_facts.length > 0 || task.source.expected_output != null) && <p className="mt-3 tabular text-[14px] text-muted">Also keeps {task.source.required_facts.length} review note{task.source.required_facts.length === 1 ? '' : 's'}{task.source.expected_output != null ? ' and an expected output' : ''} saved earlier.</p>}
     </details></li>)}</ol>
     {tasks.length < 20 && <button type="button" className="button-secondary mt-5" onClick={() => { setDirty(true); setTasks([...tasks, blank()]) }}><Plus size={16} aria-hidden="true" /> Add a task</button>}
@@ -275,7 +275,7 @@ export default function Setup({ importId, session, hasAdapter, onChanged, childr
       : contract.isError ? <div role="alert" className="slab mt-9 p-8"><p>{message(contract.error)}</p><button className="button-secondary mt-4" onClick={() => void contract.refetch()}>Try again</button></div>
       : <Tasks key={`${contract.data.version}:${inspection.data.configuration_revision}:${Boolean(adapter.data)}`} base={base} session={session} revision={inspection.data.configuration_revision!} record={contract.data} adapter={adapter.data || null} tools={inspection.data.configuration?.approved_tools || []} onSaved={next => { queryClient.setQueryData(contractKey, next); void queryClient.invalidateQueries({ queryKey: ['run-contract'] }); onChanged() }} />}
     {/* One line that always says what is still missing and what comes after. */}
-    <aside className="mt-9 rounded-card bg-ink p-6 text-paper sm:p-8"><p className="tabular text-[14px] text-paper/80">what's next</p>
+    <aside className="ink-block mt-9 rounded-card bg-ink p-6 text-paper sm:p-8"><p className="tabular text-[14px] text-paper/80">what's next</p>
       {(() => { const tasksDone = contract.data?.status === 'confirmed' && !contract.data.stale
         const fits = allowsSandboxPython(inspection.data.configuration?.python_version || '')
         const todo = !ready ? 'Save the settings in step 1.' : !fits ? 'Fix the Python version in step 1: it has to allow 3.12.' : !hasAdapter ? 'Start onboarding in step 2 so Hansa can run your agent.' : !tasksDone ? 'Save and confirm at least one task in step 3.' : null

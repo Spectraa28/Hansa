@@ -683,3 +683,27 @@ def test_a_failed_upstream_attempt_is_not_an_unpriced_answer(tmp_path):
     with database.connect() as db:
         db.execute("INSERT INTO model_calls (key_hash,model,http_status,estimated_cost_usd,created_at) VALUES (?,?,200,NULL,1)", (token_hash("k"), "m"))
     assert gateway.summarize_key("k")["unpriced_answer_calls"] == 1
+
+
+def test_spent_allowance_is_named_and_remembered(gateway):
+    from app.gateway import service as gateway_service
+    client, service, key, state = gateway
+    gateway_service.ALLOWANCE["at"] = 0
+    state.update(status=400, cost=None, body={"error": {"message": "Budget has been exceeded! Current cost: 25.1, Max budget: 25.0", "type": "budget_exceeded"}})
+    response = call(client, key)
+    try:
+        assert response.status_code == 402
+        assert response.json()["error"] == {"message": gateway_service.ALLOWANCE_MESSAGE, "type": "allowance_exhausted"}
+        assert "25.1" not in response.text
+        assert gateway_service.allowance_spent()
+    finally:
+        gateway_service.ALLOWANCE["at"] = 0
+
+
+def test_ordinary_rate_limit_is_not_a_spent_allowance(gateway):
+    from app.gateway import service as gateway_service
+    client, service, key, state = gateway
+    gateway_service.ALLOWANCE["at"] = 0
+    state.update(status=429, cost=None, body={"error": {"message": "Rate limit reached, slow down", "type": "rate_limit_error"}})
+    assert call(client, key).status_code == 429
+    assert not gateway_service.allowance_spent()

@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
 from ..auth.service import rate_limit
-from ..sessions import establish_session
+from ..sessions import establish_session, require_invited
 from ..users import EmailInUse, oauth_user
 from .providers import provider_client, provider_identity
 
@@ -41,6 +41,7 @@ async def oauth_callback(provider: Literal["google", "github"], request: Request
     try:
         token = await client.authorize_access_token(request)
         identity = await provider_identity(client, provider, token)
+        require_invited(request, str(identity.email) if identity.email else None)
         user = await run_in_threadpool(
             oauth_user, request.app.state.database, provider, identity.subject,
             str(identity.email).casefold() if identity.email else None, identity.name, identity.avatar_url,
@@ -57,5 +58,7 @@ async def oauth_callback(provider: Literal["google", "github"], request: Request
         return failed(request, "identity")
     except EmailInUse:
         return failed(request, "email_in_use")
+    except HTTPException:
+        return failed(request, "invite_only")
     finally:
         request.session.clear()

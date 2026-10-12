@@ -86,7 +86,7 @@ function FindingCard({ finding, index, data, coverage }: { finding: Finding; ind
       <div className="mt-4 flex flex-wrap gap-2">{finding.source.map((source, i) => {
         const url = sourceUrl(data.import.repository, data.import.commit_sha, source, data.import.folder)
         const label = `${source.path}:${source.start_line}${source.end_line === source.start_line ? '' : `–${source.end_line}`}`
-        return url ? <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="chip shrink bg-surface break-all whitespace-normal hover:bg-ink hover:text-paper">{label}</a> : <span key={i} className="chip shrink break-all whitespace-normal">{label}</span>
+        return url ? <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="chip shrink bg-surface break-all whitespace-normal hover:bg-blue-soft">{label}</a> : <span key={i} className="chip shrink break-all whitespace-normal">{label}</span>
       })}</div>
       {rest && <p className="report-prose mt-4 line-clamp-3 text-muted md:line-clamp-none">{rest}</p>}
       <details className="mt-4 text-[14px]"><summary className="flex min-h-11 cursor-pointer items-center font-semibold underline decoration-line decoration-2 underline-offset-4">The full evidence, the fix and the risk</summary>
@@ -139,12 +139,12 @@ export default function ImportReportPage({ session, preview = false }: { session
   const step: Step = steps.includes(requestedStep as Step) ? requestedStep as Step : preview ? 'findings' : next
 
   if ((!preview && session.isError) || (report.isError && !report.data)) return <main className="page">
-    <Link to="/app" className="font-semibold underline decoration-waste decoration-[3px] underline-offset-4">All imports</Link>
+    <Link to="/app" className="font-semibold link-action">All imports</Link>
     <h1 className="page-title mt-6">Could not load this import</h1>
     <p role="alert" className="mt-4">{report.error instanceof ApiError ? report.error.message : 'Check your connection and try again.'}</p>
     <button className="button-secondary mt-6" onClick={() => { if (session.isError) void session.refetch(); else void report.refetch() }}>Try again</button>
   </main>
-  if (source.isError) return <main className="page"><Link to="/app" className="font-semibold underline decoration-waste decoration-[3px] underline-offset-4">All imports</Link>
+  if (source.isError) return <main className="page"><Link to="/app" className="font-semibold link-action">All imports</Link>
     <h1 className="page-title mt-6">Could not load this import</h1><p role="alert" className="mt-4">{source.error instanceof ApiError ? source.error.message : 'Check your connection and try again.'}</p></main>
   if (source.data && source.data.status !== 'ready') {
     const waiting = ['queued', 'downloading'].includes(source.data.status)
@@ -165,6 +165,16 @@ export default function ImportReportPage({ session, preview = false }: { session
   // A running hunt, or an explicit choice, shows the hunt; otherwise the free suggestions lead.
   const view = params.get('view') === 'hunt' || data.active?.kind === 'investigation' ? 'hunt' : 'quick'
   const done: Record<Step, boolean> = { import: true, setup: Boolean(data.adapter), baseline: data.stages.baseline, findings: data.stages.investigated, fix: data.stages.optimized, result: data.stages.optimized }
+  // The one fact worth knowing about each step, shown inside the step itself.
+  const costChange = latest?.comparison?.totals.cost_usd?.change_percent
+  const fact: Record<Step, string> = {
+    import: data.import.commit_sha.slice(0, 7),
+    setup: data.adapter ? 'adapter ready' : 'not set up',
+    baseline: baseline?.status === 'completed' ? `${measurement(baseline.per_pass.cost_usd && Number(baseline.per_pass.cost_usd.toFixed(4)), 'usd')} · ${measurement(baseline.per_pass.model_calls)} calls` : 'not measured',
+    findings: investigation ? `${investigation.findings.length} leak${investigation.findings.length === 1 ? '' : 's'} found` : baseline?.xray?.prompt_caching_estimate?.saving_percent ? `caching ~${Math.round(baseline.xray.prompt_caching_estimate.saving_percent)}%` : 'quick wins',
+    fix: latest ? `${data.optimizations.length} tested` : 'none tested',
+    result: latest ? `${latest.decision === 'accept' ? 'accepted' : latest.decision === 'reject' ? 'rejected' : 'no change kept'}${costChange != null ? ` · cost ${costChange > 0 ? '+' : '−'}${Math.abs(costChange).toFixed(1)}%` : ''}` : 'no result yet',
+  }
   const nextLabel: Record<string, string> = { onboard: 'Set up the adapter', baseline: 'Measure the baseline', investigate: 'See what to fix', optimize: 'Test a fix', review: 'Review the result', wait: 'A job is running' }
 
   const runner = <StageRunner key={`${data.import.import_id}:${session.data?.user.id || 'preview'}`} data={data} step={step} session={session.data} preview={preview} disabled={report.isFetching || report.isError} refresh={report.refetch} />
@@ -180,28 +190,18 @@ export default function ImportReportPage({ session, preview = false }: { session
         <h1 className="font-display text-[36px] leading-[.95] font-medium [overflow-wrap:anywhere] sm:text-[48px]">{data.import.repository.includes('/') && <span className="mb-1 block tabular text-[14px] font-medium tracking-normal text-muted">{data.import.repository.split('/')[0]} /</span>}{data.import.repository.split('/').slice(1).join('/') || data.import.repository}</h1>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        {data.import.folder && <span className="chip bg-waste" title="Only this folder was imported">/{data.import.folder}</span>}<span className="chip bg-surface">{data.import.branch}</span><span className="chip bg-ink text-paper" title={data.import.commit_sha}>{data.import.commit_sha.slice(0, 7)}</span>
+        {data.import.folder && <span className="chip chip-quiet text-ink" title="Only this folder was imported">/{data.import.folder}</span>}<span className="chip bg-surface">{data.import.branch}</span><span className="chip chip-quiet font-mono text-ink" title={data.import.commit_sha}>{data.import.commit_sha.slice(0, 7)}</span>
         <button className="button-secondary min-h-9 px-3" disabled={report.isFetching} aria-label="Refresh report" onClick={() => void report.refetch()}><RefreshCw size={16} className={report.isFetching ? 'animate-spin' : ''} aria-hidden="true" /></button>
       </div>
     </div>
-    {preview && <p role="note" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-control bg-ink px-5 py-3 text-paper"><span><b>You're looking at a real, saved run</b> of OpenAI's Swarm airline example. Click through the steps; nothing starts from here.</span><Link to="/app" className="button-primary">Run it on your agent <ArrowRight size={16} aria-hidden="true" /></Link></p>}
+    {preview && <p role="note" className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-control border border-blue/40 bg-blue-soft px-5 py-3 text-ink"><span><b>You're looking at a real, saved run</b> of OpenAI's Swarm airline example. Click through the steps; nothing starts from here.</span><Link to="/app" className="button-primary">Run it on your agent <ArrowRight size={16} aria-hidden="true" /></Link></p>}
     {report.isError && <div className="mt-5"><p role="alert">{report.error instanceof ApiError ? report.error.message : 'Could not refresh the report. Check your connection.'}</p><button className="button-secondary mt-3" onClick={() => void report.refetch()}>Try again</button></div>}
-
-    {/* The story so far in one line, so a returning owner does not have to click through the steps to find it. */}
-    {baseline?.status === 'completed' && <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 rounded-control px-5 py-4 lg:grid-cols-4">
-      {([['costs today', `${measurement(baseline.per_pass.cost_usd && Number(baseline.per_pass.cost_usd.toFixed(4)), 'usd')} a pass`, `${measurement(baseline.per_pass.model_calls)} calls · ${measurement(baseline.per_pass.wall_time_seconds && Math.round(baseline.per_pass.wall_time_seconds), 'seconds')}`, 'baseline'],
-        ['biggest lever', baseline.xray?.readings[0]?.headline.replace(/\.$/, '') || 'nothing stands out', baseline.xray?.prompt_caching_estimate?.saving_percent ? `caching could save about ${Math.round(baseline.xray.prompt_caching_estimate.saving_percent)}%` : 'from the X-ray', 'baseline'],
-        ['found', investigation ? `${investigation.findings.length} leak${investigation.findings.length === 1 ? '' : 's'} in the code` : 'quick wins ready', investigation ? 'by the deep hunt' : 'no AI hunt yet', 'findings'],
-        ['latest fix', latest ? latest.decision === 'accept' ? 'accepted' : latest.decision === 'reject' ? 'rejected' : 'no change kept' : 'none tested', latest?.comparison?.totals.cost_usd?.change_percent != null ? `cost ${latest.comparison.totals.cost_usd.change_percent > 0 ? '+' : '−'}${Math.abs(latest.comparison.totals.cost_usd.change_percent).toFixed(1)}%${latest.proof ? ` · ${latest.proof.strength} proof` : ''}` : 'test one from Fixes', latest ? 'result' : 'findings'],
-      ] as const).map(([label, value, sub, to]) => <Link key={label} to={`?step=${to}`} className="group min-w-0"><dt className="label">{label}</dt>
-        <dd className="mt-1 text-[17px] leading-snug font-semibold [overflow-wrap:anywhere] group-hover:underline decoration-waste decoration-2 underline-offset-4">{value}</dd><dd className="tabular text-[14px] text-muted">{sub}</dd></Link>)}
-    </dl>}
 
     <nav aria-label="Import steps" className="mt-5">
       <ol ref={strip} className="-mx-5 flex snap-x gap-2 overflow-x-auto px-5 pb-2 [scrollbar-width:none] md:mx-0 md:grid md:grid-cols-6 md:overflow-visible md:px-0 md:pb-0">{steps.map((value, index) => <li key={value} className="shrink-0 snap-start"><Link to={`?step=${value}`} aria-current={step === value ? 'step' : undefined}
-        className={`flex min-h-12 items-center gap-2 rounded-control border border-line px-3.5 text-[14px] font-semibold whitespace-nowrap md:min-h-14 ${step === value ? 'bg-ink text-paper' : done[value] ? 'bg-surface' : 'border-dashed bg-transparent text-muted'}`}>
-        <span className={`grid size-6 shrink-0 place-items-center rounded-full border tabular text-[14px] ${step === value ? 'border-paper' : done[value] ? 'border-ink bg-ok-soft' : 'border-current'}`}>{done[value] ? <Check size={13} strokeWidth={3} aria-label="done" /> : index + 1}</span>
-        {stepNames[value]}{value === next && step !== value && <span className="live-dot ml-auto" aria-label="next step" />}</Link></li>)}</ol>
+        className={`flex min-h-14 items-center gap-2.5 rounded-control border border-line px-3.5 py-2 text-[14px] font-semibold whitespace-nowrap ${step === value ? 'is-selected' : done[value] ? 'bg-surface' : 'border-dashed bg-transparent text-muted'}`}>
+        <span className={`grid size-6 shrink-0 place-items-center rounded-full border tabular text-[14px] ${done[value] ? 'border-ok bg-ok-soft text-ok' : 'border-current'}`}>{done[value] ? <Check size={13} strokeWidth={3} aria-label="done" /> : index + 1}</span>
+        <span className="min-w-0"><span className="block leading-tight">{stepNames[value]}</span><span className="block truncate tabular text-[12.5px] leading-tight font-normal text-muted">{fact[value]}</span></span>{value === next && step !== value && <span className="live-dot ml-auto" aria-label="next step" />}</Link></li>)}</ol>
     </nav>
 
     {step !== next && !preview && baseline?.status !== 'completed' && <Link to={`?step=${next}`} className="mt-4 flex items-center justify-between gap-3 rounded-control border border-line bg-waste px-5 py-3 font-semibold ">
@@ -237,9 +237,9 @@ export default function ImportReportPage({ session, preview = false }: { session
       {step === 'findings' && <div className="mb-8"><h2 className="font-display text-[34px] leading-none font-medium sm:text-[48px]">What to fix.</h2>
         {/* Two ways to get fixes: instant ones read from the measurements, and an AI pass through the code. */}
         <div role="tablist" aria-label="Where fixes come from" className="mt-6 grid gap-3 sm:grid-cols-2">{([['quick', 'Quick wins', 'From your measurements. Instant, free.', null], ['hunt', 'Deep hunt', 'An AI pass through your code. Uses model calls.', investigation?.findings.length ?? null]] as const).map(([key, title, sub, count]) =>
-          <Link key={key} role="tab" aria-selected={view === key} to={`?step=findings${key === 'hunt' ? '&view=hunt' : ''}`} replace className={`rounded-control border border-line px-5 py-4 ${view === key ? 'bg-ink text-paper' : 'bg-surface'}`}>
-            <span className="flex items-center gap-2 font-display text-[22px] font-medium">{title}{count != null && <span className={`chip px-2 py-0 text-[14px] ${view === key ? 'border-paper text-paper' : ''}`}>{count} found</span>}</span>
-            <span className={`mt-1 block text-[14px] ${view === key ? 'text-paper/80' : 'text-muted'}`}>{sub}</span></Link>)}</div></div>}
+          <Link key={key} role="tab" aria-selected={view === key} to={`?step=findings${key === 'hunt' ? '&view=hunt' : ''}`} replace className={`rounded-control border border-line px-5 py-4 ${view === key ? 'is-selected' : 'bg-surface'}`}>
+            <span className="flex items-center gap-2 font-display text-[22px] font-medium">{title}{count != null && <span className={`chip px-2 py-0 text-[14px] ${view === key ? 'border-blue bg-surface' : ''}`}>{count} found</span>}</span>
+            <span className={`mt-1 block text-[14px] ${view === key ? 'text-ink/80' : 'text-muted'}`}>{sub}</span></Link>)}</div></div>}
       {step === 'findings' && view === 'quick' && <Suggestions data={data} session={session.data} preview={preview} />}
       {step === 'findings' && view === 'hunt' && (investigation ? <section>
         <div className="mb-8 flex flex-wrap items-end justify-between gap-3"><p className="font-display text-[34px] leading-none font-medium sm:text-[48px]">{investigation.findings.length} leak{investigation.findings.length === 1 ? '' : 's'} found.</p>
@@ -277,7 +277,7 @@ export function DeleteAgent({ importId, name, csrf, onDone, compact = false }: {
   if (!asking) return <button type="button" aria-label={`Delete ${name}`} onClick={() => setAsking(true)} className={compact ? 'grid size-11 place-items-center rounded-control border border-transparent hover:border-ink hover:bg-surface' : 'button-secondary'}><Trash2 size={16} aria-hidden="true" />{!compact && ' Delete this agent'}</button>
   return <span role="group" aria-label={`Confirm deleting ${name}`} className="inline-flex flex-wrap items-center gap-2 rounded-control border border-line bg-surface px-3 py-2 text-[15px]">
     <span className="font-medium">Delete {name} and all its results?</span>
-    <button type="button" disabled={busy} onClick={() => void remove()} className="chip min-h-9 bg-ink text-paper">{busy ? 'deleting…' : 'yes, delete'}</button>
+    <button type="button" disabled={busy} onClick={() => void remove()} className="chip min-h-9 border-transparent bg-waste text-white">{busy ? 'deleting…' : 'yes, delete'}</button>
     <button type="button" disabled={busy} onClick={() => { setAsking(false); setError('') }} className="chip min-h-9 bg-surface">keep</button>
     {error && <span role="alert" className="basis-full">{error}</span>}</span>
 }

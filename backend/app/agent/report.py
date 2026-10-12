@@ -71,7 +71,8 @@ def proof(comparison, baseline):
     if contract and len(shape_only) == len(tasks):
         notes.append("The checks only test the shape of the answer, so they would not catch the agent doing the wrong thing.")
     elif shape_only:
-        notes.append(f"Tasks {', '.join(shape_only)} have no exact check; they only test the shape of the answer.")
+        notes.append(f"Task{'s' if len(shape_only) != 1 else ''} {', '.join(shape_only)} {'have' if len(shape_only) != 1 else 'has'} no exact check, "
+                     "so only the shape of the answer is tested there.")
     if not comparison.get("variation_measured"):
         notes.append("The baseline ran each task once, so normal run-to-run variation was not measured.")
     if comparison.get("needs_review"):

@@ -1,5 +1,6 @@
 import asyncio
 from decimal import Decimal, InvalidOperation
+import re
 import json
 import math
 import secrets
@@ -24,8 +25,24 @@ REJECTED_STATUSES = {400, 401, 402, 403, 404, 405, 406, 413, 415, 422, 429}
 REJECTED_SQL = ",".join(str(status) for status in sorted(REJECTED_STATUSES))
 
 
-def error(status, message):
-    return JSONResponse({"error": {"message": message, "type": "gateway_error"}},
+# The model provider says the shared allowance is spent. Matched on the refusal's wording, which is never echoed.
+SPENT = re.compile(rb"budget[^\"]{0,60}exceeded|exceeded[^\"]{0,60}budget|ExceededBudget|budget_exceeded|"
+                   rb"insufficient[_ ](credit|quota|funds|balance)|quota[_ ]exceeded|exceeded your current quota|"
+                   rb"credit balance is too low", re.IGNORECASE)
+ALLOWANCE_MESSAGE = ("Hansa's shared model allowance is used up, so no model calls can run right now. Nothing is wrong with "
+                     "your agent or your setup. Saved results and the recorded demo still work, and runs resume once the "
+                     "allowance is topped up.")
+# When the provider last refused for that reason, so jobs can say so instead of failing with a bare status.
+ALLOWANCE = {"at": 0}
+
+
+def allowance_spent(since=None, within=600):
+    """Whether the provider reported a spent allowance since a moment, or in the last few minutes."""
+    return ALLOWANCE["at"] >= since if since is not None else time.time() - ALLOWANCE["at"] < within
+
+
+def error(status, message, kind="gateway_error"):
+    return JSONResponse({"error": {"message": message, "type": kind}},
                         status_code=status, headers={"Cache-Control": "no-store"})
 
 
@@ -257,6 +274,15 @@ class GatewayService:
                         cost = response_cost(upstream.headers)
                         if not 200 <= status < 300:
                             result = error(status, "Model provider rejected or failed the request.")
+                            if status in {400, 401, 402, 403, 429}:
+                                refusal = bytearray()
+                                async for chunk in upstream.aiter_bytes():
+                                    refusal.extend(chunk[:4096 - len(refusal)])
+                                    if len(refusal) >= 4096:
+                                        break
+                                if SPENT.search(bytes(refusal)):
+                                    ALLOWANCE["at"] = int(time.time())
+                                    result = error(402, ALLOWANCE_MESSAGE, "allowance_exhausted")
                             retry_after = upstream.headers.get("retry-after", "")
                             if (0 < len(retry_after) <= 10 and retry_after.isascii() and retry_after.isdecimal()
                                     and not contains_secret(retry_after, self.settings.litellm_api_key)):

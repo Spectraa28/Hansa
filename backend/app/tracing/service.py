@@ -26,6 +26,30 @@ COVERAGE = ("Model calls are measured at the gateway. HTTP(S) connections are me
             "Gaps between model calls are inferred time in the agent's own code and tools.")
 
 
+# How much of a tool step's input and output is kept for the trace panel.
+STEP_TEXT = 800
+# These return the imported repository's own text. Source stays in the snapshot, out of the database,
+# so only the size of what came back is recorded.
+SOURCE_TOOLS = {"read_file", "search_code", "list_files", "show_diff", "edit_file", "write_file", "write_adapter"}
+
+
+def step_output(step):
+    if step["name"] in SOURCE_TOOLS:
+        text = step["output"] if isinstance(step["output"], str) else json.dumps(step["output"], default=str)
+        return f"{len(text):,} characters returned from the repository (not stored)."
+    return redact(step["output"], STEP_TEXT)
+
+
+def step_input(step):
+    if step["name"] in {"edit_file", "write_file", "write_adapter"}:
+        # The arguments carry the new file text; keep the path alone.
+        try:
+            path = json.loads(step["input"]).get("path")
+        except (ValueError, AttributeError, TypeError):
+            path = None
+        return json.dumps({"path": path}) if path else "(file text not stored)"
+    return redact(step["input"], STEP_TEXT)
+
 def iso(milliseconds):
     return datetime.fromtimestamp(milliseconds / 1000, tz=timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
@@ -279,6 +303,11 @@ class TraceService:
             if parent:
                 span["parent_span_id"] = parent
             tools.append(span)
+        # Neatlogs does not return a step's input and output on readback, so keep a bounded, redacted copy here.
+        with self.database.connect() as db:
+            db.executemany("INSERT OR REPLACE INTO trace_steps VALUES (?,?,?,?)", [(job_id, import_id, f"tool-{index}", json.dumps({
+                "name": step["name"], "ok": bool(step["ok"]), "input": step_input(step),
+                "output": step_output(step)})) for index, step in enumerate(steps)])
         cost = sum(row["estimated_cost_usd"] or 0 for row in self.calls(key_hash))
         summary = {"kind": kind, "status": status, "model_calls": len(model), "tool_calls": len(tools), "cost_usd": cost}
         arguments = {"workflow_name": "hansa-" + kind, "agent_name": "hansa-agent",
@@ -314,7 +343,61 @@ class TraceService:
         checked = self.recheck(user_id, import_id, trace_id)
         if checked.get("error"):
             raise HTTPException(502, checked["error"])
-        return checked["context"]
+        context = checked["context"]
+        row = self.owned(user_id, import_id, trace_id)
+        context["hansa"] = {"kind": row["kind"], "summary": json.loads(row["summary"]),
+                            "steps": self.ledger(row, context.get("spans") or []),
+                            "tools": self.tool_steps(row, context.get("spans") or [])}
+        return context
+
+    def tool_steps(self, trace, spans):
+        """What each of Hansa's own tool steps took in and gave back, for a job's trace."""
+        wanted = [str(span.get("span_id")) for span in spans if str(span.get("span_id") or "").startswith("tool-")]
+        if not wanted or not trace["job_id"]:
+            return {}
+        marks = ",".join("?" * len(wanted))
+        with self.database.connect() as db:
+            rows = db.execute(f"SELECT span_id, detail FROM trace_steps WHERE job_id=? AND import_id=? AND span_id IN ({marks})",
+                              (trace["job_id"], trace["import_id"], *wanted)).fetchall()
+        return {row["span_id"]: json.loads(row["detail"]) for row in rows}
+
+    def ledger(self, trace, spans):
+        """What Hansa's own gateway recorded for each model call in a trace, keyed by span ID.
+
+        Neatlogs returns a step's name and duration but not the attributes sent with it, so the figures come
+        from the ledger. Span IDs are the ones this application wrote when it logged the trace.
+        """
+        wanted = {}
+        for span in spans:
+            prefix, _, number = str(span.get("span_id") or "").partition("-")
+            if prefix in ("llm", "agent") and number.isdigit():
+                wanted[int(number)] = prefix
+        if not wanted:
+            return {}
+        marks = ",".join("?" * len(wanted))
+        with self.database.connect() as db:
+            keys = db.execute(f"SELECT DISTINCT c.key_hash, k.run_label FROM model_calls c JOIN gateway_keys k "
+                              f"ON k.key_hash=c.key_hash WHERE c.id IN ({marks})", tuple(wanted)).fetchall()
+        steps = {}
+        for key in keys:
+            # A run's trace names its run; only that run's key may explain it.
+            if trace["run_id"] and key["run_label"] != trace["run_id"]:
+                continue
+            prefix = next(iter(set(wanted.values())))
+            for span in llm_spans(self.calls(key["key_hash"]), prefix=prefix):
+                if span["span_id"] in {f"{wanted[number]}-{number}" for number in wanted}:
+                    found = span["attributes"]
+                    steps[span["span_id"]] = {
+                        "model": found["neatlogs.llm.model_name"], "requested_model": found["hansa.requested_model"],
+                        "tokens_in": found.get("neatlogs.llm.token_count.prompt"),
+                        "tokens_out": found.get("neatlogs.llm.token_count.completion"),
+                        "cost_usd": found["hansa.cost_usd"] if isinstance(found["hansa.cost_usd"], (int, float)) else None,
+                        "http_status": found["hansa.http_status"], "messages": found["hansa.messages"],
+                        "prompt_chars": found["hansa.prompt_size"], "repeated_messages": found["hansa.repeated_messages"],
+                        "repeated_chars": found["hansa.repeated_size"], "tool_schema_chars": found["hansa.tool_schema_size"],
+                        "tool_calls": [name for name in found["hansa.tool_calls"].split(",") if name],
+                        "finish_reason": found["hansa.finish_reason"]}
+        return steps
 
     def recheck(self, user_id, import_id, trace_id):
         row = self.owned(user_id, import_id, trace_id)

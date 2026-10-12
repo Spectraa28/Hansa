@@ -57,13 +57,24 @@ function ExperimentDiagram() {
   const [stage, setStage] = useState(0)
   const [hovered, setHovered] = useState(false)
   const [focused, setFocused] = useState(false)
+  // The loop only runs while the diagram is on screen and the tab is in front; otherwise it costs renders nobody sees.
+  const [watching, setWatching] = useState(true)
+  const figure = useRef<HTMLElement>(null)
   useEffect(() => {
-    if (reducedMotion || hovered || focused) return
+    let onScreen = true
+    const update = () => setWatching(onScreen && !document.hidden)
+    const observer = new IntersectionObserver(([entry]) => { onScreen = entry.isIntersecting; update() })
+    if (figure.current) observer.observe(figure.current)
+    document.addEventListener('visibilitychange', update)
+    return () => { observer.disconnect(); document.removeEventListener('visibilitychange', update) }
+  }, [])
+  useEffect(() => {
+    if (reducedMotion || hovered || focused || !watching) return
     const timer = window.setInterval(() => setStage(current => (current + 1) % 6), 1200)
     return () => window.clearInterval(timer)
-  }, [reducedMotion, hovered, focused])
+  }, [reducedMotion, hovered, focused, watching])
   const active = (index: number) => !reducedMotion && stage === index
-  return <figure className="experiment-diagram" tabIndex={0} aria-label="Recorded Swarm experiment: original model calls and cost, Hansa's tested change, and the rejection after a task regression. Animation pauses while focused."
+  return <figure ref={figure} className="experiment-diagram" tabIndex={0} aria-label="Recorded Swarm experiment: original model calls and cost, Hansa's tested change, and the rejection after a task regression. Animation pauses while focused."
     onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     onFocus={() => setFocused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
     <figcaption><span className="data-label">THE ENGINEERING LOOP</span><span className="diagram-label">SAVED SWARM RUN</span></figcaption>

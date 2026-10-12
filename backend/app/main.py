@@ -63,7 +63,10 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
             if worker:
                 await worker
 
-    app = FastAPI(title="Ouro backend", lifespan=lifespan)
+    # The interactive API reference describes every route; it is for local development only.
+    hosted = settings.cookie_secure
+    app = FastAPI(title="Ouro backend", lifespan=lifespan, docs_url=None if hosted else "/docs",
+                  redoc_url=None if hosted else "/redoc", openapi_url=None if hosted else "/openapi.json")
     app.state.settings = settings
     app.state.database = database
     app.state.oauth = oauth_clients(settings)
@@ -102,10 +105,15 @@ def create_app(settings: Settings | None = None) -> ASGIApp:
                                         headers={"Cache-Control": "no-store"})
             response = await call_next(request)
             response.headers["Cache-Control"] = "no-store"
-            response.headers["Referrer-Policy"] = "no-referrer"
-            response.headers["X-Content-Type-Options"] = "nosniff"
-            return response
-        return await call_next(request)
+        else:
+            response = await call_next(request)
+        # On every response, including errors and the gateway: no framing, no type guessing, no referrer.
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        if hosted:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
 
     @app.exception_handler(RequestValidationError)
     async def invalid_input(request: Request, exc: RequestValidationError):

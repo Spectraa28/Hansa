@@ -8,7 +8,8 @@ from concurrent.futures import ThreadPoolExecutor
 from fastapi import HTTPException
 
 from ..contracts.service import ContractService
-from ..agent.service import JOB_LOCK
+from ..agent.service import JOB_LOCK, claim
+from ..gateway.service import ALLOWANCE_MESSAGE, allowance_spent
 from .service import HERE
 
 
@@ -136,13 +137,19 @@ def passes(task):
     return [sum(bool(run.get("automatic_passed")) for run in runs), len(runs)]
 
 
+# With one baseline repetition nothing is known about run-to-run noise, so a saving has to be at least this
+# large before it counts. Two runs of the same agent routinely differ by a few percent.
+MIN_EFFECT_PERCENT = 5.0
+
+
 def compare(baseline, candidate_tasks):
     """Deterministic verdict. A task regresses when its automatic checks passed before and do not now.
 
     Improvement must exceed what the baseline's own repetitions varied by: the candidate total has to
     beat the sum of each task's best baseline repetition. With one baseline repetition there is no
-    measured variation, and the verdict says so.
+    measured variation, so the saving must also reach MIN_EFFECT_PERCENT; the verdict says which applied.
     """
+    measured = baseline.get("repetitions", 1) > 1
     rows, totals = [], {key: {"baseline": 0, "candidate": 0, "baseline_best": 0, "known": True} for key in METRICS}
     by_id = {task["task_id"]: task for task in baseline["tasks"]}
     for task in candidate_tasks:
@@ -170,7 +177,8 @@ def compare(baseline, candidate_tasks):
     for key, total in totals.items():
         summary[key] = ({"baseline": total["baseline"], "candidate": total["candidate"],
                          "change_percent": change(total["baseline"], total["candidate"]),
-                         "beyond_baseline_variation": total["candidate"] < total["baseline_best"]}
+                         "beyond_baseline_variation": total["candidate"] < total["baseline_best"] and (
+                             measured or (change(total["baseline"], total["candidate"]) or 0) <= -MIN_EFFECT_PERCENT)}
                         if total["known"] else {"baseline": None, "candidate": None, "change_percent": None,
                                                 "beyond_baseline_variation": False})
     regressions = [row["task_id"] for row in rows if row["regressed"]]
@@ -178,7 +186,8 @@ def compare(baseline, candidate_tasks):
     complete = {task["task_id"] for task in candidate_tasks} == set(by_id)
     verdict = "regressed" if regressions else "improved" if improved else "no_measurable_change"
     return {"verdict": verdict, "regressed_tasks": regressions, "improved_metrics": improved, "all_tasks": complete,
-            "variation_measured": baseline.get("repetitions", 1) > 1, "tasks": rows, "totals": summary,
+            "variation_measured": measured, "minimum_effect_percent": None if measured else MIN_EFFECT_PERCENT,
+            "tasks": rows, "totals": summary,
             "needs_review": [row["task_id"] for row in rows if row["candidate_status"] == "needs_review"],
             "note": "Automatic checks only. Tasks marked needs_review still require a person to confirm the candidate's answers."}
 
@@ -240,8 +249,7 @@ class BaselineService:
             raise HTTPException(409, "Run onboarding to store an adapter before starting a baseline.")
         if not self.runner.settings.litellm_base_url or not self.runner.settings.litellm_api_key:
             raise HTTPException(503, "Model gateway is not configured.")
-        if not JOB_LOCK.acquire(blocking=False):
-            raise HTTPException(409, "Another agent or baseline job is running.")
+        claim("baseline")
         try:
             report = {"baseline_id": uuid.uuid4().hex, "import_id": import_id, "kind": "contract",
                       "litellm_model": config["configuration"]["litellm_model"],
@@ -268,6 +276,9 @@ class BaselineService:
             report.update(status="failed", reason=str(exc))
         except Exception as exc:
             report.update(status="failed", reason="Unexpected controller error: " + type(exc).__name__)
+        if allowance_spent(since=report["created_at"]):
+            # Tasks that failed because no model call could run say nothing about the agent.
+            report.update(status="failed", reason=ALLOWANCE_MESSAGE)
         try:
             self.save(user_id, report)
             self.event(report["baseline_id"], "finished", {"status": report["status"], "reason": report.get("reason"),

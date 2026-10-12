@@ -43,11 +43,47 @@
   --waste-soft: #FFF0DD;
   --ok: #15734F;
   --ok-soft: #E4F3EC;
+  --header: #182432;
+  --dot: #B9C8DC;
   --ease: cubic-bezier(.2, .8, .2, 1);
   --proof-shadow: 0 2px 8px rgb(24 36 50 / .05), 0 20px 48px -16px rgb(24 36 50 / .16);
   /* One side margin for the nav and every page: slim, and only growing once the content is 1600px wide. */
   --gutter: max(20px, 4vw, calc((100vw - 1600px) / 2));
 }
+
+/* Dark: the same roles on a deep navy ground. Blue, green and amber are lifted so they read on it. */
+:root[data-theme=dark] {
+  color-scheme: dark;
+  --milk: #0A111D;
+  --lake: #E7EDF6;
+  --deep: #FFFFFF;
+  --water: #4A7FF0;
+  --water-deep: #AFC8FF;
+  --mist: #223046;
+  --reed: #94A3B8;
+  --saffron: #E0914A;
+  --lotus: #C9A27A;
+  --lotus-soft: #2A2117;
+  --body: #BAC6D6;
+  --surface: #121B2C;
+  --wash: #182338;
+  --blue-soft: #16264A;
+  --waste-soft: #34230F;
+  --ok: #45C795;
+  --ok-soft: #0F2B21;
+  --header: #060B14;
+  --dot: #2A3A55;
+  --proof-shadow: 0 2px 8px rgb(0 0 0 / .3), 0 24px 56px -18px rgb(0 0 0 / .7);
+}
+/* Blocks that are dark in the light theme stay dark here too, a step above the page, instead of flipping to white. */
+:root[data-theme=dark] .ink-block, :root[data-theme=dark] .landing-footer { --paper: #E7EDF6; background-color: #1B2842; box-shadow: inset 0 0 0 1px #2B3B5C; }
+:root[data-theme=dark] .footer-invitation .button-primary { background: var(--water); color: #fff; }
+/* In dark, the lighter blue is for text; a pressed button goes deeper instead. */
+:root[data-theme=dark] .button-primary:hover:not(:disabled) { background: #3A6BDA; }
+/* The switch itself: the new theme is revealed in a circle growing from the button (see ThemeToggle). */
+::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+::view-transition-old(root) { z-index: 1; }
+::view-transition-new(root) { z-index: 2; }
 
 @theme inline {
   --color-paper: var(--paper);
@@ -72,10 +108,18 @@
   --radius-window: 8px;
 }
 
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; background: var(--paper); }
+/* While the smoothed scroll is running it owns the motion; the browser's own easing would fight it. */
+html.lenis, html.lenis body { height: auto; }
+html.lenis.lenis-smooth { scroll-behavior: auto !important; }
+html.lenis.lenis-stopped { overflow: clip; }
+/* The background rests while the page is moving. */
+html.is-scrolling body::after, html.is-scrolling .backdrop span, html.is-scrolling .signin-drift span { animation-play-state: paused; }
 body {
   margin: 0;
-  background: var(--paper);
+  position: relative;
+  /* The page colour sits on <html>, so the moving layer below can show through. */
+  background: transparent;
   color: var(--ink);
   font-family: var(--font-sans);
   font-size: 17px;
@@ -104,10 +148,20 @@ input.field, select.field, textarea.field { font-size: 16px; }
 .run-event, .task-resolved { animation: run-event-enter 180ms var(--ease); }
 .task-row, .run-event { transition: background-color 140ms; }
 .task-row:hover, .run-event:hover { background-color: var(--wash); }
+/* A task that failed or got worse is marked down its left edge, so it is found without reading every row. */
+.task-row + .task-row { border-top: 1px solid var(--line); }
+.task-row:has(.chip-waste) { background: color-mix(in srgb, var(--waste-soft) 60%, transparent); box-shadow: inset 3px 0 0 var(--waste); }
+.task-row:has(.chip-ok) { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ok) 55%, transparent); }
 .trace-backdrop { animation: trace-backdrop-enter 160ms var(--ease); }
 .trace-panel { animation: trace-panel-enter 220ms var(--ease); }
 @keyframes trace-backdrop-enter { from { background-color: transparent; } }
-@keyframes trace-panel-enter { from { transform: translateX(100%); } to { transform: none; } }
+/* The trace opens as a window: it rises and sharpens into place rather than sliding in from the side. */
+@keyframes trace-panel-enter { from { opacity: 0; transform: translateY(16px) scale(.97); } to { opacity: 1; transform: none; } }
+.trace-panel { box-shadow: 0 30px 80px -20px rgb(0 0 0 / .55); }
+.trace-step { transition: background-color 140ms; }
+.trace-step:hover { background: var(--wash); }
+.trace-step.is-on { background: var(--blue-soft); box-shadow: inset 3px 0 0 var(--blue); }
+.trace-detail { animation: run-event-enter 200ms var(--ease); }
 
 @layer components {
   /* App pages share the nav's side margin, so the logo and the page content line up. */
@@ -122,7 +176,8 @@ input.field, select.field, textarea.field { font-size: 16px; }
     @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-control px-5 text-[16px] font-semibold;
     transition: background-color 160ms, color 160ms, border-color 160ms, transform 120ms var(--ease);
   }
-  .button-primary { background: var(--water); color: var(--on-accent); }
+  .button-primary { background: linear-gradient(180deg, #3468DC, var(--water)); color: var(--on-accent); box-shadow: inset 0 1px 0 rgb(255 255 255 / .18), 0 1px 2px rgb(24 36 50 / .2); }
+  .button-primary:hover:not(:disabled) { transform: translateY(-1px); }
   .button-primary:hover:not(:disabled) { background: var(--water-deep); }
   .button-secondary { @apply border border-ink/25 bg-transparent text-ink; }
   .button-secondary:hover:not(:disabled) { @apply border-ink bg-surface; }
@@ -137,7 +192,8 @@ input.field, select.field, textarea.field { font-size: 16px; }
   .field:disabled { @apply bg-wash text-muted; }
 
   /* App reading groups stay flat; padding and spacing define their boundaries. */
-  .slab { @apply relative bg-transparent; }
+  /* A report panel is a solid sheet: the page behind it moves, the content on it does not compete with that. */
+  .slab { @apply relative rounded-[12px] border border-line bg-surface; box-shadow: 0 1px 2px rgb(24 36 50 / .04), 0 14px 32px -22px rgb(24 36 50 / .28); }
   /* A quiet caption at the top of a sheet, in the reader's words. */
   .slab-tab { @apply mb-2 block text-[14px] font-medium text-muted; }
   .label { @apply text-[14px] font-medium text-muted; }
@@ -145,11 +201,121 @@ input.field, select.field, textarea.field { font-size: 16px; }
   .chip-waste { @apply border-transparent bg-waste-soft text-ink; }
   .chip-ok { @apply border-transparent bg-ok-soft text-ink; }
   .chip-quiet { @apply border-transparent bg-wash text-muted; }
-  .live-dot { @apply inline-block size-2 rounded-full bg-waste; animation: pulse-dot 2.4s ease-in-out infinite; }
-  .big-number { @apply font-mono leading-none font-medium; letter-spacing: -.04em; }
+  /* Colour has three jobs. Blue: something you can click, or the one you picked. Green: kept or saved.
+     Amber: a regression, a rejection or an error. Everything else is ink and grey. */
+  .is-selected { background: var(--blue-soft); color: var(--water-deep); border-color: var(--blue); }
+  .notice-problem { @apply rounded-control border px-4 py-3 text-ink; background: var(--waste-soft); border-color: color-mix(in srgb, var(--waste) 40%, transparent); }
+  .link-action { @apply underline decoration-2 underline-offset-4; text-decoration-color: var(--blue); }
+  /* Activity is neither good nor bad, so the running dot is ink. */
+  .live-dot { @apply inline-block size-2 rounded-full bg-ink; animation: pulse-dot 2.4s ease-in-out infinite; }
+  /* Big figures use the text face with aligned digits; the mono face left gaps around the point and the unit. */
+  .big-number { @apply leading-none font-semibold; letter-spacing: -.035em; }
   /* A sheet whose content runs edge to edge still needs room around its caption. */
   .slab:not([class*=" p-"]):not([class*=" px-"]) > .slab-tab { padding: 16px 24px 0; margin-bottom: 0; }
   .back-link { @apply -ml-2 inline-flex min-h-11 items-center gap-1.5 rounded-control px-2 text-[14px] font-medium text-muted hover:text-ink; }
+}
+
+/* ---- the site is quietly alive: two soft washes of colour drift behind every page, over a dotted grid ---- */
+body::before, body::after { content: ''; position: fixed; z-index: -1; pointer-events: none; }
+/* Both layers get their own compositor layer, so scrolling the page never repaints them. */
+body::before { inset: 0; background: radial-gradient(var(--dot) 1px, transparent 1.3px) 0 0 / 28px 28px; opacity: .7; transform: translateZ(0); }
+body::after { inset: -18vmax; background:
+    radial-gradient(36vmax 36vmax at 20% 28%, rgb(36 88 202 / .34), transparent 70%),
+    radial-gradient(32vmax 32vmax at 80% 60%, rgb(24 160 110 / .30), transparent 70%),
+    radial-gradient(26vmax 26vmax at 62% 16%, rgb(232 150 60 / .22), transparent 70%),
+    radial-gradient(28vmax 28vmax at 30% 82%, rgb(120 90 220 / .18), transparent 70%);
+  animation: wash-drift 16s ease-in-out infinite alternate; will-change: transform; }
+/* Position and a slight turn only: no scaling, so the layer is drawn once and then just moved. */
+@keyframes wash-drift { from { transform: translate3d(-8vmax, -5vmax, 0) rotate(-5deg); } to { transform: translate3d(9vmax, 6vmax, 0) rotate(10deg); } }
+/* Icon tiles float over the washes, behind the content. */
+.backdrop { position: fixed; inset: 72px 0 0; z-index: -1; pointer-events: none; overflow: hidden; contain: strict; }
+/* Each tile is centred in the side margin, whatever its width. */
+.backdrop .at-left { left: calc(var(--gutter) / 2 - 20px); }
+.backdrop .at-right { right: calc(var(--gutter) / 2 - 20px); }
+.backdrop span { position: absolute; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--surface); color: var(--muted); opacity: .8;
+  animation: signin-drift var(--t) ease-in-out var(--d) infinite alternate; will-change: transform; }
+.backdrop .is-blue { color: var(--blue); background: var(--blue-soft); border-color: transparent; }
+.backdrop .is-ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.backdrop .is-waste { color: var(--waste); background: var(--waste-soft); border-color: transparent; }
+/* Below about 1100px the margins are too thin to hold a tile; the washes carry the motion alone. */
+@media (max-width: 1100px) { .backdrop { display: none; } }
+/* Every page arrives with a short rise instead of snapping in. */
+/* No fill after it ends: a lingering transform would trap fixed windows (the trace) inside the page. */
+.page { animation: page-enter 360ms var(--ease) backwards; }
+@keyframes page-enter { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+/* A thin line of the three working colours under the header ties the dark bar to the page. */
+header.bg-ink::after { content: ''; position: absolute; inset: auto 0 0; height: 2px; background: linear-gradient(90deg, var(--blue), #2FA37A 55%, #D98A3D); opacity: .9; }
+/* Things you can open lift a little when you point at them. */
+a.slab, .task-row, nav[aria-label="Import steps"] a { transition: transform 160ms var(--ease), box-shadow 160ms, background-color 140ms, border-color 140ms; }
+a.slab:hover, nav[aria-label="Import steps"] a:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -16px rgb(24 36 50 / .45); }
+
+/* ---- a live run: a journey across the top, a moving line while it works ---- */
+.run-box { position: relative; }
+.run-box[data-state=running]::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; z-index: 1; background: linear-gradient(90deg, transparent, var(--blue), var(--ok), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: run-sweep 1.8s linear infinite; }
+.run-box[data-state=done]::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: var(--ok); }
+.run-box[data-state=stopped]::before { content: ''; position: absolute; inset: 0 0 auto; height: 3px; background: var(--waste); }
+@keyframes run-sweep { from { background-position: -50% 0; } to { background-position: 150% 0; } }
+.run-journey { display: flex; gap: 0; padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--surface); overflow-x: auto; scrollbar-width: none; }
+.run-journey li { position: relative; display: flex; flex: 1; min-width: max-content; align-items: center; gap: 10px; padding-right: 28px; font-size: 14px; color: var(--muted); }
+.run-journey li b { font-weight: 500; white-space: nowrap; }
+.run-journey li > span { position: relative; display: grid; flex: none; place-items: center; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--paper); transition: background-color 300ms, color 300ms, border-color 300ms; }
+/* The line to the next stage fills in once this one is done. */
+.run-journey li:not(:last-child)::after { content: ''; flex: 1; min-width: 24px; height: 2px; margin-left: 6px; border-radius: 2px; background: var(--line); transition: background-color 400ms; }
+.run-journey li[data-stage=done] { color: var(--ink); }
+.run-journey li[data-stage=done] > span { border-color: transparent; background: var(--ok-soft); color: var(--ok); }
+.run-journey li[data-stage=done]::after { background: var(--ok); }
+.run-journey li[data-stage=now] { color: var(--ink); }
+.run-journey li[data-stage=now] b { font-weight: 600; }
+.run-journey li[data-stage=now] > span { border-color: transparent; background: var(--blue); color: #fff; }
+.run-journey li[data-stage=now] > span::before { content: ''; position: absolute; inset: -5px; border-radius: 50%; border: 2px solid var(--blue); opacity: 0; animation: run-ring 1.8s ease-out infinite; }
+.run-journey li[data-stage=now]::after { background: linear-gradient(90deg, var(--blue) 50%, var(--line) 50%); background-size: 200% 100%; animation: run-line 1.6s linear infinite; }
+@keyframes run-ring { 0% { opacity: .7; transform: scale(.85); } 100% { opacity: 0; transform: scale(1.35); } }
+@keyframes run-line { from { background-position: 100% 0; } to { background-position: 0 0; } }
+/* Each new action replaces the last with a small rise, so the box visibly moves on. */
+.run-now-text { animation: run-event-enter 260ms var(--ease); }
+.run-meter { display: block; height: 6px; border-radius: 6px; background: var(--wash); overflow: hidden; }
+.run-meter > span { display: block; height: 100%; border-radius: 6px; background: var(--blue); transition: width 600ms var(--ease); }
+
+/* The header is the one dark bar on a light site. Sign in is a white button so it reads against it;
+   the blue button beside it stays the main action. */
+header.bg-ink { --paper: #F7F9FC; background: var(--header); }
+.bg-ink .button-secondary:hover:not(:disabled) { color: #182432; }
+.theme-toggle { color: #F7F9FC; border: 1px solid rgb(247 249 252 / .28); transition: background-color 140ms, transform 300ms var(--ease); }
+.theme-toggle:hover { background: rgb(247 249 252 / .12); transform: rotate(18deg); }
+.nav-signin { min-height: 44px; align-items: center; gap: 8px; padding-inline: 16px; border-radius: 6px; background: #F7F9FC; color: #182432; font-size: 15px; font-weight: 600; transition: background-color 140ms, transform 120ms var(--ease); }
+.nav-signin:hover { background: #fff; transform: translateY(-1px); }
+header.bg-ink .button-primary { box-shadow: 0 0 0 1px rgb(255 255 255 / .16); }
+
+/* ---- sign-in: the pitch on the left, the card on the right, and everything Hansa looks at drifting behind ---- */
+.signin { position: relative; display: grid; grid-template-columns: minmax(0, 6fr) minmax(0, 5fr); gap: 72px; align-items: center; min-height: calc(100dvh - 72px); padding: 56px var(--gutter) 80px; overflow: hidden; }
+.signin-pitch, .signin-card { position: relative; z-index: 1; }
+.signin-pitch { max-width: 620px; justify-self: end; }
+.signin-card { width: 100%; max-width: 460px; padding: 32px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: var(--proof-shadow); animation: signin-rise 520ms var(--ease) both; }
+.signin-pitch { animation: signin-rise 520ms var(--ease) 80ms both; }
+@keyframes signin-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+.signin-email { border-top: 1px solid var(--line); }
+.signin-promise { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid transparent; border-radius: 10px; transition: background-color 400ms, border-color 400ms, transform 400ms var(--ease); }
+.signin-promise > span { display: grid; flex: none; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--wash); color: var(--muted); transition: background-color 400ms, color 400ms; }
+.signin-promise[data-lit=true] { border-color: var(--line); background: var(--surface); transform: translateX(6px); }
+.signin-promise[data-lit=true] > span { background: var(--blue); color: #fff; }
+.signin-drift { position: absolute; inset: 0; pointer-events: none; }
+.signin-drift span { position: absolute; display: grid; place-items: center; width: 52px; height: 52px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); opacity: .75;
+  animation: signin-drift var(--t) ease-in-out var(--d) infinite alternate; will-change: transform; }
+.signin-drift .is-blue { color: var(--blue); background: var(--blue-soft); border-color: transparent; }
+.signin-drift .is-ok { color: var(--ok); background: var(--ok-soft); border-color: transparent; }
+.signin-drift .is-waste { color: var(--waste); background: var(--waste-soft); border-color: transparent; }
+.signin-drift .is-ink { color: var(--muted); }
+@keyframes signin-drift { from { transform: translate3d(0, 10px, 0) rotate(-5deg); } to { transform: translate3d(8px, -18px, 0) rotate(6deg); } }
+@media (max-width: 960px) {
+  .signin { grid-template-columns: 1fr; gap: 32px; align-items: start; padding-block: 36px 56px; }
+  .signin-pitch { justify-self: start; }
+  .signin-card { max-width: none; padding: 22px; }
+  /* On a phone the tiles would sit under the text, so only the ones at the edges stay, fainter. */
+  .signin-drift span { opacity: .22; }
+  .signin-drift span:nth-child(3n) { display: none; }
+  /* The form comes first on a phone; the pitch follows it. */
+  .signin-card { order: -1; }
+  .signin-pitch .page-title { font-size: 28px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

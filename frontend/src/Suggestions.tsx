@@ -59,17 +59,17 @@ export default function Suggestions({ data, session, preview }: { data: ImportRe
       <ul className="mt-4 grid gap-3">{items.map(play => { const on = chosen.has(play.id), est = play.estimate
         return <li key={play.id} className={`rounded-control ${on ? 'bg-surface' : 'bg-transparent'}`}>
           <label className="relative flex cursor-pointer items-start gap-3 p-4 sm:p-5"><input type="checkbox" className="absolute inset-0 size-full cursor-pointer opacity-0" checked={on} onChange={() => toggle(play.id)} />
-            <span aria-hidden="true" className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-[6px] border border-line ${on ? 'bg-waste' : 'bg-surface'}`}>{on && <Check size={15} strokeWidth={3.5} />}</span>
+            <span aria-hidden="true" className={`mt-0.5 grid size-6 shrink-0 place-items-center rounded-[6px] border border-line ${on ? 'border-blue bg-blue text-white' : 'bg-surface'}`}>{on && <Check size={15} strokeWidth={3.5} />}</span>
             <span className="min-w-0 flex-1"><span className="flex flex-wrap items-center gap-x-3 gap-y-1"><span className="text-[19px] leading-snug font-semibold sm:text-[21px]">{play.title}</span>
               <span className="chip chip-quiet px-2 py-0 text-[14px]">{areas.find(area => area.key === play.area)?.name || play.area}</span></span>
               <span className="mt-1 block text-[14px] text-muted">{play.why}</span></span>
-            <span className="shrink-0 text-right">{est.cost_percent ? <span className="big-number block text-[26px] sm:text-[30px]">−{Math.round(est.cost_percent)}%</span> : est.latency_percent ? <span className="big-number block text-[26px] sm:text-[30px]">−{Math.round(est.latency_percent)}%</span> : <span className="chip chip-quiet">guard</span>}
+            <span className="shrink-0 text-right">{est.cost_percent ? <span className="big-number block text-[26px] text-ok sm:text-[30px]">−{Math.round(est.cost_percent)}%</span> : est.latency_percent ? <span className="big-number block text-[26px] text-ok sm:text-[30px]">−{Math.round(est.latency_percent)}%</span> : <span className="chip chip-quiet">guard</span>}
               <span className="tabular text-[14px] text-muted">{est.cost_percent ? 'cost, est.' : est.latency_percent ? 'time, est.' : 'no saving'}</span></span></label>
           <details className="border-t border-dashed border-line px-4 pb-4 text-[14px] sm:px-5"><summary className="flex min-h-11 cursor-pointer items-center tabular text-[14px] text-muted">evidence, where, and how</summary>
             <ul className="list-disc space-y-1 pl-5">{play.evidence.map(item => <li key={item}>{item}</li>)}</ul>
             {play.where.length > 0 && <p className="mt-3 flex flex-wrap gap-1.5">{play.where.map(place => { const [path, line] = [place.slice(0, place.lastIndexOf(':')), Number(place.slice(place.lastIndexOf(':') + 1))]
               const url = sourceUrl(data.import.repository, data.import.commit_sha, { path, start_line: line, end_line: line }, data.import.folder)
-              return url ? <a key={place} href={url} target="_blank" rel="noopener noreferrer" className="chip shrink bg-surface break-all whitespace-normal hover:bg-ink hover:text-paper">{place}</a> : <span key={place} className="chip shrink break-all whitespace-normal">{place}</span> })}</p>}
+              return url ? <a key={place} href={url} target="_blank" rel="noopener noreferrer" className="chip shrink bg-surface break-all whitespace-normal hover:bg-blue-soft">{place}</a> : <span key={place} className="chip shrink break-all whitespace-normal">{place}</span> })}</p>}
             <ol className="mt-3 list-decimal space-y-1 pl-5">{play.steps.map(step => <li key={step}>{step}</li>)}</ol>
             <p className="mt-3"><b>Must stay true:</b> {play.keep}</p><p className="mt-1"><b>How to check:</b> {play.check}</p>
             {est.basis && <p className="mt-2 tabular text-[14px] text-muted">estimate basis: {est.basis}</p>}</details></li> })}</ul></div> }
@@ -80,7 +80,7 @@ export default function Suggestions({ data, session, preview }: { data: ImportRe
       {group('safe', ShieldCheck, 'Safe to apply', 'These change how requests are sent and billed, not what your agent does or says.')}
       {group('needs_proof', TestTube2, 'Needs proof', 'These change behaviour. Apply one at a time and rerun your tasks after each.')}
     </div>
-    <div className="sticky bottom-3 z-30 mt-5 rounded-card bg-ink p-4 text-paper sm:p-5">
+    <div className="ink-block sticky bottom-3 z-30 mt-5 rounded-card bg-ink p-4 text-paper sm:p-5">
       <div className="flex flex-wrap items-center gap-x-6 gap-y-3"><p className="min-w-0 flex-1"><span className="tabular text-[14px] text-paper/80">{selected.length} selected · estimated together</span>
         <span className="mt-0.5 block font-display text-[26px] leading-tight font-medium">{cost ? `−${cost}% cost` : 'no cost change'}{time ? ` · −${time}% time` : ''}</span></p>
         <div className="flex flex-wrap gap-3"><button className="button-primary" disabled={busy || !selected.length} onClick={() => void brief('copy')}><ClipboardCopy size={16} aria-hidden="true" /> {busy ? 'Writing…' : 'Copy the brief'}</button>
