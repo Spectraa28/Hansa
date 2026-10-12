@@ -1,11 +1,14 @@
-import Lenis from 'lenis'
+import type Lenis from 'lenis'
 
 // One smoothed page scroll for the whole site. A mouse wheel otherwise moves the page in hard steps
 // (most visibly on Linux, where browsers do not smooth it themselves).
 let lenis: Lenis | null = null
 
-export function startSmoothScroll() {
+export async function startSmoothScroll() {
   if (lenis || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  // Loaded after the page has painted: scrolling works natively until then, so nothing waits on it.
+  const { default: Lenis } = await import('lenis')
+  if (lenis) return
   lenis = new Lenis({ autoRaf: true, lerp: 0.13, anchors: true, allowNestedScroll: true })
   // The drifting background rests while the page moves, so the two never compete for the same frame.
   const root = document.documentElement

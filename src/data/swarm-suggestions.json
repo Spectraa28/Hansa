@@ -2,32 +2,35 @@
  "measured": true,
  "suggestions": [
   {
-   "id": "prompt-caching",
+   "id": "stable-prefix",
    "area": "Context",
    "kind": "safe",
-   "title": "Turn on prompt caching",
-   "why": "The agent resends the same opening on every call and pays full price for it each time. A cached prefix is billed at about a tenth.",
+   "title": "Put what never changes first, what changes last",
+   "why": "A cache only covers an identical prefix. One timestamp, ID or user detail near the top of the prompt makes every call a miss.",
    "evidence": [
-    "59% of each request was already sent on the call before (measured over 80 calls).",
-    "No cache markers were found in the source."
+    "The system prompt is 58% of every request.",
+    "Only 0% of each request repeats the call before, which is low for a prompt this size."
    ],
    "steps": [
-    "Find every place a model request is built (see the listed lines).",
-    "Mark the end of the unchanging prefix as cacheable: for Anthropic models add `cache_control: {\"type\": \"ephemeral\"}` to the last system block and to the last tool definition; OpenAI models cache automatically once the unchanging prefix is long enough, so only the ordering work below is needed there.",
-    "Keep the cache alive between calls of one conversation: do not rebuild or reorder the prefix between turns.",
-    "Log the provider's cached-token count from each response so the hit rate can be seen."
+    "Order each request as: fixed instructions, then tool definitions, then fixed examples, then the conversation, then anything that changes per call.",
+    "Move dates, times, request IDs, user names and retrieved data out of the system prompt into the final user message.",
+    "Build the fixed part once at start-up and reuse the same string; do not re-render it with a template on each call.",
+    "Keep tool definitions in a stable order (sort them) so the same list is byte-identical between calls."
    ],
-   "keep": "Do not change any prompt wording, tool, or model. This changes how the request is billed, not what is sent.",
-   "check": "Run the same tasks twice in a row: cached input tokens should be above zero on every call after the first, and answers unchanged.",
+   "keep": "Every instruction must still reach the model; only its position changes. Do not reword anything.",
+   "check": "Diff the first request of two different tasks: everything before the conversation should be identical.",
    "where": [
-    "swarm/core.py:69"
+    "examples/airline/configs/agents.py:45",
+    "examples/airline/configs/agents.py:51",
+    "examples/airline/configs/agents.py:61",
+    "examples/airline/configs/agents.py:73"
    ],
+   "example": "# Before: the prefix changes every call, so nothing can be cached.\nsystem = f\"Today is {date.today()}. You are a support agent. ...\"\n# After: fixed text first, built once; what changes goes last.\nSYSTEM = \"You are a support agent. ...\"                       # module level, never re-rendered\nmessages = [{\"role\": \"system\", \"content\": SYSTEM}, *history,\n            {\"role\": \"user\", \"content\": f\"(Today is {date.today()}.) {user_message}\"}]",
    "estimate": {
-    "cost_percent": 41.9,
+    "cost_percent": 20.5,
     "latency_percent": null,
-    "basis": "repeat share \u00d7 input share of the bill \u00d7 90% cached-read discount"
-   },
-   "example": "# OpenAI-style chat call to a Claude model (directly or through LiteLLM): mark the end of the fixed prefix.\nmessages = [\n    {\"role\": \"system\", \"content\": [\n        {\"type\": \"text\", \"text\": SYSTEM_PROMPT, \"cache_control\": {\"type\": \"ephemeral\"}},\n    ]},\n    *history,\n]\n# Anthropic SDK: system=[{\"type\": \"text\", \"text\": SYSTEM_PROMPT, \"cache_control\": {\"type\": \"ephemeral\"}}]\n# Then log the cached-token count the provider returns in `usage` on each response."
+    "basis": "system-prompt share × input share × 90% cached-read discount, halved because some of it may already be cacheable"
+   }
   },
   {
    "id": "bound-turns",
@@ -37,7 +40,7 @@
    "why": "With no limit, one confused conversation can loop until the bill is noticed. A ceiling costs nothing on the normal path.",
    "evidence": [
     "A loop or turn limit with no upper bound is set in the source.",
-    "Tasks in the baseline needed 6.7 calls on average."
+    "Tasks in the baseline needed 3 calls on average."
    ],
    "steps": [
     "Set the maximum turns to about three times what the longest baseline task needed.",
@@ -51,12 +54,12 @@
     "swarm/core.py:239",
     "swarm/repl/repl.py:69"
    ],
+   "example": "MAX_TURNS = 20   # about three times the longest task in the baseline\nfor turn in range(MAX_TURNS):\n    ...\nelse:\n    log.warning(\"turn ceiling reached\")          # a bug to look at\n    return {\"status\": \"could_not_complete\"}",
    "estimate": {
     "cost_percent": null,
     "latency_percent": null,
     "basis": "no saving on the normal path; removes the unbounded worst case"
-   },
-   "example": "MAX_TURNS = 20   # about three times the longest task in the baseline\nfor turn in range(MAX_TURNS):\n    ...\nelse:\n    log.warning(\"turn ceiling reached\")          # a bug to look at\n    return {\"status\": \"could_not_complete\"}"
+   }
   },
   {
    "id": "cap-output",
@@ -76,12 +79,39 @@
    "where": [
     "swarm/core.py:69"
    ],
+   "example": "client.chat.completions.create(model=MODEL, messages=messages, max_tokens=800)   # answers\nclient.chat.completions.create(model=MODEL, messages=messages, max_tokens=120)   # steps that only pick a tool",
    "estimate": {
     "cost_percent": null,
     "latency_percent": null,
     "basis": "bounds the worst case; little change on normal runs"
-   },
-   "example": "client.chat.completions.create(model=MODEL, messages=messages, max_tokens=800)   # answers\nclient.chat.completions.create(model=MODEL, messages=messages, max_tokens=120)   # steps that only pick a tool"
+   }
+  },
+  {
+   "id": "route-cheaply",
+   "area": "Model choice",
+   "kind": "needs_proof",
+   "title": "Use a small model for calls that only route",
+   "why": "A call that says nothing and picks one tool is a classification. A small model does it for a fraction of the price and time.",
+   "evidence": [
+    "2 of 6 calls returned a single tool call and no text.",
+    "Those calls are 30% of the bill."
+   ],
+   "steps": [
+    "Identify the agents or steps whose only job is to choose the next agent or tool.",
+    "Give those steps a smaller, faster model; leave the steps that write answers on the current model.",
+    "Where the choice is a fixed rule (a keyword or a field value), replace the model call with code."
+   ],
+   "keep": "The same next step must be chosen for the same input. Do not change the routing rules themselves.",
+   "check": "Rerun the task set and compare which tools were called per task; any difference means the small model is not good enough for that step.",
+   "where": [
+    "swarm/core.py:69"
+   ],
+   "example": null,
+   "estimate": {
+    "cost_percent": 24.1,
+    "latency_percent": 16.6,
+    "basis": "cost of routing-only calls × 80%, assuming a model about five times cheaper"
+   }
   },
   {
    "id": "tool-schemas",
@@ -90,7 +120,7 @@
    "title": "Send each step only the tools it can use, with shorter descriptions",
    "why": "Every call carries the full definition of every tool. Most steps can only use one or two of them.",
    "evidence": [
-    "Tool definitions are 23% of every request."
+    "Tool definitions are 28% of every request."
    ],
    "steps": [
     "List the tools each agent or step actually calls in the baseline runs.",
@@ -106,65 +136,41 @@
     "examples/airline/configs/agents.py:62",
     "examples/airline/configs/agents.py:74"
    ],
+   "example": null,
    "estimate": {
-    "cost_percent": 9.2,
+    "cost_percent": 10.8,
     "latency_percent": null,
-    "basis": "tool-definition share \u00d7 input share, assuming definitions can be halved"
-   },
-   "example": null
+    "basis": "tool-definition share × input share, assuming definitions can be halved"
+   }
   },
   {
-   "id": "trim-history",
-   "area": "Memory",
+   "id": "parallel-tools",
+   "area": "Latency",
    "kind": "needs_proof",
-   "title": "Stop carrying the whole conversation into every call",
-   "why": "Each step resends everything said so far, so the cost of a task grows with the square of its length.",
+   "title": "Run independent tool calls at the same time",
+   "why": "Time outside the model is the agent's own code and its tools. Calls that do not depend on each other can overlap.",
    "evidence": [
-    "Tasks take 6.7 model calls on average.",
-    "The conversation is 32% of what is sent."
+    "41% of run time is spent outside the model.",
+    "No parallel execution was found in the source."
    ],
    "steps": [
-    "Keep the last few turns whole and replace older tool results with a one-line summary of what they returned.",
-    "When control passes to another agent, pass a short brief of what is known instead of the full transcript.",
-    "Never drop the user's original request or anything the agent has promised."
+    "Find steps where the model asks for several tools at once, or where code makes several lookups in a row.",
+    "Run those together (asyncio.gather or a small thread pool) and return results in the original order.",
+    "Allow the model to request several tools in one turn if the provider supports it."
    ],
-   "keep": "Facts the agent needs later must survive the trimming.",
-   "check": "Rerun the task set, paying attention to the longest tasks: answers must not lose detail.",
-   "where": [],
-   "estimate": {
-    "cost_percent": 7.5,
-    "latency_percent": null,
-    "basis": "conversation share \u00d7 input share, assuming 30% of history can be dropped"
-   },
-   "example": null
-  },
-  {
-   "id": "route-cheaply",
-   "area": "Model choice",
-   "kind": "needs_proof",
-   "title": "Use a small model for calls that only route",
-   "why": "A call that says nothing and picks one tool is a classification. A small model does it for a fraction of the price and time.",
-   "evidence": [
-    "9 of 80 calls returned a single tool call and no text.",
-    "Those calls are 9% of the bill."
-   ],
-   "steps": [
-    "Identify the agents or steps whose only job is to choose the next agent or tool.",
-    "Give those steps a smaller, faster model; leave the steps that write answers on the current model.",
-    "Where the choice is a fixed rule (a keyword or a field value), replace the model call with code."
-   ],
-   "keep": "The same next step must be chosen for the same input. Do not change the routing rules themselves.",
-   "check": "Rerun the task set and compare which tools were called per task; any difference means the small model is not good enough for that step.",
+   "keep": "Only overlap calls that neither read each other's results nor write to the same place.",
+   "check": "Rerun the task set: same answers, lower wall time.",
    "where": [
     "swarm/core.py:69"
    ],
+   "example": null,
    "estimate": {
-    "cost_percent": 7.1,
-    "latency_percent": 5.6,
-    "basis": "cost of routing-only calls \u00d7 80%, assuming a model about five times cheaper"
-   },
-   "example": null
+    "cost_percent": null,
+    "latency_percent": 16.4,
+    "basis": "time outside the model × 40%, assuming under half of it can overlap"
+   }
   }
  ],
- "brief_all": "# Task: make the AI agent in Spectraa28/swarm cheaper and faster\n\nYou are a senior engineer working in a checkout of this repository. The changes below were chosen from measurements of this agent running its own tasks at commit `6af0b4caf37d`, not from guesses. Carry them out in order.\n\n## Task list\n\n- [ ] 1. Turn on prompt caching (does not change behaviour)\n- [ ] 2. Put a ceiling on turns (does not change behaviour)\n- [ ] 3. Set a limit on answer length (does not change behaviour)\n- [ ] 4. Send each step only the tools it can use, with shorter descriptions (changes behaviour: verify after)\n- [ ] 5. Stop carrying the whole conversation into every call (changes behaviour: verify after)\n- [ ] 6. Use a small model for calls that only route (changes behaviour: verify after)\n- [ ] Run the tests and send the report at the end\n\n## Before you start\n\n1. Find how this project runs its tests (README, `pyproject.toml`, `Makefile`, CI config) and run them once so you know the starting state.\n2. Open the files listed under each change. Line numbers are from the commit above; if the code has moved, find the same code by function or symbol name.\n3. Find where the agent builds its model requests and where it defines its prompts and tools. Most changes below are made there.\n\n## Ground rules\n\n- Change how the agent is run, not what it does. Tool names, tool behaviour, prompt wording and the shape of the output stay the same unless a change below says otherwise.\n- One change per commit, in the order given, so each can be measured and reverted on its own.\n- Do not refactor, rename or reformat anything outside the lines you need to touch. No new dependencies.\n- If a change cannot be made without altering behaviour, or the code does not match what is described, stop and say so instead of improvising.\n\n## What was measured\n\nOver 80 model calls in 12 task runs:\n\n- 59% of each request had already been sent on the call before.\n- Each request is 45% system prompt, 23% tool definitions and 32% conversation.\n- A task takes 6.7 model calls on average; 23% of run time is spent outside the model.\n\n## Changes that do not alter behaviour\n\nThese change how requests are sent and billed. Do them first.\n\n### 1. Turn on prompt caching\n\nThe agent resends the same opening on every call and pays full price for it each time. A cached prefix is billed at about a tenth.\n\n**Evidence**\n\n- 59% of each request was already sent on the call before (measured over 80 calls).\n- No cache markers were found in the source.\n\n**Start at:** `swarm/core.py:69`\n\n**Do this**\n\n1. Find every place a model request is built (see the listed lines).\n2. Mark the end of the unchanging prefix as cacheable: for Anthropic models add `cache_control: {\"type\": \"ephemeral\"}` to the last system block and to the last tool definition; OpenAI models cache automatically once the unchanging prefix is long enough, so only the ordering work below is needed there.\n3. Keep the cache alive between calls of one conversation: do not rebuild or reorder the prefix between turns.\n4. Log the provider's cached-token count from each response so the hit rate can be seen.\n\n**The shape of it** (an illustration; adapt it to this codebase's client and names)\n\n```python\n# OpenAI-style chat call to a Claude model (directly or through LiteLLM): mark the end of the fixed prefix.\nmessages = [\n    {\"role\": \"system\", \"content\": [\n        {\"type\": \"text\", \"text\": SYSTEM_PROMPT, \"cache_control\": {\"type\": \"ephemeral\"}},\n    ]},\n    *history,\n]\n# Anthropic SDK: system=[{\"type\": \"text\", \"text\": SYSTEM_PROMPT, \"cache_control\": {\"type\": \"ephemeral\"}}]\n# Then log the cached-token count the provider returns in `usage` on each response.\n```\n\n**Must stay true:** Do not change any prompt wording, tool, or model. This changes how the request is billed, not what is sent.\n\n**Done when:** Run the same tasks twice in a row: cached input tokens should be above zero on every call after the first, and answers unchanged.\n\n**Expected effect (estimate):** about 41.9% lower cost. Basis: repeat share \u00d7 input share of the bill \u00d7 90% cached-read discount.\n\n### 2. Put a ceiling on turns\n\nWith no limit, one confused conversation can loop until the bill is noticed. A ceiling costs nothing on the normal path.\n\n**Evidence**\n\n- A loop or turn limit with no upper bound is set in the source.\n- Tasks in the baseline needed 6.7 calls on average.\n\n**Start at:** `swarm/core.py:146`, `swarm/core.py:239`, `swarm/repl/repl.py:69`\n\n**Do this**\n\n1. Set the maximum turns to about three times what the longest baseline task needed.\n2. When the ceiling is hit, stop and return a clear 'could not complete' result instead of raising.\n3. Log every time it is hit; that is a bug to look at, not noise.\n\n**The shape of it** (an illustration; adapt it to this codebase's client and names)\n\n```python\nMAX_TURNS = 20   # about three times the longest task in the baseline\nfor turn in range(MAX_TURNS):\n    ...\nelse:\n    log.warning(\"turn ceiling reached\")          # a bug to look at\n    return {\"status\": \"could_not_complete\"}\n```\n\n**Must stay true:** Normal tasks must finish exactly as before; the ceiling must sit well above what they use.\n\n**Done when:** Rerun the task set: no task should reach the ceiling.\n\n### 3. Set a limit on answer length\n\nOutput tokens cost several times more than input and are the slowest part of a call. Without a limit, one rambling answer sets the worst case.\n\n**Evidence**\n\n- No output limit was found where model calls are made.\n\n**Start at:** `swarm/core.py:69`\n\n**Do this**\n\n1. Set a maximum output length on every model call, sized to about twice the longest answer the baseline produced.\n2. Use a much smaller limit on steps that only pick a tool.\n\n**The shape of it** (an illustration; adapt it to this codebase's client and names)\n\n```python\nclient.chat.completions.create(model=MODEL, messages=messages, max_tokens=800)   # answers\nclient.chat.completions.create(model=MODEL, messages=messages, max_tokens=120)   # steps that only pick a tool\n```\n\n**Must stay true:** Normal answers must not be cut off.\n\n**Done when:** Rerun the task set: no answer should end with a length stop.\n\n## Changes that alter behaviour\n\nEach of these can change what the agent does. Do one at a time, and after each, run the tests and compare the agent's answers on a few real inputs before going on.\n\n### 4. Send each step only the tools it can use, with shorter descriptions\n\nEvery call carries the full definition of every tool. Most steps can only use one or two of them.\n\n**Evidence**\n\n- Tool definitions are 23% of every request.\n\n**Start at:** `examples/airline/configs/agents.py:46`, `examples/airline/configs/agents.py:55`, `examples/airline/configs/agents.py:62`, `examples/airline/configs/agents.py:74`\n\n**Do this**\n\n1. List the tools each agent or step actually calls in the baseline runs.\n2. Pass each step only that subset instead of the whole list.\n3. Cut each tool description to one sentence saying when to use it; move long usage notes into the system prompt once.\n4. Remove parameters and enum values nothing uses.\n\n**Must stay true:** Do not rename a tool or change what it does or returns. Names and behaviour stay exactly as they are.\n\n**Done when:** Rerun the task set: the same tools must be called in the same tasks.\n\n**Expected effect (estimate):** about 9.2% lower cost. Basis: tool-definition share \u00d7 input share, assuming definitions can be halved.\n\n### 5. Stop carrying the whole conversation into every call\n\nEach step resends everything said so far, so the cost of a task grows with the square of its length.\n\n**Evidence**\n\n- Tasks take 6.7 model calls on average.\n- The conversation is 32% of what is sent.\n\n**Do this**\n\n1. Keep the last few turns whole and replace older tool results with a one-line summary of what they returned.\n2. When control passes to another agent, pass a short brief of what is known instead of the full transcript.\n3. Never drop the user's original request or anything the agent has promised.\n\n**Must stay true:** Facts the agent needs later must survive the trimming.\n\n**Done when:** Rerun the task set, paying attention to the longest tasks: answers must not lose detail.\n\n**Expected effect (estimate):** about 7.5% lower cost. Basis: conversation share \u00d7 input share, assuming 30% of history can be dropped.\n\n### 6. Use a small model for calls that only route\n\nA call that says nothing and picks one tool is a classification. A small model does it for a fraction of the price and time.\n\n**Evidence**\n\n- 9 of 80 calls returned a single tool call and no text.\n- Those calls are 9% of the bill.\n\n**Start at:** `swarm/core.py:69`\n\n**Do this**\n\n1. Identify the agents or steps whose only job is to choose the next agent or tool.\n2. Give those steps a smaller, faster model; leave the steps that write answers on the current model.\n3. Where the choice is a fixed rule (a keyword or a field value), replace the model call with code.\n\n**Must stay true:** The same next step must be chosen for the same input. Do not change the routing rules themselves.\n\n**Done when:** Rerun the task set and compare which tools were called per task; any difference means the small model is not good enough for that step.\n\n**Expected effect (estimate):** about 7.1% lower cost, about 5.6% less time. Basis: cost of routing-only calls \u00d7 80%, assuming a model about five times cheaper.\n\n## Report back\n\nWhen every item on the task list is ticked or explained, reply with:\n\n- Each change: done or skipped, the commit, the files and lines touched. For a skipped change, the reason.\n- Test results before and after.\n- For one task run before and after: total input tokens, cached input tokens, output tokens and time.\n- Anything in the code that did not match what this brief describes.\n\nEstimated combined effect if every change lands: about 54.7% lower cost and about 5.6% less run time. These are estimates from the measurements above. The real figure comes from running the same tasks again.\n"
+ "note": "Chosen from measurements and a text-only read of the source. Savings are estimates until the tasks are rerun.",
+ "brief_all": "# Task: make the AI agent in Spectraa28/swarm cheaper and faster\n\nYou are a senior engineer working in a checkout of this repository. The changes below were chosen from measurements of this agent running its own tasks at commit `6af0b4caf37d`, not from guesses. Carry them out in order.\n\n## Task list\n\n- [ ] 1. Put what never changes first, what changes last (does not change behaviour)\n- [ ] 2. Put a ceiling on turns (does not change behaviour)\n- [ ] 3. Set a limit on answer length (does not change behaviour)\n- [ ] 4. Use a small model for calls that only route (changes behaviour: verify after)\n- [ ] 5. Send each step only the tools it can use, with shorter descriptions (changes behaviour: verify after)\n- [ ] 6. Run independent tool calls at the same time (changes behaviour: verify after)\n- [ ] Run the tests and send the report at the end\n\n## Before you start\n\n1. Find how this project runs its tests (README, `pyproject.toml`, `Makefile`, CI config) and run them once so you know the starting state.\n2. Open the files listed under each change. Line numbers are from the commit above; if the code has moved, find the same code by function or symbol name.\n3. Find where the agent builds its model requests and where it defines its prompts and tools. Most changes below are made there.\n\n## Ground rules\n\n- Change how the agent is run, not what it does. Tool names, tool behaviour, prompt wording and the shape of the output stay the same unless a change below says otherwise.\n- One change per commit, in the order given, so each can be measured and reverted on its own.\n- Do not refactor, rename or reformat anything outside the lines you need to touch. No new dependencies.\n- If a change cannot be made without altering behaviour, or the code does not match what is described, stop and say so instead of improvising.\n\n## What was measured\n\nOver 6 model calls in 2 task runs:\n\n- 0% of each request had already been sent on the call before.\n- Each request is 58% system prompt, 28% tool definitions and 14% conversation.\n- A task takes 3 model calls on average; 41% of run time is spent outside the model.\n\n## Changes that do not alter behaviour\n\nThese change how requests are sent and billed. Do them first.\n\n### 1. Put what never changes first, what changes last\n\nA cache only covers an identical prefix. One timestamp, ID or user detail near the top of the prompt makes every call a miss.\n\n**Evidence**\n\n- The system prompt is 58% of every request.\n- Only 0% of each request repeats the call before, which is low for a prompt this size.\n\n**Start at:** `examples/airline/configs/agents.py:45`, `examples/airline/configs/agents.py:51`, `examples/airline/configs/agents.py:61`, `examples/airline/configs/agents.py:73`\n\n**Do this**\n\n1. Order each request as: fixed instructions, then tool definitions, then fixed examples, then the conversation, then anything that changes per call.\n2. Move dates, times, request IDs, user names and retrieved data out of the system prompt into the final user message.\n3. Build the fixed part once at start-up and reuse the same string; do not re-render it with a template on each call.\n4. Keep tool definitions in a stable order (sort them) so the same list is byte-identical between calls.\n\n**The shape of it** (an illustration; adapt it to this codebase's client and names)\n\n```python\n# Before: the prefix changes every call, so nothing can be cached.\nsystem = f\"Today is {date.today()}. You are a support agent. ...\"\n# After: fixed text first, built once; what changes goes last.\nSYSTEM = \"You are a support agent. ...\"                       # module level, never re-rendered\nmessages = [{\"role\": \"system\", \"content\": SYSTEM}, *history,\n            {\"role\": \"user\", \"content\": f\"(Today is {date.today()}.) {user_message}\"}]\n```\n\n**Must stay true:** Every instruction must still reach the model; only its position changes. Do not reword anything.\n\n**Done when:** Diff the first request of two different tasks: everything before the conversation should be identical.\n\n**Expected effect (estimate):** about 20.5% lower cost. Basis: system-prompt share × input share × 90% cached-read discount, halved because some of it may already be cacheable.\n\n### 2. Put a ceiling on turns\n\nWith no limit, one confused conversation can loop until the bill is noticed. A ceiling costs nothing on the normal path.\n\n**Evidence**\n\n- A loop or turn limit with no upper bound is set in the source.\n- Tasks in the baseline needed 3 calls on average.\n\n**Start at:** `swarm/core.py:146`, `swarm/core.py:239`, `swarm/repl/repl.py:69`\n\n**Do this**\n\n1. Set the maximum turns to about three times what the longest baseline task needed.\n2. When the ceiling is hit, stop and return a clear 'could not complete' result instead of raising.\n3. Log every time it is hit; that is a bug to look at, not noise.\n\n**The shape of it** (an illustration; adapt it to this codebase's client and names)\n\n```python\nMAX_TURNS = 20   # about three times the longest task in the baseline\nfor turn in range(MAX_TURNS):\n    ...\nelse:\n    log.warning(\"turn ceiling reached\")          # a bug to look at\n    return {\"status\": \"could_not_complete\"}\n```\n\n**Must stay true:** Normal tasks must finish exactly as before; the ceiling must sit well above what they use.\n\n**Done when:** Rerun the task set: no task should reach the ceiling.\n\n### 3. Set a limit on answer length\n\nOutput tokens cost several times more than input and are the slowest part of a call. Without a limit, one rambling answer sets the worst case.\n\n**Evidence**\n\n- No output limit was found where model calls are made.\n\n**Start at:** `swarm/core.py:69`\n\n**Do this**\n\n1. Set a maximum output length on every model call, sized to about twice the longest answer the baseline produced.\n2. Use a much smaller limit on steps that only pick a tool.\n\n**The shape of it** (an illustration; adapt it to this codebase's client and names)\n\n```python\nclient.chat.completions.create(model=MODEL, messages=messages, max_tokens=800)   # answers\nclient.chat.completions.create(model=MODEL, messages=messages, max_tokens=120)   # steps that only pick a tool\n```\n\n**Must stay true:** Normal answers must not be cut off.\n\n**Done when:** Rerun the task set: no answer should end with a length stop.\n\n## Changes that alter behaviour\n\nEach of these can change what the agent does. Do one at a time, and after each, run the tests and compare the agent's answers on a few real inputs before going on.\n\n### 4. Use a small model for calls that only route\n\nA call that says nothing and picks one tool is a classification. A small model does it for a fraction of the price and time.\n\n**Evidence**\n\n- 2 of 6 calls returned a single tool call and no text.\n- Those calls are 30% of the bill.\n\n**Start at:** `swarm/core.py:69`\n\n**Do this**\n\n1. Identify the agents or steps whose only job is to choose the next agent or tool.\n2. Give those steps a smaller, faster model; leave the steps that write answers on the current model.\n3. Where the choice is a fixed rule (a keyword or a field value), replace the model call with code.\n\n**Must stay true:** The same next step must be chosen for the same input. Do not change the routing rules themselves.\n\n**Done when:** Rerun the task set and compare which tools were called per task; any difference means the small model is not good enough for that step.\n\n**Expected effect (estimate):** about 24.1% lower cost, about 16.6% less time. Basis: cost of routing-only calls × 80%, assuming a model about five times cheaper.\n\n### 5. Send each step only the tools it can use, with shorter descriptions\n\nEvery call carries the full definition of every tool. Most steps can only use one or two of them.\n\n**Evidence**\n\n- Tool definitions are 28% of every request.\n\n**Start at:** `examples/airline/configs/agents.py:46`, `examples/airline/configs/agents.py:55`, `examples/airline/configs/agents.py:62`, `examples/airline/configs/agents.py:74`\n\n**Do this**\n\n1. List the tools each agent or step actually calls in the baseline runs.\n2. Pass each step only that subset instead of the whole list.\n3. Cut each tool description to one sentence saying when to use it; move long usage notes into the system prompt once.\n4. Remove parameters and enum values nothing uses.\n\n**Must stay true:** Do not rename a tool or change what it does or returns. Names and behaviour stay exactly as they are.\n\n**Done when:** Rerun the task set: the same tools must be called in the same tasks.\n\n**Expected effect (estimate):** about 10.8% lower cost. Basis: tool-definition share × input share, assuming definitions can be halved.\n\n### 6. Run independent tool calls at the same time\n\nTime outside the model is the agent's own code and its tools. Calls that do not depend on each other can overlap.\n\n**Evidence**\n\n- 41% of run time is spent outside the model.\n- No parallel execution was found in the source.\n\n**Start at:** `swarm/core.py:69`\n\n**Do this**\n\n1. Find steps where the model asks for several tools at once, or where code makes several lookups in a row.\n2. Run those together (asyncio.gather or a small thread pool) and return results in the original order.\n3. Allow the model to request several tools in one turn if the provider supports it.\n\n**Must stay true:** Only overlap calls that neither read each other's results nor write to the same place.\n\n**Done when:** Rerun the task set: same answers, lower wall time.\n\n**Expected effect (estimate):** about 16.4% less time. Basis: time outside the model × 40%, assuming under half of it can overlap.\n\n## Report back\n\nWhen every item on the task list is ticked or explained, reply with:\n\n- Each change: done or skipped, the commit, the files and lines touched. For a skipped change, the reason.\n- Test results before and after.\n- For one task run before and after: total input tokens, cached input tokens, output tokens and time.\n- Anything in the code that did not match what this brief describes.\n\nEstimated combined effect if every change lands: about 46.2% lower cost and about 30.3% less run time. These are estimates from the measurements above. The real figure comes from running the same tasks again.\n"
 }

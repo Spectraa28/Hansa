@@ -15,6 +15,11 @@ const comparison = attempt.comparison!
 const totals = comparison.totals
 const regressions = comparison.tasks.filter(task => task.regressed)
 const needsReview = comparison.tasks.filter(task => task.candidate_status === 'needs_review').length
+// Everything the page says about the outcome follows the saved decision; nothing here assumes one.
+const accepted = attempt.decision === 'accept'
+const verdict = accepted ? 'Accepted' : attempt.decision === 'reject' ? 'Rejected' : 'No change kept'
+const behaviour = regressions.length ? `${regressions.length} task${regressions.length === 1 ? '' : 's'} regressed` : 'No task regressed'
+const proof = attempt.proof
 const heroCost = measurement(baseline.per_pass.cost_usd, 'usd')
 const patch = (savedPatches as Record<string, string | null>)[attempt.job_id] || ''
 const diffLine = patch.split('\n').find(line => line.startsWith('+') && !line.startsWith('+++')) || 'No patch recorded.'
@@ -48,7 +53,7 @@ const recordedMetrics = [
   { name: 'Latency', value: `${measurement(totals.wall_time_seconds.baseline, 'seconds')} → ${measurement(totals.wall_time_seconds.candidate, 'seconds')}`, delta: totals.wall_time_seconds.change_percent, detail: 'Run time per pass' },
   { name: 'Model calls', value: `${measurement(totals.model_calls.baseline)} → ${measurement(totals.model_calls.candidate)}`, delta: totals.model_calls.change_percent, detail: 'Model calls per pass' },
   { name: 'Context', value: `${measurement(totals.tokens_in.baseline)} → ${measurement(totals.tokens_in.candidate)}`, delta: totals.tokens_in.change_percent, detail: `Input tokens; output ${measurement(totals.tokens_out.baseline)} → ${measurement(totals.tokens_out.candidate)}` },
-  { name: 'Task behavior', value: `${regressions.length} task regressed`, detail: `${needsReview} candidate answers need human review. Change ${attempt.decision === 'reject' ? 'rejected' : status(attempt.decision)}.` },
+  { name: 'Task behavior', value: behaviour, detail: `${needsReview} candidate answer${needsReview === 1 ? '' : 's'} still need${needsReview === 1 ? 's' : ''} human review. Change ${verdict.toLowerCase()}.` },
   { name: 'Run conditions', value: `${baseline.tasks.length} tasks × ${measurement(baseline.repetitions)} repetitions`, detail: `${baseline.model || 'Model not recorded'}. Spend/runtime caps not recorded.` },
 ]
 
@@ -74,7 +79,7 @@ function ExperimentDiagram() {
     return () => window.clearInterval(timer)
   }, [reducedMotion, hovered, focused, watching])
   const active = (index: number) => !reducedMotion && stage === index
-  return <figure ref={figure} className="experiment-diagram" tabIndex={0} aria-label="Recorded Swarm experiment: original model calls and cost, Hansa's tested change, and the rejection after a task regression. Animation pauses while focused."
+  return <figure ref={figure} className="experiment-diagram" tabIndex={0} aria-label="Recorded Swarm experiment: original model calls and cost, Hansa's tested change, and the verdict Hansa reached after rerunning the tasks. Animation pauses while focused."
     onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
     onFocus={() => setFocused(true)} onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false) }}>
     <figcaption><span className="data-label">THE ENGINEERING LOOP</span><span className="diagram-label">SAVED SWARM RUN</span></figcaption>
@@ -85,7 +90,7 @@ function ExperimentDiagram() {
       <p><GitCompareArrows size={15} aria-hidden="true" /> Compare against the original. Keep or reject.</p>
     </div>
     <div className="diagram-connector" aria-hidden="true"><ArrowDown size={18} /></div>
-    <div className="diagram-output"><div data-active={active(3)}><span><FileCode2 size={18} aria-hidden="true" />Patch</span><small>Tested candidate</small></div><div data-active={active(4)}><span><Gauge size={18} aria-hidden="true" />Measurements</span><small>{baseline.tasks.length} tasks · {measurement(baseline.repetitions)} reps</small></div><div className="diagram-verdict" data-active={active(5)}><span><ShieldCheck size={18} aria-hidden="true" />Verdict</span><small>{change(totals.model_calls.change_percent)} calls<br />{regressions.length} task regressed<br /><b>{attempt.decision === 'reject' ? 'Rejected' : status(attempt.decision)}</b></small></div></div>
+    <div className="diagram-output"><div data-active={active(3)}><span><FileCode2 size={18} aria-hidden="true" />Patch</span><small>Tested candidate</small></div><div data-active={active(4)}><span><Gauge size={18} aria-hidden="true" />Measurements</span><small>{baseline.tasks.length} tasks · {baseline.repetitions === 1 ? 'run once' : `${measurement(baseline.repetitions)} runs each`}</small></div><div className="diagram-verdict" data-active={active(5)}><span><ShieldCheck size={18} aria-hidden="true" />Verdict</span><small>{change(totals.model_calls.change_percent)} calls<br />{behaviour.toLowerCase()}<br /><b className={accepted ? 'is-accepted' : ''}>{verdict}</b></small></div></div>
     <p className="diagram-note">Recorded results. Automatic checks; human review still required.</p>
   </figure>
 }
@@ -162,18 +167,20 @@ function SavedDemo() {
         </li>)}</ol>
       </>}
       {view === 2 && <>
-        <div className="demo-panel-heading"><div><span className="data-label">THE CANDIDATE</span><h3>A small change, tested on the same tasks.</h3></div><span className="outcome-warning">Not accepted</span></div>
-        <p className="demo-note">The saved patch is an experiment artifact. Its result includes a regression; review it before considering any change.</p>
+        <div className="demo-panel-heading"><div><span className="data-label">THE CANDIDATE</span><h3>A small change, tested on the same tasks.</h3></div><span className={accepted ? 'verdict-label is-accepted' : 'outcome-warning'}>{accepted ? 'Accepted' : 'Not accepted'}</span></div>
+        <p className="demo-note">{accepted ? 'This is the patch Hansa kept after rerunning the tasks. Read it before applying it: the checks are automatic and a person has not confirmed the answers.' : 'The saved patch is an experiment artifact. Its result includes a regression; review it before considering any change.'}</p>
         <pre className="demo-patch" aria-label="Tested candidate patch">{patch ? patch.trim().split('\n').map((line, index) => <span key={index} className={line.startsWith('+') && !line.startsWith('+++') ? 'patch-add' : line.startsWith('-') && !line.startsWith('---') ? 'patch-remove' : ''}>{line || ' '}{'\n'}</span>) : 'No patch recorded.'}</pre>
       </>}
       {view === 3 && <>
-        <div className="demo-panel-heading"><div><span className="data-label">THE VERDICT</span><h3>Cheaper and faster. Still rejected.</h3></div><span className="verdict-label">Change rejected</span></div>
+        <div className="demo-panel-heading"><div><span className="data-label">THE VERDICT</span><h3>{accepted ? 'Cheaper and faster, and every task held.' : regressions.length ? 'Cheaper and faster. Still rejected.' : 'No saving worth keeping.'}</h3></div><span className={`verdict-label ${accepted ? 'is-accepted' : ''}`}>Change {verdict.toLowerCase()}</span></div>
         <div className="comparison-scroll"><table className="demo-comparison"><caption>Mean totals per pass of the same task set</caption><thead><tr><th scope="col">Measurement</th><th scope="col">Original</th><th scope="col">Candidate</th><th scope="col">Change</th></tr></thead><tbody>{metrics.map(([label, key, unit]) => {
           const value = comparison.totals[key]
           return <tr key={key}><th scope="row">{label}</th><td>{measurement(value.baseline, unit)}</td><td><CandidateMeasurement from={value.baseline} to={value.candidate} unit={unit} /></td><td>{change(value.change_percent)}</td></tr>
         })}</tbody></table></div>
-        <p className="demo-note">{regressions.length} task regressed. {comparison.note.replaceAll('needs_review', '“Needs review”')} Lower resource usage does not establish correct answers.</p>
-        <details className="regression-detail"><summary>Why this change was rejected</summary>{regressions.map(task => <p key={task.task_id}><b>{task.name || `Task ${task.task_id}`}:</b> {task.candidate_reason || 'No detailed reason recorded.'}</p>)}</details>
+        <p className="demo-note">{behaviour}. {comparison.note.replaceAll('needs_review', '“Needs review”')} Lower resource usage does not establish correct answers.</p>
+        {/* How far the evidence goes, in the product's own words: an accepted change on a small task set is a lead, not a guarantee. */}
+        {proof && <p className="demo-note"><b>Proof strength: {proof.strength}.</b> {proof.notes.join(' ')}</p>}
+        {regressions.length > 0 && <details className="regression-detail"><summary>Why this change was rejected</summary>{regressions.map(task => <p key={task.task_id}><b>{task.name || `Task ${task.task_id}`}:</b> {task.candidate_reason || 'No detailed reason recorded.'}</p>)}</details>}
         <div className="task-list">{comparison.tasks.map(task => <div key={task.task_id}><span>{task.name || `Task ${task.task_id}`}</span><span className={task.regressed ? 'outcome-warning' : ''}>{task.regressed ? 'Regressed' : status(task.candidate_status)}</span></div>)}</div>
       </>}
     </div>
@@ -212,7 +219,7 @@ export default function Landing() {
           {index === 0 && <a className="artifact-repo" href={`https://github.com/${report.import.repository}/tree/${report.import.commit_sha}`} target="_blank" rel="noopener noreferrer" title={`${report.import.repository} · ${report.import.commit_sha}`}><GitBranch size={16} aria-hidden="true" /><span>{report.import.repository}</span></a>}
           {index === 1 && <div className="artifact-calls"><div className="artifact-call-bars" aria-hidden="true">{Array.from({ length: Math.round(baseline.per_pass.model_calls || 0) }, (_, call) => <i key={call} />)}</div><span>{measurement(baseline.per_pass.model_calls)} calls / pass</span></div>}
           {index === 2 && <Link to="/demo?step=fix" className="artifact-diff" title={diffLine} aria-label="Open the saved tested patch"><code>{diffLine}</code></Link>}
-          {index === 3 && <div className="artifact-verdict"><span className="verdict-label"><ShieldCheck size={16} aria-hidden="true" />{attempt.decision === 'reject' ? 'Rejected' : status(attempt.decision)}</span><span>{regressions.length} task regressed</span></div>}
+          {index === 3 && <div className="artifact-verdict"><span className={`verdict-label ${accepted ? 'is-accepted' : ''}`}><ShieldCheck size={16} aria-hidden="true" />{verdict}</span><span>{behaviour}</span></div>}
         </div>
         <h3>{title}</h3><p>{text}</p>
       </li>)}</ol>

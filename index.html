@@ -12,7 +12,8 @@
     <meta name="description" content="Hansa investigates your AI agent, tests code changes on your tasks, and returns a reviewable patch with measurements and regressions." />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Painted straight from the HTML, before any script runs, so the first screen is never blank. React replaces it. -->
+    <div id="root"><div style="height:71px;background:#182432;display:flex;align-items:center;padding:0 max(20px,4vw);gap:10px;font:600 21px system-ui,sans-serif;color:#F7F9FC;letter-spacing:-.02em"><img src="/brand/mark.svg" width="38" height="38" alt="">Hansa</div></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
