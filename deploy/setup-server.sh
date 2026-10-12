@@ -68,6 +68,16 @@ cat > /etc/cron.d/hansa-backup <<'CRON'
 17 3 * * * hansa [ -f /opt/hansa/var/auth.sqlite3 ] && sqlite3 /opt/hansa/var/auth.sqlite3 ".backup /var/backups/hansa/auth-$(date +\%F).sqlite3" && ls -1t /var/backups/hansa/auth-*.sqlite3 | tail -n +8 | xargs -r rm --
 CRON
 
+echo "== Automatic system updates must not restart Hansa or Docker (a restart ends the running job)"
+if [ -d /etc/needrestart/conf.d ]; then
+  cat > /etc/needrestart/conf.d/hansa.conf <<'CONF'
+# Restart these by hand, when no job is in progress, to pick up updated system libraries.
+$nrconf{override_rc}{qr(^hansa-api)} = 0;
+$nrconf{override_rc}{qr(^docker)} = 0;
+$nrconf{override_rc}{qr(^containerd)} = 0;
+CONF
+fi
+
 echo "== API service"
 install -m 644 "$APP/deploy/hansa-api.service" /etc/systemd/system/hansa-api.service
 systemctl daemon-reload
