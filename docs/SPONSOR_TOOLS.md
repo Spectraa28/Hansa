@@ -20,6 +20,19 @@ This page shows how Neatlogs, Entire and CFO.ai were used. It has a screenshot o
 - **What it covers.** 11 checkpoints, on 10 of the first 25 commits. Entire is set up to capture Codex sessions, so commits from other sessions carry none.
 - **What it is not.** Hansa the product does not call Entire. It is how Hansa was built.
 
+### Checkpoints
+
+The repository on Entire is public. Each checkpoint below is recorded on the commit beside it.
+
+| Checkpoint ID | Commit | Session started with |
+| --- | --- | --- |
+| `01M4Q7V56FYRKNC5AC9MS7BX8X` | `1894e6e` | "Lets start frontend of the hansa" |
+| `01M4PXBTBBCKSPRFWRMZP5G5TF` | `8cec1f6` | "Lets start frontend of the hansa" |
+| `01M4N648YE33Y5BPN8XPQWGNZD` | `6482f84` | "read frontend/DESIGN.md. set up the app in frontend/ with..." |
+| `01M4N35AY96GEDE8WMBSBFA538` | `e0f515f` | "read frontend/DESIGN.md. set up the app in frontend/ with..." |
+
+To see all of them, run `entire checkpoint list` in a clone of the repository.
+
 ## An incident, start to finish: onboarding the OpenAI Agents SDK example
 
 Three runs of the same job on the same agent, all traced.
