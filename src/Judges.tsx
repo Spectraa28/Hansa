@@ -58,9 +58,9 @@ export default function Judges() {
         <h2 className="text-[22px] font-semibold tracking-tight">Public work</h2><span className="font-mono text-[14px] text-muted">15% of the score</span>
         <p className="w-full text-[16px] text-body">Posted as it was built, including the fix Hansa refused and the first one it accepted.</p></div>
       <ul className="divide-y divide-line">{([
-        ['"your AI agent is wasting model calls. you just can't see which ones"', 'Launch post on X, with a short video. 11 October.', 'https://x.com/sonuv_dev/status/2109154433456050612'],
+        ["\"your AI agent is wasting model calls. you just can't see which ones\"", 'Launch post on X, with a short video. 11 October.', 'https://x.com/sonuv_dev/status/2109154433456050612'],
         ['"then the mf refused to ship the fix because ONE conversation broke"', 'On X, about the 10% saving Hansa rejected. 11 October.', 'https://x.com/sonuv_dev/status/2109209614344712594'],
-        ['"finally got a fix accepted on OpenAI\'s Swarm"', 'On X: 33% fewer model calls, 23% lower cost, both tasks passing.', 'https://x.com/sonuv_dev'],
+        ["\"finally got a fix accepted on OpenAI's Swarm\"", 'On X: 33% fewer model calls, 23% lower cost, both tasks passing.', 'https://x.com/sonuv_dev'],
         ['The launch post on LinkedIn', 'Same story for a different audience, with the video.', 'https://www.linkedin.com/posts/sonu-verma28_neathack-ugcPost-7515014968757366785-dUo4/'],
       ] as const).map(([label, note, url]) =>
         <li key={label} className="px-6 py-3.5"><a href={url} target="_blank" rel="noopener noreferrer" className="link-action font-semibold">{label}</a><p className="mt-0.5 text-[14.5px] text-muted">{note}</p></li>)}</ul>
