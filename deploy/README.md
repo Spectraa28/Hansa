@@ -2,12 +2,12 @@
 
 Proposed layout, not yet exercised: nothing here has been run against a real server.
 
-- **Frontend** on Vercel at `https://hansa.svema.online`.
-- **API and sandbox** on one EC2 instance at `https://hansa-api.svema.online`.
+- **Frontend** on Vercel at `https://hansa.sverma.online`.
+- **API and sandbox** on one EC2 instance at `https://hansa-api.sverma.online`.
 
 The browser only ever talks to the Vercel address. [frontend/vercel.json](../frontend/vercel.json) passes `/auth/*` and `/github/*` through to the API, so sign-in cookies and the app's relative requests work without cross-site settings.
 
-`frontend/vercel.json` already points at `hansa-api.svema.online`. `deploy/Caddyfile` keeps a placeholder that `setup-server.sh` fills in from the name you pass it.
+`frontend/vercel.json` already points at `hansa-api.sverma.online`. `deploy/Caddyfile` keeps a placeholder that `setup-server.sh` fills in from the name you pass it.
 
 ## Hackathon AWS limits
 
@@ -27,7 +27,7 @@ A `t3.medium` (4 GB) runs the API and one sandbox at a time; a `t3.large` (8 GB)
 On a fresh Ubuntu 24.04 instance, copy [setup-server.sh](setup-server.sh) over and run it:
 
 ```sh
-sudo bash setup-server.sh https://github.com/<you>/<repository>.git hansa-api.svema.online
+sudo bash setup-server.sh https://github.com/<you>/<repository>.git hansa-api.sverma.online
 ```
 
 It installs Docker, Caddy and the Python environment, clones `main`, pulls the sandbox base image, writes the Caddy config for your API name, adds swap and a nightly database backup (seven kept, under `/var/backups/hansa`), and installs the API service. It writes no secrets and does not start the API until `/opt/hansa/.env` is filled in.
@@ -35,8 +35,8 @@ It installs Docker, Caddy and the Python environment, clones `main`, pulls the s
 Create `/opt/hansa/.env` as [README.md](../README.md) describes, with these hosted values:
 
 ```sh
-APP_URL=https://hansa.svema.online
-FRONTEND_ORIGIN=https://hansa.svema.online
+APP_URL=https://hansa.sverma.online
+FRONTEND_ORIGIN=https://hansa.sverma.online
 AUTH_COOKIE_SECURE=true
 ```
 
@@ -48,13 +48,13 @@ Open ports 80 and 443 in the instance's security group. Port 8000 stays closed; 
 
 Use the Vercel address in each provider's settings:
 
-- GitHub sign-in: `https://hansa.svema.online/auth/github/callback`
-- Google sign-in: `https://hansa.svema.online/auth/google/callback`
-- GitHub App: callback and webhook addresses under `https://hansa.svema.online/github/` (see [GITHUB_IMPORT.md](../backend/docs/GITHUB_IMPORT.md) for the exact paths)
+- GitHub sign-in: `https://hansa.sverma.online/auth/github/callback`
+- Google sign-in: `https://hansa.sverma.online/auth/google/callback`
+- GitHub App: callback and webhook addresses under `https://hansa.sverma.online/github/` (see [GITHUB_IMPORT.md](../backend/docs/GITHUB_IMPORT.md) for the exact paths)
 
 ## Frontend
 
-In Vercel, import the repository, set the root directory to `frontend`, and add `hansa.svema.online` under Domains. The build command and output folder are Vite's defaults (`npm run build`, `dist`).
+In Vercel, import the repository, set the root directory to `frontend`, and add `hansa.sverma.online` under Domains. The build command and output folder are Vite's defaults (`npm run build`, `dist`).
 
 ## Keeping it closed
 

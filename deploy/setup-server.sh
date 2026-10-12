@@ -3,14 +3,14 @@
 # Proposed and not yet run against a real server; read it before running it.
 #
 #   sudo bash setup-server.sh <git-repository-url | folder-on-this-machine> <api-host-name>
-#   e.g. sudo bash setup-server.sh https://github.com/you/hansa.git hansa-api.svema.online
+#   e.g. sudo bash setup-server.sh https://github.com/you/hansa.git hansa-api.sverma.online
 #
 # Safe to run again: each step checks before it changes anything. It never writes secrets;
 # you fill in /opt/hansa/.env yourself, and the API is only started once that file is ready.
 set -euo pipefail
 
 REPO="${1:?Pass the git repository URL}"
-API_HOST="${2:?Pass the API host name, for example hansa-api.svema.online}"
+API_HOST="${2:?Pass the API host name, for example hansa-api.sverma.online}"
 APP=/opt/hansa
 
 if [ "$(id -u)" -ne 0 ]; then echo "Run with sudo." >&2; exit 1; fi
