@@ -153,6 +153,6 @@ The tests cover authentication and mocked GitHub connection/session binding, enc
 
 ## Planning references
 
-Read [prd.md](../../prd.md), [ARCHITECTURE.md](../../backend/docs/ARCHITECTURE.md), [SPONSORS.md](../../SPONSORS.md), and [hackathon.md](../../hackathon.md) for the optimization product and event constraints. Authentication and source import do not establish optimization or measured improvement; the reviewed-workflow runner has separate evidence in [RUNNER.md](../../backend/docs/RUNNER.md).
+Read [prd.md](../../prd.md), [ARCHITECTURE.md](../../backend/docs/ARCHITECTURE.md), [SPONSORS.md](../../SPONSORS.md) for the optimization product and event constraints. Authentication and source import do not establish optimization or measured improvement; the reviewed-workflow runner has separate evidence in [RUNNER.md](../../backend/docs/RUNNER.md).
 
 Implementation references: [Authlib example](https://github.com/authlib/demo-oauth-client/blob/master/starlette-google-login/app.py), [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [GitHub authorization](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps), [GitHub scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps), and [pwdlib password hashing](https://frankie567.github.io/pwdlib/guide/).

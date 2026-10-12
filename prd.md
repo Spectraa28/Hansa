@@ -2,7 +2,7 @@
 
 Prepared: October 10, 2026. Working product description; final branding is undecided.
 
-Status: the prior 37 authentication/import tests passed after user authorization on October 10, 2026. Local authentication startup and real GitHub sign-in succeeded. The App key was saved and validated; live App authorization and fixed-commit imports remain unverified. Repository inspection and a testing UI are now written, with new tests unrun pending authorization. See [README.md](README.md), [GITHUB_IMPORT.md](backend/docs/GITHUB_IMPORT.md), and [REPOSITORY_INSPECTION.md](backend/docs/REPOSITORY_INSPECTION.md). Google sign-in, optimizer, agent sandbox, hosted execution, measured improvement, and customer validation remain unimplemented or unverified. Read [hackathon.md](hackathon.md) for event rules and submission requirements.
+Status: the prior 37 authentication/import tests passed after user authorization on October 10, 2026. Local authentication startup and real GitHub sign-in succeeded. The App key was saved and validated; live App authorization and fixed-commit imports remain unverified. Repository inspection and a testing UI are now written, with new tests unrun pending authorization. See [README.md](README.md), [GITHUB_IMPORT.md](backend/docs/GITHUB_IMPORT.md), and [REPOSITORY_INSPECTION.md](backend/docs/REPOSITORY_INSPECTION.md). Google sign-in, optimizer, agent sandbox, hosted execution, measured improvement, and customer validation remain unimplemented or unverified. Read [the event rules](the event rules) for event rules and submission requirements.
 
 Build preparation: the user has requested implementation and will supply paid model API access later. Authentication and import code exist; bounded static inspection and configuration confirmation with a simple testing UI are now written. This step is untested pending user authorization; see [REPOSITORY_INSPECTION.md](backend/docs/REPOSITORY_INSPECTION.md). The saved App key was validated and the connector enabled, but live connection/import testing is deferred. Read [SPONSORS.md](SPONSORS.md) for the initial integration plan. Agent execution and sponsor outputs remain unverified.
 
@@ -255,7 +255,7 @@ Starting hardware recommendations, not measured minimums: modern 4-core developm
 | A6 | Trade-offs are honest | Improvements, regressions, failures, denominators and unknowns |
 | A7 | Expense is bounded and reported | Admission limits and separate optimization accounting |
 | A8 | Visitor completes the journey | Hosted input-to-artifact path, fresh run clearly distinguished from replay |
-| A9 | Required sponsor contribution is real | Evidence described in hackathon.md |
+| A9 | Required sponsor contribution is real | Evidence described in README.md |
 
 These are our product criteria. An honest no-improvement outcome fulfills the stop behavior but does not, by itself, establish commercial value or a winning demonstration.
 
@@ -267,7 +267,7 @@ These are our product criteria. An honest no-improvement outcome fulfills the st
 4. Establish one complete inspect → change → run → feedback → revise/reject → export loop.
 5. Add the hosted journey and a supported live challenge; enforce spend/concurrency limits.
 6. Freeze candidates, run protected comparisons, produce the business plan and assemble sponsor evidence.
-7. Record the actual demonstration and complete the submission checklist in hackathon.md.
+7. Record the actual demonstration and complete the submission checklist.
 
 Aim to establish optimization headroom early in the build. If ordinary model substitution already solves the whole problem, meaningful labels are unavailable, or experiment expense cannot reasonably pay back, reconsider the target/claim. Do not rescue the pitch by making the original deliberately inefficient.
 
@@ -286,6 +286,6 @@ GEPA already optimizes code/agent architectures; routing and prompt optimizers a
 
 ## 17. Continue in another chat
 
-> Read prd.md and hackathon.md. Continue the Autonomous Agent Optimization Engineer project. Preserve the user's central promise: delegate context/memory/orchestration experimentation and deliver a tested patch with improvements and regressions. Our optimizer is the acting agent; the user's agent is its target; the runner/evaluator are tools. Inspect the current workspace, current time, organizer updates and available access without exposing secrets. The stack and narrow Python scope are recommendations, not established implementation. Choose a reasonable target and explicit acceptance contract before broad UI or architecture work. Run fair baselines, then build one complete autonomous loop and hosted visitor journey. Never manufacture inefficiency, invent metrics or claim general compatibility. Preserve sponsor roles and evidence requirements. These files authorize planning handoff, not automatic external publication, paid signup or production changes.
+> Read prd.md. Continue the Autonomous Agent Optimization Engineer project. Preserve the user's central promise: delegate context/memory/orchestration experimentation and deliver a tested patch with improvements and regressions. Our optimizer is the acting agent; the user's agent is its target; the runner/evaluator are tools. Inspect the current workspace, current time, organizer updates and available access without exposing secrets. The stack and narrow Python scope are recommendations, not established implementation. Choose a reasonable target and explicit acceptance contract before broad UI or architecture work. Run fair baselines, then build one complete autonomous loop and hosted visitor journey. Never manufacture inefficiency, invent metrics or claim general compatibility. Preserve sponsor roles and evidence requirements. These files authorize planning handoff, not automatic external publication, paid signup or production changes.
 
 Current evidence: 37 passing regression tests, local authentication startup, and real GitHub sign-in with a persisted session. Import tests use mocked GitHub responses. Real repository imports and optimization results remain unverified.

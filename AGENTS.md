@@ -5,7 +5,6 @@
 This workspace contains the Autonomous Agent Optimization Engineer plans, authentication, GitHub source import, static inspection/configuration, task contracts, a testing UI, and a service-only Docker runner. The setup UI saves an explicit LiteLLM model selection separately from source model metadata; owner-scoped service minting binds every call to that choice and records both names. Own-key provider mode remains planned. The non-streaming model gateway supports per-key model maps, requested/upstream model accounting, LiteLLM-reported cost headers, atomic recorded-spend admission, text content parts, and interrupted-call recovery. A real `claude-haiku` gateway call succeeded with HTTP 200 and a recorded $0.0000396 cost header; `/cost/estimate` is no longer required: spend admission now uses a soft recorded-spend threshold, with call/output limits and explicit unknown-cost reporting. See [GATEWAY.md](backend/docs/GATEWAY.md). The local sample runner → Docker → gateway → LiteLLM path and timeout/child cleanup succeeded; this is a labelled local fixture, not GitHub-agent compatibility or optimization evidence. See [RUNNER.md](backend/docs/RUNNER.md). Real GitHub sign-in/App connection and a fixed-commit import with saved inspection findings succeeded; the user confirmed that UI flow. The user reports that the updated setup UI works with their repository. A confirmed development contract and baseline have been exercised on the labelled web_lookup fixture; real GitHub task-contract confirmation and Google sign-in remain unverified. The optimizer, protected evaluation and hosted execution remain unimplemented.
 
 - `prd.md`: product definition, proposed architecture, evaluation contract, acceptance criteria, and build order.
-- `hackathon.md`: event requirements, sponsor setup, evidence expectations, and submission checklist.
 - `AGENTS.md`: contributor instructions.
 - `backend/app/gateway/`: scoped throwaway keys, per-key model maps, non-streaming LiteLLM proxy, dual-name usage records, LiteLLM response-header costs, atomic recorded-spend admission, text content parts, and lease/cancellation recovery (estimated spend can differ from billing).
 - `GATEWAY.md`: configuration, accounting limits, service-only mint/summary, and a real-call command.
@@ -36,7 +35,7 @@ This workspace contains the Autonomous Agent Optimization Engineer plans, authen
 - `frontend/`: the product interface; see `frontend/README.md`.
 - `deploy/`: proposed hosting layout (Vercel frontend, one EC2 API host behind Caddy), invite list and security settings. Not yet exercised against a real server; see `deploy/README.md`.
 
-Read both planning documents before extending the product. Python/FastAPI is used for authentication, imports, inspection and the runner; a simple testing UI is written. The optimizer and full product frontend remain planned. Keep new modules focused on the supported workflow. Run only one API process for the import queue and one runner/controller process; multi-process runner scheduling and controller-crash cleanup are not implemented.
+Read `prd.md` before extending the product. Python/FastAPI is used for authentication, imports, inspection and the runner; a simple testing UI is written. The optimizer and full product frontend remain planned. Keep new modules focused on the supported workflow. Run only one API process for the import queue and one runner/controller process; multi-process runner scheduling and controller-crash cleanup are not implemented.
 
 ## Build, Test, and Development Commands
 
@@ -51,7 +50,7 @@ uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-a
 Useful documentation checks:
 
 - `rg --files`: list workspace files.
-- `rg -n 'Status:|Acceptance criteria|Submission checklist' prd.md hackathon.md`: locate implementation status and delivery requirements.
+- `rg -n 'Status:|Acceptance criteria' prd.md`: locate implementation status and acceptance criteria.
 - `git diff --check`: check whitespace. Git is initialized and the Entire origin remote is configured.
 
 Entire is enabled locally with automatic checkpoint uploads disabled. Hooks still require user approval. Manual session attachment can create a checkpoint; verify its ID and remote ref before claiming uploaded checkpoint evidence.

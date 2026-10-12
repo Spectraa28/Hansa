@@ -95,14 +95,52 @@ Hansa cannot measure some changes in the sandbox. Examples are a different model
 | **Docker** | The sandbox for imported code. |
 | **React, TypeScript, Vite, Tailwind CSS** | The web interface. |
 
-<p align="center">
-  <a href="docs/SPONSOR_TOOLS.md"><img src="docs/images/neatlogs-dashboard.png" alt="The Neatlogs dashboard for Hansa" width="290"></a>
-  <a href="docs/SPONSOR_TOOLS.md"><img src="docs/images/entire-session.png" alt="A recorded agent session in Entire" width="290"></a>
-  <a href="docs/SPONSOR_TOOLS.md"><img src="docs/images/cfo-cost-simulator.png" alt="The Hansa cost simulator in CFO.ai" width="290"></a>
-</p>
-<p align="center"><sub>Neatlogs · Entire · CFO.ai</sub></p>
+## The sponsor tools
 
-For a description of each tool and one full incident, see [docs/SPONSOR_TOOLS.md](docs/SPONSOR_TOOLS.md).
+### Neatlogs
+
+<p align="center"><img src="docs/images/neatlogs-dashboard.png" alt="The Neatlogs home page for Hansa: 337 sessions and a 3.6% error rate. An amber note from Hansa gives the real recorded spend." width="900"></p>
+
+- **What Hansa records.** Each sandbox run is one trace. Each agent job is one trace. A trace shows each model call and each tool step. There are 337 traces.
+- **How the product uses it.** Hansa reads each trace again to make sure that it arrived. The trace window in the app shows the Neatlogs steps and the Hansa cost for each call. During a deep hunt, the Hansa agent reads the Neatlogs detections as leads.
+- **About the $0.00.** The amber box is a note from Hansa. Neatlogs calculates cost from the model name. Hansa sent a short model name that Neatlogs could not price. The real recorded spend is $13.30. New traces use a name that Neatlogs can price.
+
+#### One incident from start to finish
+
+The job is the onboarding of the OpenAI Agents SDK example. Neatlogs has a trace for each run.
+
+| When | Result | Model calls | Cost |
+| --- | --- | --- | --- |
+| 11 Oct, 21:12 | **Failed** at the limit of 40 turns | 40 | $0.475 |
+| 11 Oct, 21:24 | **Ready** | 18 | $0.233 |
+| 12 Oct, 08:03 | **Ready**, after a provider timeout | 18 | $0.195 |
+
+- **The cause.** The Hansa gateway refused requests that had fields it did not know. The agent used all 40 turns to try other methods.
+- **The fix.** The gateway now removes those fields and sends the request. Twelve minutes later, the same job was complete in 18 calls at half the cost.
+- **The next day.** The first model call timed out after one minute. Neatlogs shows it as a slow response and a failed execution. The job tried again and was complete.
+
+<p align="center"><img src="docs/images/neatlogs-timeout-survived.png" alt="An onboarding trace in Neatlogs. The first model call has an error after one minute. The steps after it are successful." width="900"></p>
+
+"Content withheld" in a trace means that Neatlogs refused the full text. Hansa then sends the trace again with times and token counts only.
+
+### Entire
+
+<p align="center"><img src="docs/images/entire-session.png" alt="A recorded Codex session in Entire: 2 checkpoints, 121 file changes and 171 tool calls" width="900"></p>
+
+- **What it holds.** Entire holds the repository and the recorded agent sessions. [Open this session on Entire](https://entire.io/et/ouro/ouro/session/01a12981-647f-75f0-92e2-3f2bc6878d85).
+- **How it helped.** More than one coding agent worked on Hansa. Entire gave each agent the context from the earlier sessions. I did not have to manage that context myself.
+- **What it covers.** There are 11 checkpoints. One of them is `01M4N648YE33Y5BPN8XPQWGNZD` on commit `6482f84`. Run `entire checkpoint list` to see all of them.
+- **What is next.** I will continue to use Entire for my development work.
+
+### CFO.ai
+
+<p align="center"><img src="docs/images/cfo-cost-simulator.png" alt="The Hansa cost simulator in CFO.ai: API fees of $1.39 for each first pass, with a measured range of $0.97 to $1.80" width="900"></p>
+
+- **What it holds.** The business model: prices, the cost of each proof, a 12-month forecast and three scenarios. [Open the model](https://cfo.ai/s/fG9t075-Bd4KFAHP).
+- **How it was used.** The model starts from measured costs. A full first pass on a small agent costs $0.97 to $1.80 in model fees.
+- **What it showed.** The model provider bill is the largest cost. The server is a small cost.
+- **The decision.** The customer pays their own model bill. Hansa charges a software fee: $149 each month for one proof, or $299 for three.
+- **What is not measured.** Sandbox minutes, customer growth and prices are assumptions. No customer has paid.
 
 ## Run Hansa
 
@@ -134,7 +172,7 @@ Put your settings in a `.env` file at the top of the repository. Use [backend/.e
 | `backend/` | The API, the Hansa agent, the sandbox and the tests |
 | `frontend/` | The web interface |
 | `deploy/` | The server setup |
-| `docs/` | Screenshots and the sponsor tool page |
+| `docs/` | Screenshots |
 
 ## Limits
 

@@ -11,7 +11,7 @@ The browser only ever talks to the Vercel address. [frontend/vercel.json](../fro
 
 ## Hackathon AWS limits
 
-From [hackathon.md](../hackathon.md): `us-east-1` only, the existing `Hackathon_VPC`, one EC2 instance per IAM user, sizes `t2`/`t3`/`t3a` from `nano` to `large`, each EBS volume at most 50 GB, one shared $25 allowance. Stop the instance when judging ends.
+The AWS account for this project has these limits: `us-east-1` only, the existing `Hackathon_VPC`, one EC2 instance per IAM user, sizes `t2`/`t3`/`t3a` from `nano` to `large`, each EBS volume at most 50 GB, one shared $25 allowance. Stop the instance when judging ends.
 
 A `t3.medium` (4 GB) runs the API and one sandbox at a time; a `t3.large` (8 GB) leaves more room. Use a 30 to 50 GB volume: sandbox images are tens of megabytes each and are pruned after every build.
 

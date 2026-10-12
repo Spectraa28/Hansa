@@ -14,7 +14,7 @@ const criteria = [
   { name: 'Required tools', weight: '25%', claim: 'Neatlogs is part of the product. Entire holds the build. CFO.ai holds the business model.',
     rows: [
       ['Neatlogs', '337 traces in the project in the last 14 days. Every sandbox run and every agent job is logged as a trace, read back and confirmed. The in-app trace window shows each step with Hansa\'s own per-call figures beside it. Known gap: Neatlogs\' cost total reads $0, because Hansa sends cost in its own field.'],
-      ['Entire', 'The project\'s only git remote is Entire. 10 of the first 25 commits carry a checkpoint from recorded agent sessions (Codex). Commits made in other sessions carry none, and no product feature depends on Entire.'],
+      ['Entire', 'The project\'s only git remote is Entire. 10 of the first 25 commits carry a checkpoint from recorded agent sessions (Codex). It gave each coding agent the context of the earlier sessions, without managing that by hand. One recorded session: entire.io/et/ouro/ouro/session/01a12981-647f-75f0-92e2-3f2bc6878d85'],
       ['CFO.ai', 'A production model: Starter $149 a month for one proof, Team $299 for three, with the customer paying their own model bill. Base case over 12 months: 33 customers, $6,381 monthly revenue at exit, 92% gross margin, $211 of funding needed. The hosted stress case loses $16,200, and the model shows it. No customer has paid yet.'],
     ] },
   { name: 'Demo', weight: '20%', claim: 'The product is live, and the demo is a real saved run.',
