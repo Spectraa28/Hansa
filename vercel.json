@@ -3,11 +3,11 @@
   "rewrites": [
     {
       "source": "/auth/:path*",
-      "destination": "https://hansa-api.svema.online/auth/:path*"
+      "destination": "https://hansa-api.sverma.online/auth/:path*"
     },
     {
       "source": "/github/:path*",
-      "destination": "https://hansa-api.svema.online/github/:path*"
+      "destination": "https://hansa-api.sverma.online/github/:path*"
     },
     {
       "source": "/((?!assets/|fonts/|brand/|favicon.svg).*)",
