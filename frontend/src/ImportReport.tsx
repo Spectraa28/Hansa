@@ -37,10 +37,12 @@ function Cells({ count }: { count: number | null }) {
 // The model writes a paragraph; the first sentence is the headline and the rest is detail.
 function split(text: string | null): [string, string] {
   if (!text) return ['No description saved.', '']
-  const cut = text.search(/[.!?](\s|$)/)
-  if (cut >= 0 && cut <= 150) return [text.slice(0, cut + 1), text.slice(cut + 1).trim()]
-  const stop = text.lastIndexOf(' ', 110)
-  return [text.slice(0, stop > 0 ? stop : 110) + '…', text]
+  // A headline reads better without the bookkeeping: "(call 577 in run 336df274, …)" stays in the text below.
+  const plain = text.replace(/\s*\((?:calls?|runs?)\b[^)]*\)/gi, '')
+  const cut = plain.search(/[.!?](\s|$)/)
+  if (cut >= 0 && cut <= 170) return [plain.slice(0, cut + 1), text]
+  const stop = plain.lastIndexOf(' ', 120)
+  return [plain.slice(0, stop > 0 ? stop : 120) + '…', text]
 }
 
 // Which area a finding belongs to: its own field once the backend sends one, otherwise the coverage record that cites it.
@@ -79,22 +81,23 @@ function FindingCard({ finding, index, data, coverage }: { finding: Finding; ind
   const [title, rest] = split(finding.waste)
   const saving = finding.estimated_saving
   const extras = saving ? [saving.model_calls != null && `${measurement(saving.model_calls)} calls`, saving.wall_time_seconds != null && `${measurement(saving.wall_time_seconds, 'seconds')}`, saving.tokens != null && `${measurement(saving.tokens)} tokens`].filter(Boolean) : []
-  return <li className="slab grid gap-6 p-6 pt-8 md:grid-cols-[minmax(0,1fr)_200px] md:p-8">
-    <span className="slab-tab">leak {String(index + 1).padStart(2, '0')}{area ? ` · ${area.name}` : ''}</span>
+  return <li className="slab grid gap-x-8 gap-y-4 p-6 md:grid-cols-[minmax(0,1fr)_220px] md:p-8">
+    {/* The label takes the whole first row; without that it becomes a grid cell and pushes the text into the narrow column. */}
+    <span className="slab-tab col-span-full mb-0">leak {String(index + 1).padStart(2, '0')}{area ? ` · ${area.name}` : ''}</span>
     <div className="min-w-0">
-      <h3 className="text-[20px] font-semibold leading-[1.15] font-medium [overflow-wrap:anywhere] sm:text-[28px] sm:leading-[1.1]">{title}</h3>
+      <h3 className="max-w-[52ch] text-[20px] leading-[1.2] font-semibold [overflow-wrap:anywhere] sm:text-[24px]">{title}</h3>
       <div className="mt-4 flex flex-wrap gap-2">{finding.source.map((source, i) => {
         const url = sourceUrl(data.import.repository, data.import.commit_sha, source, data.import.folder)
         const label = `${source.path}:${source.start_line}${source.end_line === source.start_line ? '' : `–${source.end_line}`}`
         return url ? <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="chip shrink bg-surface break-all whitespace-normal hover:bg-blue-soft">{label}</a> : <span key={i} className="chip shrink break-all whitespace-normal">{label}</span>
       })}</div>
-      {rest && <p className="report-prose mt-4 line-clamp-3 text-muted md:line-clamp-none">{rest}</p>}
+      {rest && <p className="mt-4 line-clamp-3 max-w-[80ch] text-[15px] leading-relaxed text-muted">{rest}</p>}
       <details className="mt-4 text-[14px]"><summary className="flex min-h-11 cursor-pointer items-center font-semibold underline decoration-line decoration-2 underline-offset-4">The full evidence, the fix and the risk</summary>
-        <dl className="mt-3 space-y-4">{rest && <div className="md:hidden"><dt className="label">What Hansa saw</dt><dd className="report-prose mt-1">{rest}</dd></div>}<div><dt className="label">Proposed change</dt><dd className="report-prose mt-1">{finding.proposed_change || 'Not recorded'}</dd></div><div><dt className="label">Risk</dt><dd className="report-prose mt-1">{finding.behaviour_risk || 'Not recorded'}</dd></div>{saving?.method && <div><dt className="label">How the saving was estimated</dt><dd className="report-prose mt-1">{saving.method}</dd></div>}</dl></details>
+        <dl className="mt-3 space-y-4">{rest && <div><dt className="label">What Hansa saw</dt><dd className="report-prose mt-1">{rest}</dd></div>}<div><dt className="label">Proposed change</dt><dd className="report-prose mt-1">{finding.proposed_change || 'Not recorded'}</dd></div><div><dt className="label">Risk</dt><dd className="report-prose mt-1">{finding.behaviour_risk || 'Not recorded'}</dd></div>{saving?.method && <div><dt className="label">How the saving was estimated</dt><dd className="report-prose mt-1">{saving.method}</dd></div>}</dl></details>
     </div>
-    <div className="flex flex-col items-start gap-1 pt-5 md:items-end md:pt-0 md:pl-6 md:text-right">
+    <div className="flex flex-col items-start gap-1 border-line pt-5 max-md:border-t md:border-l md:pt-0 md:pl-8">
       <span className="label">could save</span>
-      <p className="big-number text-[44px]">{saving?.cost_usd != null ? measurement(saving.cost_usd, 'usd') : '?'}</p>
+      <p className="big-number text-[40px] text-ok">{saving?.cost_usd != null ? measurement(saving.cost_usd, 'usd') : '?'}</p>
       <p className="tabular text-[14px] text-muted">{extras.length ? extras.join(' · ') : 'not priced yet'}</p>
       <p className="tabular text-[14px] text-muted">estimate, until tested</p>
       <Link to={`?step=fix&finding=${encodeURIComponent(finding.finding_id)}`} className="button-primary mt-4 w-full md:mt-auto">Test this fix <ArrowRight size={16} aria-hidden="true" /></Link>

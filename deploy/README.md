@@ -2,12 +2,12 @@
 
 Proposed layout, not yet exercised: nothing here has been run against a real server.
 
-- **Frontend** on Vercel at `https://hansa.yourdomain.com`.
-- **API and sandbox** on one EC2 instance at `https://hansa-api.yourdomain.com`.
+- **Frontend** on Vercel at `https://hansa.svema.online`.
+- **API and sandbox** on one EC2 instance at `https://hansa-api.svema.online`.
 
 The browser only ever talks to the Vercel address. [frontend/vercel.json](../frontend/vercel.json) passes `/auth/*` and `/github/*` through to the API, so sign-in cookies and the app's relative requests work without cross-site settings.
 
-Replace `HANSA_API_HOST` in `frontend/vercel.json` and `deploy/Caddyfile` with the API's name before deploying.
+`frontend/vercel.json` already points at `hansa-api.svema.online`. `deploy/Caddyfile` keeps a placeholder that `setup-server.sh` fills in from the name you pass it.
 
 ## Hackathon AWS limits
 
@@ -24,44 +24,37 @@ A `t3.medium` (4 GB) runs the API and one sandbox at a time; a `t3.large` (8 GB)
 
 ## Server
 
+On a fresh Ubuntu 24.04 instance, copy [setup-server.sh](setup-server.sh) over and run it:
+
 ```sh
-sudo apt-get update && sudo apt-get install -y docker.io caddy git
-sudo useradd --system --create-home --groups docker hansa
-sudo mkdir -p /opt/hansa && sudo chown hansa /opt/hansa
-sudo -u hansa git clone <repository> /opt/hansa
-cd /opt/hansa/backend && sudo -u hansa sh -c 'curl -LsSf https://astral.sh/uv/install.sh | sh && ~/.local/bin/uv sync --locked'
+sudo bash setup-server.sh https://github.com/<you>/<repository>.git hansa-api.svema.online
 ```
+
+It installs Docker, Caddy and the Python environment, clones `main`, pulls the sandbox base image, writes the Caddy config for your API name, adds swap and a nightly database backup (seven kept, under `/var/backups/hansa`), and installs the API service. It writes no secrets and does not start the API until `/opt/hansa/.env` is filled in.
 
 Create `/opt/hansa/.env` as [README.md](../README.md) describes, with these hosted values:
 
 ```sh
-APP_URL=https://hansa.yourdomain.com
-FRONTEND_ORIGIN=https://hansa.yourdomain.com
+APP_URL=https://hansa.svema.online
+FRONTEND_ORIGIN=https://hansa.svema.online
 AUTH_COOKIE_SECURE=true
 ```
 
-`APP_URL` is the Vercel address, not the API's, because sign-in callbacks return through Vercel.
+`APP_URL` is the Vercel address, not the API's, because sign-in callbacks return through Vercel. Then `sudo systemctl start hansa-api`.
 
-Then:
-
-```sh
-sudo cp /opt/hansa/deploy/Caddyfile /etc/caddy/Caddyfile && sudo systemctl restart caddy
-sudo cp /opt/hansa/deploy/hansa-api.service /etc/systemd/system/ && sudo systemctl enable --now hansa-api
-```
-
-Open ports 80 and 443 in the instance's security group. Port 8000 stays closed; only Caddy reaches it.
+Open ports 80 and 443 in the instance's security group. Port 8000 stays closed; only Caddy reaches it. To deploy a later change, run the script again: it pulls `main` and restarts the API. Do not do that while a job is running.
 
 ## Sign-in callbacks to register
 
 Use the Vercel address in each provider's settings:
 
-- GitHub sign-in: `https://hansa.yourdomain.com/auth/github/callback`
-- Google sign-in: `https://hansa.yourdomain.com/auth/google/callback`
-- GitHub App: callback and webhook addresses under `https://hansa.yourdomain.com/github/` (see [GITHUB_IMPORT.md](../backend/docs/GITHUB_IMPORT.md) for the exact paths)
+- GitHub sign-in: `https://hansa.svema.online/auth/github/callback`
+- Google sign-in: `https://hansa.svema.online/auth/google/callback`
+- GitHub App: callback and webhook addresses under `https://hansa.svema.online/github/` (see [GITHUB_IMPORT.md](../backend/docs/GITHUB_IMPORT.md) for the exact paths)
 
 ## Frontend
 
-In Vercel, import the repository, set the root directory to `frontend`, and add `hansa.yourdomain.com` under Domains. The build command and output folder are Vite's defaults (`npm run build`, `dist`).
+In Vercel, import the repository, set the root directory to `frontend`, and add `hansa.svema.online` under Domains. The build command and output folder are Vite's defaults (`npm run build`, `dist`).
 
 ## Keeping it closed
 

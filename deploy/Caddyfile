@@ -1,5 +1,5 @@
 # Terminates HTTPS for the API and passes requests to the one local API process.
-# Replace HANSA_API_HOST with the API's name, for example hansa-api.yourdomain.com.
+# Replace HANSA_API_HOST with the API's name, for example hansa-api.svema.online. setup-server.sh does this for you.
 HANSA_API_HOST {
 	encode gzip
 	header -Server

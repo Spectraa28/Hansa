@@ -50,6 +50,21 @@ class BriefInput(BaseModel):
     ids: list[str] = Field(min_length=1, max_length=20)
 
 
+# A snapshot is one fixed commit and never changes, so reading it for patterns only needs doing once.
+# On a large repository that read takes seconds; this keeps the Fixes step from paying it on every visit.
+SCANS: dict = {}
+
+
+def scanned(snapshot_path, entrypoint):
+    from . import playbook
+    key = (str(snapshot_path), entrypoint)
+    if key not in SCANS:
+        if len(SCANS) >= 32:
+            SCANS.pop(next(iter(SCANS)))
+        SCANS[key] = playbook.scan(snapshot_path, entrypoint)
+    return SCANS[key]
+
+
 def suggestion_set(request: Request, user_id: str, import_id: str):
     """Plays for an import, from its latest completed baseline and a text-only read of its source. No model call."""
     import json
@@ -65,7 +80,7 @@ def suggestion_set(request: Request, user_id: str, import_id: str):
         entrypoint = (request.app.state.inspection.get(user_id, import_id)["configuration"] or {}).get("entrypoint")
     except HTTPException:
         entrypoint = None
-    found = playbook.plays(xray, playbook.scan(imported["snapshot_path"], entrypoint))
+    found = playbook.plays(xray, scanned(imported["snapshot_path"], entrypoint))
     return imported, xray, found
 
 

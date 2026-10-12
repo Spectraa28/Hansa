@@ -6,7 +6,8 @@ import App from './App'
 import './styles.css'
 import { startSmoothScroll } from './smoothScroll'
 
-startSmoothScroll()
+// After first paint, when the browser is idle.
+;(window.requestIdleCallback || ((run: () => void) => window.setTimeout(run, 200)))(() => void startSmoothScroll())
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 

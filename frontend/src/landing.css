@@ -42,6 +42,8 @@
 .diagram-output [data-active]::before { inset: -5px; }
 .diagram-output small { display: block; margin-top: 8px; font-size: 14px; line-height: 1.6; color: var(--body); }
 .diagram-verdict b { color: var(--waste); }
+.diagram-verdict b.is-accepted { color: var(--ok); }
+.verdict-label.is-accepted { background: var(--ok-soft); color: var(--ok); }
 .diagram-output span { display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 500; }
 .diagram-note { margin-top: 22px; font-size: 14px; color: var(--muted); text-align: center; }
 .landing-section { padding-block: var(--section-space); }
