@@ -118,6 +118,26 @@ Three ideas hold it together:
 - **How it was used while building.** The digest above is where failed runs showed up: the error rate rose from 0.6% to 6.3% as deep hunts failed on their own tool steps. Reading those traces is what pointed at the steps that needed fixing.
 - **About the $0.00.** The amber box in the image is our note, not Neatlogs'. Neatlogs prices a trace from its model name and token counts, and Hansa was logging a short model name it could not price. Recorded spend for the build is $13.30. Traces from 12 October onward use a name Neatlogs can price; its figure is list price, so it will differ from what the provider charged.
 
+#### An incident, start to finish: onboarding the OpenAI Agents SDK example
+
+Three runs of the same job on the same agent, all traced.
+
+| When | Result | Model calls | Cost | Sandbox runs |
+| --- | --- | --- | --- | --- |
+| 11 Oct, 21:12 | **Failed** at the 40-turn limit | 40 | $0.475 | 2, both crashed |
+| 11 Oct, 21:24 | **Ready** | 18 | $0.233 | 1, passed |
+| 12 Oct, 08:03 | **Ready**, through a provider timeout | 18 | $0.195 | 1, passed |
+
+**What went wrong.** Hansa's model gateway refused the SDK's requests because they carried fields it did not recognise, with a message that pointed the agent the wrong way. It spent all 40 turns on workarounds.
+
+**What changed.** The gateway now drops fields it does not forward instead of refusing the request, and the onboarding prompt tells the agent to switch such frameworks to plain chat completions rather than patch the client. Twelve minutes later the same job finished in 18 calls at half the cost.
+
+**The next morning** the first model call of the same job timed out after a minute. Neatlogs flags it as a slow response and a failed execution. The job retried and still finished; earlier in the build a timeout like that ended a deep hunt outright.
+
+<p align="center"><img src="docs/images/neatlogs-timeout-survived.png" alt="An onboarding run in Neatlogs whose first model call errored after one minute, flagged Slow LLM Response and Execution Failed, followed by successful steps" width="900"></p>
+
+"Content withheld" in these traces is Hansa's own fallback: when Neatlogs' ingest refuses a trace's full text, Hansa resends it with timings and token counts and no content.
+
 ### Backend
 
 | Tool | Used for |
