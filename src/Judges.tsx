@@ -22,8 +22,9 @@ const criteria = [
       ['Live site', 'Sign in with GitHub or Google and import your own agent. One job runs at a time, and each run has a spend cap you see first.'],
       ['Recorded run', 'The demo walks a real run of Swarm from import to verdict without signing in or spending anything. It is the earlier two-task run, and it labels its own proof as thin.'],
     ] },
-  { name: 'Usefulness and originality', weight: '10%', claim: 'Agents waste model calls in ways their owners cannot see. Hansa shows where, and proves the fix.',
+  { name: 'Usefulness and originality', weight: '10%', claim: 'Hansa does the work of an agent engineer: it measures an agent, examines its prompts, tools, memory, context and model choice, and proves a fix.',
     rows: [
+      ['What it examines', 'Eight areas on every deep hunt: prompt structure, tool definitions, agent design, model choice, memory, output, latency and unused calls. Quick wins also cover caching, turn limits and answer-length limits. Each area is reported as a finding or as checked and clean.'],
       ['What you leave with', 'A patch against your exact commit, a brief your own coding agent can apply, and the measurements behind both.'],
       ['Honest about what it cannot prove', 'Model swaps, prompt caching and safety guards cannot be measured in the sandbox. Hansa says so and gives a labelled estimate from list prices instead of a test.'],
     ] },
