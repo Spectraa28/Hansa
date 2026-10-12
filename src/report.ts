@@ -17,7 +17,15 @@ export type Finding = {
   source: SourceReference[]
   run_ids: string[]
   category?: string | null
+  // What kind of change this is, and whether rerunning the tasks in the sandbox can show it.
+  lever?: string | null
+  testable_here?: boolean
+  predicted_cost_change_percent?: number | null
+  estimate?: Estimate | null
 }
+/** Arithmetic over the measured baseline for a change the sandbox cannot show. Never a test result. */
+export type Estimate = { lever: string; why_not_tested: string; cost_before_usd: number | null; cost_after_usd: number | null; change_percent: number | null
+  basis: string[]; unknowns: string[]; prices_retrieved: string; from_model?: string; to_model?: string }
 export type Coverage = { category: string; status: string; observation: string; finding_ids: string[] }
 export type MetricComparison = { baseline: number | null; candidate: number | null; change_percent: number | null }
 export type Comparison = {

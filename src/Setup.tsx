@@ -146,8 +146,24 @@ function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { b
       const result = await send<{ tasks: Task[]; estimated_cost_usd: number | null }>(`${base}/contract/suggest`, session.csrf_token)
       const fresh = result.tasks.filter(task => !tasks.some(have => have.name.toLowerCase() === task.name.toLowerCase())).map(task => ({ ...draftOf(task), source: undefined }))
       const kept = tasks.filter(task => task.name || task.source)
-      setTasks([...kept, ...fresh].slice(0, 20)); setDirty(true)
-      setDrafted(`${fresh.length} task${fresh.length === 1 ? '' : 's'} drafted${result.estimated_cost_usd != null ? ` for $${result.estimated_cost_usd.toFixed(3)}` : ''}. They're guesses from your code: check each input and expected value, then save.`)
+      let all = [...kept, ...fresh].slice(0, 20)
+      setTasks(all); setDirty(true)
+      // Each draft is then run once, so its checks can name what the agent really decided instead of only "this field exists".
+      let pinnedTasks = 0, spent = result.estimated_cost_usd || 0
+      for (const [index, item] of fresh.entries()) {
+        setDrafted(`${fresh.length} tasks drafted. Running task ${index + 1} of ${fresh.length} once to record what your agent does…`)
+        try {
+          const run = await send<{ checks: Rule[]; ran: boolean; estimated_cost_usd: number | null }>(`${base}/contract/suggest/pin`, session.csrf_token, { input: JSON.parse(item.input) })
+          spent += run.estimated_cost_usd || 0
+          if (!run.checks.length) continue
+          pinnedTasks += 1
+          const exact = run.checks.map(rule => ({ pointer: rule.pointer, field_type: rule.field_type, exact: JSON.stringify(rule.exact_value) }))
+          const merged = { ...item, checks: [...exact, ...item.checks.filter(check => !exact.some(rule => rule.pointer === check.pointer))].slice(0, 12) }
+          all = all.map(task => task === item || task.name === item.name ? merged : task)
+          setTasks(all)
+        } catch { /* a task that could not be run keeps its drafted checks */ }
+      }
+      setDrafted(`${fresh.length} task${fresh.length === 1 ? '' : 's'} drafted for about $${spent.toFixed(3)}. ${pinnedTasks ? `${pinnedTasks} now check exactly what your agent did on one real run.` : 'None could be run, so the checks only test the shape of the answer.'} Read each one, remove any value that could rightly differ, then save.`)
     } catch (caught) { setError(message(caught)) } finally { setDrafting(false) }
   }
   function useExample() {
@@ -196,7 +212,7 @@ function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { b
     {!example && <aside className="mt-6 rounded-control p-5">
       <p className="flex items-center gap-2 text-[19px] font-semibold"><Lightbulb size={18} aria-hidden="true" /> Not sure what to write?</p>
       <p className="mt-2 max-w-[70ch] text-[14px]">{adapter ? 'Write one task per thing your agent is for, or let Hansa draft them.' : 'Run step 2 first. While Hansa learns to run your agent it works out the input it takes, and offers it here as a ready-made task.'}</p>
-      {adapter && <button type="button" className="button-primary mt-4" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing tasks…' : 'Write 3 tasks for me'}</button>}
+      {adapter && <button type="button" className="button-primary mt-4" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing and checking tasks…' : 'Write tasks for me'}</button>}
       {drafted && <p role="status" className="mt-3 text-[14px] font-medium">{drafted}</p>}
       {tools.length > 0 && <><p className="mt-4 tabular text-[14px] text-muted">ideas from the tools you allowed, one task each:</p>
         <div className="mt-2 flex flex-wrap gap-1.5">{tools.slice(0, 8).map(tool => { const name = `Ends in ${tool}`, used = tasks.some(task => task.name === name)
@@ -207,7 +223,7 @@ function Tasks({ base, session, revision, record, adapter, tools, onSaved }: { b
       <p className="flex items-center gap-2 text-[19px] font-semibold"><Lightbulb size={18} aria-hidden="true" /> Suggested from your code</p>
       <p className="mt-2 max-w-[70ch] text-[14px]">{example.description || 'Hansa worked out the input this agent takes while writing its adapter.'}</p>
       <pre className="mt-3 max-h-44 overflow-auto ink-block rounded-control bg-ink p-4 tabular text-[14px] leading-relaxed text-paper">{JSON.stringify(example.task, null, 2)}</pre>
-      <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" className="button-primary" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing tasks…' : 'Write 3 tasks for me'}</button>
+      <div className="mt-4 flex flex-wrap items-center gap-3"><button type="button" className="button-primary" disabled={drafting} onClick={() => void draft()}><Sparkles size={16} aria-hidden="true" /> {drafting ? 'Writing and checking tasks…' : 'Write tasks for me'}</button>
         <button type="button" className="button-secondary" onClick={useExample}><Plus size={16} aria-hidden="true" /> Use just this example</button>
         <span className="tabular text-[14px] text-muted">one model call, a few cents</span></div>
       {drafted && <p role="status" className="mt-3 text-[14px] font-medium">{drafted}</p>}
