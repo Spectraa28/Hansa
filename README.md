@@ -118,6 +118,15 @@ Three ideas hold it together:
 - **How it was used while building.** The digest above is where failed runs showed up: the error rate rose from 0.6% to 6.3% as deep hunts failed on their own tool steps. Reading those traces is what pointed at the steps that needed fixing.
 - **About the $0.00.** The amber box in the image is our note, not Neatlogs'. Neatlogs prices a trace from its model name and token counts, and Hansa was logging a short model name it could not price. Recorded spend for the build is $13.30. Traces from 12 October onward use a name Neatlogs can price; its figure is list price, so it will differ from what the provider charged.
 
+#### Entire in practice
+
+<p align="center"><img src="docs/images/entire-session.png" alt="A recorded Codex session in Entire, titled Build Hansa Frontend with Vite and Design System: 2 checkpoints, 121 file changes, 171 tool calls, with the prompt and the agent's replies" width="900"></p>
+
+- **What it holds.** The project's git repository lives on Entire, and so do the agent sessions behind it. The image is one of them: a Codex session that scaffolded the frontend, kept with its prompts, the agent's replies, 171 tool calls and the two checkpoints it produced.
+- **How it was used.** Coding moved between agents during the build. A checkpoint ties a commit to the session that wrote it, so the next session could be pointed at why a file looks the way it does, not only at what it contains. That is the "helped with providing context" in the launch post.
+- **What it covers.** 11 checkpoints, on 10 of the first 25 commits. Entire is set up to capture Codex sessions, so commits from other sessions carry none.
+- **What it is not.** Hansa the product does not call Entire. It is how Hansa was built.
+
 #### An incident, start to finish: onboarding the OpenAI Agents SDK example
 
 Three runs of the same job on the same agent, all traced.
