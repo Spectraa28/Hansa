@@ -109,6 +109,15 @@ Three ideas hold it together:
 | **[CFO.ai](https://cfo.ai)** | The business model, built from measured unit costs: Starter $149 a month for one proof, Team $299 for three, with the customer paying their own model bill. It includes a hosted stress case that loses money. [Open the model](https://cfo.ai/s/fG9t075-Bd4KFAHP). No customer has paid yet. |
 | **AWS** | One `t3.medium` EC2 instance in `us-east-1` runs the API, the sandbox and the database, inside the hackathon's limits. |
 
+#### Neatlogs in practice
+
+<p align="center"><img src="docs/images/neatlogs-dashboard.png" alt="The Neatlogs project home for Hansa: 337 sessions, a 3.6% error rate and a daily digest of recorded errors. An amber note added by Hansa gives the real recorded spend." width="900"></p>
+
+- **What gets logged.** One trace per sandbox run (each model call as a step, the gaps between calls, and any outside connection) and one per agent job (each model call and each tool the agent used). 337 so far.
+- **How it is used in the product.** After logging, Hansa reads each trace back to confirm it arrived. The trace window shows Neatlogs' steps and timing beside Hansa's own figures for each call. During a deep hunt, the investigator reads Neatlogs' detections for a run as leads, then checks them against the recorded calls and the source.
+- **How it was used while building.** The digest above is where failed runs showed up: the error rate rose from 0.6% to 6.3% as deep hunts failed on their own tool steps. Reading those traces is what pointed at the steps that needed fixing.
+- **About the $0.00.** The amber box in the image is our note, not Neatlogs'. Neatlogs prices a trace from its model name and token counts, and Hansa was logging a short model name it could not price. Recorded spend for the build is $13.30. Traces from 12 October onward use a name Neatlogs can price; its figure is list price, so it will differ from what the provider charged.
+
 ### Backend
 
 | Tool | Used for |
