@@ -1,6 +1,6 @@
 # How Hansa uses the sponsor tools
 
-This page shows how Neatlogs and Entire were used, with screenshots and one incident from start to finish.
+This page shows how Neatlogs, Entire and CFO.ai were used. It has a screenshot of each tool and one incident from start to finish.
 
 ## Neatlogs in practice
 
@@ -39,3 +39,13 @@ Three runs of the same job on the same agent, all traced.
 <p align="center"><img src="images/neatlogs-timeout-survived.png" alt="An onboarding run in Neatlogs whose first model call errored after one minute, flagged Slow LLM Response and Execution Failed, followed by successful steps" width="900"></p>
 
 "Content withheld" in these traces is Hansa's own fallback: when Neatlogs' ingest refuses a trace's full text, Hansa resends it with timings and token counts and no content.
+
+## CFO.ai in practice
+
+<p align="center"><img src="images/cfo-cost-simulator.png" alt="The Hansa cost simulator in CFO.ai: a monthly serving budget of $192.64, API fees of $1.39 per first pass with a measured range of $0.97 to $1.80, and where the monthly bill goes" width="900"></p>
+
+- **What it holds.** The business model for Hansa: prices, costs for each proof, a 12-month forecast and three scenarios. [Open the model](https://cfo.ai/s/fG9t075-Bd4KFAHP).
+- **How it was used.** The model starts from measured costs. A full first pass on a small agent costs $0.97 to $1.80 in model fees. That range comes from the runs in this repository.
+- **What it showed.** The model provider bill is the main cost, not the server. If Hansa pays for all model calls at 1,000 agents a month, the bill is about $60,000. If the customer uses their own key, Hansa pays about $3,000.
+- **The decision it led to.** The customer pays their own model bill. Hansa charges a software fee: $149 a month for one proof, or $299 for three.
+- **What is not measured.** Sandbox minutes, customer growth and plan prices are assumptions. No customer has paid.

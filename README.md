@@ -95,7 +95,14 @@ Hansa cannot measure some changes in the sandbox. Examples are a different model
 | **Docker** | The sandbox for imported code. |
 | **React, TypeScript, Vite, Tailwind CSS** | The web interface. |
 
-For screenshots and one full incident, see [docs/SPONSOR_TOOLS.md](docs/SPONSOR_TOOLS.md).
+<p align="center">
+  <a href="docs/SPONSOR_TOOLS.md"><img src="docs/images/neatlogs-dashboard.png" alt="The Neatlogs dashboard for Hansa" width="290"></a>
+  <a href="docs/SPONSOR_TOOLS.md"><img src="docs/images/entire-session.png" alt="A recorded agent session in Entire" width="290"></a>
+  <a href="docs/SPONSOR_TOOLS.md"><img src="docs/images/cfo-cost-simulator.png" alt="The Hansa cost simulator in CFO.ai" width="290"></a>
+</p>
+<p align="center"><sub>Neatlogs · Entire · CFO.ai</sub></p>
+
+For a description of each tool and one full incident, see [docs/SPONSOR_TOOLS.md](docs/SPONSOR_TOOLS.md).
 
 ## Run Hansa
 
