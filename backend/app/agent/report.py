@@ -8,6 +8,7 @@ from pathlib import Path
 
 from ..runner.service import left_out
 from ..runner.xray import anatomy
+from .estimates import estimate
 
 METRICS = ("model_calls", "tokens_in", "tokens_out", "cost_usd", "wall_time_seconds")
 
@@ -196,7 +197,9 @@ def next_step(adapter, baseline, investigation, optimizations, jobs):
         return {"action": "investigate", "endpoint": "investigation", "reason": "The latest baseline has not been investigated."}
     tried = {(item["finding"] or {}).get("finding_id") for item in optimizations
              if (item["finding"] or {}).get("investigation_job_id") == investigation["job_id"]}
-    untried = [f["finding_id"] for f in investigation["result"].get("findings", []) if f["finding_id"] not in tried]
+    # Only findings a rerun can prove are queued for testing; the rest carry an estimate instead.
+    untried = [f["finding_id"] for f in investigation["result"].get("findings", [])
+               if f["finding_id"] not in tried and f.get("testable_here") is not False]
     if untried:
         return {"action": "optimize", "endpoint": "optimization", "finding_ids": untried,
                 "reason": "Findings that have not been tested yet."}
@@ -254,20 +257,25 @@ def build(service, baselines, user_id, import_id):
              for kind in ("onboarding", "investigation", "optimization")}
     spend["candidate_runs"] = sum((job["result"].get("target_usage") or {}).get("estimated_cost_usd") or 0
                                   for job in jobs if job["kind"] == "optimization")
+    measured = baseline_section(baseline, service.database)
     return {
         "import": {"import_id": import_id, "repository": imported["repository_name"], "branch": imported["branch"], "commit_sha": imported["commit_sha"],
                    # Source references are relative to this folder when one was imported.
                    "folder": imported["folder"] if "folder" in imported.keys() else None,
                    "left_out": left_out(Path(imported["snapshot_path"])) if imported["snapshot_path"] else []},
         "adapter": dict(adapter) if adapter else None,
-        "baseline": baseline_section(baseline, service.database),
+        "baseline": measured,
         "investigation": None if investigation is None else {
             "job_id": investigation["job_id"], "summary": investigation["result"].get("summary"),
             "incomplete": bool(investigation["result"].get("incomplete")) or investigation["status"] != "ready",
             "status": investigation["status"],
             "nothing_worth_changing": investigation["result"].get("nothing_worth_changing"),
-            "findings": [{key: finding.get(key) for key in ("finding_id", "waste", "proposed_change", "behaviour_risk", "estimated_saving", "saving_scope")}
-                         | {"source": finding["evidence"]["source"], "run_ids": [run["run_id"] for run in finding["evidence"]["runs"]]}
+            "findings": [{key: finding.get(key) for key in ("finding_id", "waste", "proposed_change", "behaviour_risk", "estimated_saving", "saving_scope",
+                                                             "lever", "predicted_cost_change_percent")}
+                         | {"source": finding["evidence"]["source"], "run_ids": [run["run_id"] for run in finding["evidence"]["runs"]],
+                            # Findings saved before kinds existed are treated as testable, as they always were.
+                            "testable_here": finding.get("testable_here") is not False,
+                            "estimate": estimate(finding, measured, measured.get("xray")) if measured else None}
                          for finding in investigation["result"].get("findings", [])],
             "coverage": investigation["result"].get("coverage", []), "agent_usage": investigation["result"].get("agent_usage"),
             "trace": investigation["result"].get("trace"),

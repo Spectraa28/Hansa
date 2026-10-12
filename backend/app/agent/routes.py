@@ -45,6 +45,17 @@ def suggest_tasks(import_id: uuid.UUID, request: Request, user: dict = Depends(r
     return request.app.state.agent.suggest_tasks(user["id"], str(import_id))
 
 
+class PinInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    input: dict
+
+
+@router.post("/{import_id}/contract/suggest/pin")
+def pin_task(import_id: uuid.UUID, body: PinInput, request: Request, user: dict = Depends(require_csrf)):
+    rate_limit(request)
+    return request.app.state.agent.pin_task(user["id"], str(import_id), body.input)
+
+
 class BriefInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     ids: list[str] = Field(min_length=1, max_length=20)

@@ -25,7 +25,7 @@ function StageForm({ kind, data, session, preview, busy, disabled, onStarted, re
   const [cap, setCap] = useState('0.50')
   const [targetCap, setTargetCap] = useState('0.50')
   const [repetitions, setRepetitions] = useState('1')
-  const [finding, setFinding] = useState(data.investigation?.job_id ? params.get('finding') || data.investigation.findings[0]?.finding_id || '' : '')
+  const [finding, setFinding] = useState(data.investigation?.job_id ? params.get('finding') || data.investigation.findings.find(item => item.testable_here !== false)?.finding_id || '' : '')
   const [goal, setGoal] = useState('')
   const [pending, setPending] = useState(false)
   const [uncertain, setUncertain] = useState(false)
@@ -90,7 +90,7 @@ function StageForm({ kind, data, session, preview, busy, disabled, onStarted, re
     <p className="mt-3 max-w-[60ch] text-[15px] text-muted">{pitch}</p>
     <form onSubmit={event => void start(event)} className="mt-5">
       {kind === 'optimization' && <>
-        <label htmlFor="run-finding" className="block text-[15px] font-medium">What to fix</label><select id="run-finding" className="field mt-2" value={finding} disabled={disabledFields} onChange={event => setFinding(event.target.value)}>{data.investigation?.job_id && data.investigation.findings.map((item, index) => <option key={item.finding_id} value={item.finding_id}>Leak {String(index + 1).padStart(2, '0')} · {item.waste?.slice(0, 90)}</option>)}<option value="">Something else (describe it)</option></select>
+        <label htmlFor="run-finding" className="block text-[15px] font-medium">What to fix</label><select id="run-finding" className="field mt-2" value={finding} disabled={disabledFields} onChange={event => setFinding(event.target.value)}>{data.investigation?.job_id && data.investigation.findings.map((item, index) => item.testable_here !== false && <option key={item.finding_id} value={item.finding_id}>Leak {String(index + 1).padStart(2, '0')} · {item.waste?.slice(0, 90)}</option>)}<option value="">Something else (describe it)</option></select>
         {!finding && <><label htmlFor="run-goal" className="mt-4 block text-[15px] font-medium">Describe the change to try</label><textarea id="run-goal" className="field mt-2 min-h-24" minLength={10} maxLength={2000} required value={goal} disabled={disabledFields} onChange={event => setGoal(event.target.value)} /></>}
       </>}
       {error && <div role="alert" className="notice-problem mt-4 max-w-[65ch] text-[14px]"><p className="font-semibold">{error}</p>{advice(error) && <p className="mt-1">{advice(error)}</p>}</div>}

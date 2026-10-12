@@ -27,7 +27,8 @@ This workspace contains the Autonomous Agent Optimization Engineer plans, authen
 - `backend/app/sessions.py`: session storage, cookie handling, and logout CSRF checks.
 - `backend/app/database.py`: shared SQLite connection and schema initialization.
 - `backend/app/config.py` and `backend/app/main.py`: settings and FastAPI application setup.
-- `backend/tests/`: 292 passing regression tests (3 skipped without Docker checks) as of October 12; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures. Docker lifecycle and offline-wheel checks use real containers; separate live Haiku proof uses the labelled local sample.
+- `backend/app/agent/estimates.py` and `model_prices.json`: arithmetic estimates for changes the sandbox cannot measure (model swap, caching, guards), from the measured baseline and list prices retrieved October 12. Never presented as test results; Nova prices are from third-party listings.
+- `backend/tests/`: 297 passing regression tests (3 skipped without Docker checks) as of October 12; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures. Docker lifecycle and offline-wheel checks use real containers; separate live Haiku proof uses the labelled local sample.
 - `README.md`: setup, authentication contract, and current limitations.
 - `backend/pyproject.toml` and `backend/uv.lock`: Python dependencies.
 - `backend/docs/`: technical documentation for each backend stage.

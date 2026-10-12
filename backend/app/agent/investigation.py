@@ -7,6 +7,8 @@ from typing import Literal
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .estimates import testable
+
 from ..gateway.shape import repeated_prefix
 from ..runner.xray import anatomy
 from .tools import SnapshotTools
@@ -46,6 +48,13 @@ class Finding(BaseModel):
     estimated_saving: Saving
     behaviour_risk: str = Field(min_length=10, max_length=2000)
     proposed_change: str = Field(min_length=10, max_length=2000)
+    # What kind of change this is. model_swap, caching and guard cannot be shown by rerunning the tasks here.
+    lever: Literal["remove_call", "fewer_tokens", "less_output", "model_swap", "caching", "guard", "other"] = "other"
+    # For model_swap: the model to move to, and the share of the baseline's model calls that would move.
+    swap_to_model: str | None = Field(default=None, min_length=2, max_length=80)
+    calls_affected_percent: float | None = Field(default=None, strict=True, ge=0, le=100, allow_inf_nan=False)
+    # Predicted change in cost per pass if tested, as a percentage (negative is a saving).
+    predicted_cost_change_percent: float | None = Field(default=None, strict=True, ge=-100, le=100, allow_inf_nan=False)
 
 
 class Coverage(BaseModel):
@@ -248,7 +257,10 @@ class InvestigationTools:
         saved = {"finding_id": str(len(self.findings) + 1), "waste": finding.waste,
                  "evidence": {"runs": measurements, "source": sources}, "estimated_saving": finding.estimated_saving.model_dump(),
                  "saving_scope": "Total over the cited runs; hypothesis, not a measured improvement.",
-                 "behaviour_risk": finding.behaviour_risk, "proposed_change": finding.proposed_change}
+                 "behaviour_risk": finding.behaviour_risk, "proposed_change": finding.proposed_change,
+                 "lever": finding.lever, "testable_here": testable(finding.lever), "swap_to_model": finding.swap_to_model,
+                 "calls_affected_percent": finding.calls_affected_percent,
+                 "predicted_cost_change_percent": finding.predicted_cost_change_percent}
         if len(self.findings) >= 10 or len(json.dumps(saved).encode()) > 131072:
             raise ValueError("Findings are bounded to ten, each at most 128 KiB.")
         self.findings.append(saved)

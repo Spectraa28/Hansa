@@ -1,0 +1,318 @@
+{
+  "_about": "List prices in US dollars per one million tokens, for estimating what a model swap or prompt caching would save. Reference only: Hansa's measured costs always come from the provider's own per-call figure, never from this file.",
+  "retrieved": "2026-10-12",
+  "unit": "USD per 1,000,000 tokens",
+  "caveats": [
+    "List prices for standard, pay-as-you-go use. Batch, priority and regional rates differ.",
+    "A gateway or reseller may charge differently; compare with recorded costs before trusting an estimate.",
+    "Cached input is the price of reading a cached prefix. Writing the cache costs extra on some providers and has a minimum size.",
+    "Amazon Nova prices come from third-party listings, not AWS's own page, and are marked unverified."
+  ],
+  "gateway_names": {
+    "_about": "Names offered by Hansa's model gateway and the list entry each is assumed to be.",
+    "claude-sonnet-4.6": "anthropic/claude-sonnet-4.6",
+    "claude-opus-4.6": "anthropic/claude-opus-4.6",
+    "claude-haiku": "anthropic/claude-haiku-4.5",
+    "_claude-haiku_note": "Assumed from recorded costs: 104 past calls cost 1.10 times the Haiku 4.5 list price."
+  },
+  "providers": {
+    "anthropic": {
+      "source": "https://platform.claude.com/docs/en/about-claude/pricing",
+      "verified": true,
+      "models": {
+        "claude-fable-5.1": {
+          "input": 10,
+          "output": 50,
+          "cached_input": 0.25,
+          "cache_write_5m": 12.5
+        },
+        "claude-fable-5": {
+          "input": 10,
+          "output": 50,
+          "cached_input": 1,
+          "cache_write_5m": 12.5
+        },
+        "claude-opus-5.5": {
+          "input": 4,
+          "output": 20,
+          "cached_input": 0.2,
+          "cache_write_5m": 5
+        },
+        "claude-opus-5": {
+          "input": 5,
+          "output": 25,
+          "cached_input": 0.5,
+          "cache_write_5m": 6.25
+        },
+        "claude-opus-4.8": {
+          "input": 5,
+          "output": 25,
+          "cached_input": 0.5,
+          "cache_write_5m": 6.25
+        },
+        "claude-opus-4.7": {
+          "input": 5,
+          "output": 25,
+          "cached_input": 0.5,
+          "cache_write_5m": 6.25
+        },
+        "claude-opus-4.6": {
+          "input": 5,
+          "output": 25,
+          "cached_input": 0.5,
+          "cache_write_5m": 6.25
+        },
+        "claude-opus-4.5": {
+          "input": 5,
+          "output": 25,
+          "cached_input": 0.5,
+          "cache_write_5m": 6.25
+        },
+        "claude-sonnet-5.5": {
+          "input": 2,
+          "output": 10,
+          "cached_input": 0.1,
+          "cache_write_5m": 2.5
+        },
+        "claude-sonnet-5": {
+          "input": 2,
+          "output": 10,
+          "cached_input": 0.2,
+          "cache_write_5m": 2.5
+        },
+        "claude-sonnet-4.6": {
+          "input": 3,
+          "output": 15,
+          "cached_input": 0.3,
+          "cache_write_5m": 3.75
+        },
+        "claude-sonnet-4.5": {
+          "input": 3,
+          "output": 15,
+          "cached_input": 0.3,
+          "cache_write_5m": 3.75
+        },
+        "claude-haiku-5.5": {
+          "input": 0.1,
+          "output": 0.5,
+          "cached_input": 0.01,
+          "cache_write_5m": 0.125,
+          "note": "For prompts up to 100,000 tokens; five times these rates above that."
+        },
+        "claude-haiku-4.5": {
+          "input": 1,
+          "output": 5,
+          "cached_input": 0.1,
+          "cache_write_5m": 1.25
+        }
+      }
+    },
+    "openai": {
+      "source": "https://developers.openai.com/api/docs/pricing",
+      "verified": true,
+      "models": {
+        "gpt-6-astra": {
+          "input": 10,
+          "output": 50,
+          "cached_input": 1
+        },
+        "gpt-6.1-sol": {
+          "input": 2,
+          "output": 10,
+          "cached_input": 0.1
+        },
+        "gpt-6-sol": {
+          "input": 2,
+          "output": 10,
+          "cached_input": 0.2
+        },
+        "gpt-6-luna": {
+          "input": 0.1,
+          "output": 0.5,
+          "cached_input": 0.01
+        },
+        "gpt-5.6-sol": {
+          "input": 4,
+          "output": 20,
+          "cached_input": 0.4
+        },
+        "gpt-5.6-terra": {
+          "input": 2,
+          "output": 12,
+          "cached_input": 0.2
+        },
+        "gpt-5.6-luna": {
+          "input": 0.2,
+          "output": 1.2,
+          "cached_input": 0.02
+        },
+        "gpt-5.5": {
+          "input": 5,
+          "output": 30,
+          "cached_input": 0.5,
+          "note": "Under 272K context."
+        },
+        "gpt-5.4": {
+          "input": 2.5,
+          "output": 15,
+          "cached_input": 0.25,
+          "note": "Under 272K context."
+        },
+        "gpt-5.4-mini": {
+          "input": 0.75,
+          "output": 4.5,
+          "cached_input": 0.075
+        },
+        "gpt-5.4-nano": {
+          "input": 0.2,
+          "output": 1.25,
+          "cached_input": 0.02
+        },
+        "gpt-5.2": {
+          "input": 1.75,
+          "output": 14,
+          "cached_input": 0.175
+        },
+        "gpt-5.1": {
+          "input": 1.25,
+          "output": 10,
+          "cached_input": 0.125
+        },
+        "gpt-5": {
+          "input": 1.25,
+          "output": 10,
+          "cached_input": 0.125
+        },
+        "gpt-5-mini": {
+          "input": 0.25,
+          "output": 2,
+          "cached_input": 0.025
+        },
+        "gpt-5-nano": {
+          "input": 0.05,
+          "output": 0.4,
+          "cached_input": 0.005
+        },
+        "gpt-4.1": {
+          "input": 2,
+          "output": 8,
+          "cached_input": 0.5
+        },
+        "gpt-4.1-mini": {
+          "input": 0.4,
+          "output": 1.6,
+          "cached_input": 0.1
+        },
+        "gpt-4.1-nano": {
+          "input": 0.1,
+          "output": 0.4,
+          "cached_input": 0.025
+        },
+        "gpt-4o": {
+          "input": 2.5,
+          "output": 10,
+          "cached_input": 1.25
+        },
+        "gpt-4o-mini": {
+          "input": 0.15,
+          "output": 0.6,
+          "cached_input": 0.075
+        },
+        "o3": {
+          "input": 2,
+          "output": 8,
+          "cached_input": 0.5
+        },
+        "o4-mini": {
+          "input": 1.1,
+          "output": 4.4,
+          "cached_input": 0.275
+        },
+        "o3-mini": {
+          "input": 1.1,
+          "output": 4.4,
+          "cached_input": 0.55
+        },
+        "gpt-4-turbo": {
+          "input": 10,
+          "output": 30
+        },
+        "gpt-3.5-turbo": {
+          "input": 0.5,
+          "output": 1.5
+        }
+      }
+    },
+    "google": {
+      "source": "https://ai.google.dev/gemini-api/docs/pricing",
+      "verified": true,
+      "models": {
+        "gemini-3.1-pro-preview": {
+          "input": 2,
+          "output": 12,
+          "cached_input": 0.2,
+          "note": "Prompts up to 200K tokens; $4 / $18 / $0.40 above."
+        },
+        "gemini-2.5-pro": {
+          "input": 1.25,
+          "output": 10,
+          "cached_input": 0.125,
+          "note": "Prompts up to 200K tokens; $2.50 / $15 / $0.25 above."
+        },
+        "gemini-3.8-flash": {
+          "input": 0.75,
+          "output": 3.75,
+          "cached_input": 0.075
+        },
+        "gemini-3.6-flash": {
+          "input": 0.75,
+          "output": 3.75,
+          "cached_input": 0.075
+        },
+        "gemini-2.5-flash": {
+          "input": 0.3,
+          "output": 2.5,
+          "cached_input": 0.03
+        },
+        "gemini-3.5-flash-lite": {
+          "input": 0.3,
+          "output": 2.5,
+          "cached_input": 0.03
+        },
+        "gemini-3.1-flash-lite": {
+          "input": 0.25,
+          "output": 1.5,
+          "cached_input": 0.025
+        },
+        "gemini-2.5-flash-lite": {
+          "input": 0.1,
+          "output": 0.4,
+          "cached_input": 0.01
+        }
+      }
+    },
+    "amazon": {
+      "source": "https://aws.amazon.com/bedrock/pricing/",
+      "verified": false,
+      "note": "AWS's page did not expose these figures when read; values are from third-party listings dated February to May 2026.",
+      "models": {
+        "nova-micro": {
+          "input": 0.035,
+          "output": 0.14
+        },
+        "nova-lite": {
+          "input": 0.06,
+          "output": 0.24
+        },
+        "nova-pro": {
+          "input": 0.8,
+          "output": 3.2
+        },
+        "nova-premier": {
+          "input": 2.5,
+          "output": 12.5
+        }
+      }
+    }
+  }
+}

@@ -76,14 +76,17 @@ function attemptTitle(attempt: ImportReport['optimizations'][number], data: Impo
   return split(text)[0]
 }
 
-function FindingCard({ finding, index, data, coverage }: { finding: Finding; index: number; data: ImportReport; coverage: Coverage[] }) {
+function FindingCard({ finding, index, data, coverage, first = false }: { finding: Finding; index: number; data: ImportReport; coverage: Coverage[]; first?: boolean }) {
   const area = areaOf(finding, coverage)
   const [title, rest] = split(finding.waste)
   const saving = finding.estimated_saving
   const extras = saving ? [saving.model_calls != null && `${measurement(saving.model_calls)} calls`, saving.wall_time_seconds != null && `${measurement(saving.wall_time_seconds, 'seconds')}`, saving.tokens != null && `${measurement(saving.tokens)} tokens`].filter(Boolean) : []
+  const estimate = finding.testable_here === false ? finding.estimate : null
+  const kinds: Record<string, string> = { model_swap: 'model swap', caching: 'caching', guard: 'guard' }
+  const pct = (value: number) => `${value > 0 ? '+' : '−'}${Math.abs(value) >= 10 ? Math.round(Math.abs(value)) : Math.abs(value).toFixed(1)}%`
   return <li className="slab grid gap-x-8 gap-y-4 p-6 md:grid-cols-[minmax(0,1fr)_220px] md:p-8">
     {/* The label takes the whole first row; without that it becomes a grid cell and pushes the text into the narrow column. */}
-    <span className="slab-tab col-span-full mb-0">leak {String(index + 1).padStart(2, '0')}{area ? ` · ${area.name}` : ''}</span>
+    <span className="slab-tab col-span-full mb-0">leak {String(index + 1).padStart(2, '0')}{area ? ` · ${area.name}` : ''}{first && <span className="chip chip-ok ml-2 px-2 py-0 text-[13px]">test this first</span>}{finding.testable_here === false && <span className="chip chip-quiet ml-2 px-2 py-0 text-[13px]">{kinds[finding.lever || ''] || 'not testable here'} · apply in production</span>}</span>
     <div className="min-w-0">
       <h3 className="max-w-[52ch] text-[20px] leading-[1.2] font-semibold [overflow-wrap:anywhere] sm:text-[24px]">{title}</h3>
       <div className="mt-4 flex flex-wrap gap-2">{finding.source.map((source, i) => {
@@ -93,15 +96,28 @@ function FindingCard({ finding, index, data, coverage }: { finding: Finding; ind
       })}</div>
       {rest && <p className="mt-4 line-clamp-3 max-w-[80ch] text-[15px] leading-relaxed text-muted">{rest}</p>}
       <details className="mt-4 text-[14px]"><summary className="flex min-h-11 cursor-pointer items-center font-semibold underline decoration-line decoration-2 underline-offset-4">The full evidence, the fix and the risk</summary>
-        <dl className="mt-3 space-y-4">{rest && <div><dt className="label">What Hansa saw</dt><dd className="report-prose mt-1">{rest}</dd></div>}<div><dt className="label">Proposed change</dt><dd className="report-prose mt-1">{finding.proposed_change || 'Not recorded'}</dd></div><div><dt className="label">Risk</dt><dd className="report-prose mt-1">{finding.behaviour_risk || 'Not recorded'}</dd></div>{saving?.method && <div><dt className="label">How the saving was estimated</dt><dd className="report-prose mt-1">{saving.method}</dd></div>}</dl></details>
+        <dl className="mt-3 space-y-4">{rest && <div><dt className="label">What Hansa saw</dt><dd className="report-prose mt-1">{rest}</dd></div>}<div><dt className="label">Proposed change</dt><dd className="report-prose mt-1">{finding.proposed_change || 'Not recorded'}</dd></div><div><dt className="label">Risk</dt><dd className="report-prose mt-1">{finding.behaviour_risk || 'Not recorded'}</dd></div>{saving?.method && <div><dt className="label">How the saving was estimated</dt><dd className="report-prose mt-1">{saving.method}</dd></div>}
+          {estimate && <div><dt className="label">Why this is an estimate</dt><dd className="report-prose mt-1">{estimate.why_not_tested}</dd>
+            {estimate.basis.length > 0 && <><dt className="label mt-4">What the figure rests on</dt><dd className="mt-1"><ul className="list-disc space-y-1 pl-5">{estimate.basis.map(line => <li key={line}>{line}</li>)}</ul></dd></>}
+            {estimate.unknowns.length > 0 && <><dt className="label mt-4">What it cannot tell you</dt><dd className="mt-1"><ul className="list-disc space-y-1 pl-5">{estimate.unknowns.map(line => <li key={line}>{line}</li>)}</ul></dd></>}
+            <dd className="mt-3 text-[13px] text-muted">List prices as of {estimate.prices_retrieved}.</dd></div>}</dl></details>
     </div>
-    <div className="flex flex-col items-start gap-1 border-line pt-5 max-md:border-t md:border-l md:pt-0 md:pl-8">
-      <span className="label">could save</span>
-      <p className="big-number text-[40px] text-ok">{saving?.cost_usd != null ? measurement(saving.cost_usd, 'usd') : '?'}</p>
-      <p className="tabular text-[14px] text-muted">{extras.length ? extras.join(' · ') : 'not priced yet'}</p>
-      <p className="tabular text-[14px] text-muted">estimate, until tested</p>
-      <Link to={`?step=fix&finding=${encodeURIComponent(finding.finding_id)}`} className="button-primary mt-4 w-full md:mt-auto">Test this fix <ArrowRight size={16} aria-hidden="true" /></Link>
-    </div>
+    {estimate
+      // A change the sandbox cannot show gets arithmetic, clearly marked, and no test button.
+      ? <div className="flex flex-col items-start gap-1 border-line pt-5 max-md:border-t md:border-l md:pt-0 md:pl-8">
+        <span className="chip chip-quiet">estimated, not tested</span>
+        <p className={`big-number mt-2 text-[40px] ${estimate.change_percent ? 'text-ink' : 'text-muted'}`}>{estimate.change_percent == null ? '?' : estimate.change_percent === 0 ? 'none' : pct(estimate.change_percent)}</p>
+        <p className="tabular text-[14px] text-muted">{estimate.change_percent == null ? 'no figure available' : estimate.change_percent === 0 ? 'no saving on a normal run' : 'cost per pass'}</p>
+        {estimate.cost_before_usd != null && estimate.cost_after_usd != null && estimate.change_percent !== 0 && <p className="tabular text-[14px] text-muted">{measurement(Number(estimate.cost_before_usd.toFixed(4)), 'usd')} → about {measurement(Number(estimate.cost_after_usd.toFixed(4)), 'usd')}</p>}
+        <p className="mt-3 text-[14px] leading-snug text-muted md:mt-auto">Hansa's sandbox can't measure this kind of change. Apply it in your own setup and check the result there.</p>
+      </div>
+      : <div className="flex flex-col items-start gap-1 border-line pt-5 max-md:border-t md:border-l md:pt-0 md:pl-8">
+        <span className="label">could save</span>
+        <p className="big-number text-[40px] text-ok">{saving?.cost_usd != null ? measurement(saving.cost_usd, 'usd') : '?'}</p>
+        <p className="tabular text-[14px] text-muted">{extras.length ? extras.join(' · ') : 'not priced yet'}</p>
+        <p className="tabular text-[14px] text-muted">{finding.predicted_cost_change_percent != null ? `predicted ${pct(finding.predicted_cost_change_percent)} cost · until tested` : 'estimate, until tested'}</p>
+        <Link to={`?step=fix&finding=${encodeURIComponent(finding.finding_id)}`} className="button-primary mt-4 w-full md:mt-auto">Test this fix <ArrowRight size={16} aria-hidden="true" /></Link>
+      </div>}
   </li>
 }
 
@@ -248,7 +264,8 @@ export default function ImportReportPage({ session, preview = false }: { session
         <div className="mb-8 flex flex-wrap items-end justify-between gap-3"><p className="font-display text-[34px] leading-none font-medium sm:text-[48px]">{investigation.findings.length} leak{investigation.findings.length === 1 ? '' : 's'} found.</p>
           <div className="flex flex-wrap items-center gap-2">{investigation.incomplete && <span className="chip chip-quiet">investigation ended early · findings kept</span>}{!preview && <TraceLinks trace={investigation.trace} label="Hansa's trace" />}</div></div>
         {(investigation.coverage || []).length > 0 && <Areas findings={investigation.findings} coverage={investigation.coverage || []} />}
-        {investigation.findings.length ? <ol className="grid gap-9">{investigation.findings.map((finding, index) => <FindingCard key={finding.finding_id} finding={finding} index={index} data={data} coverage={investigation.coverage || []} />)}</ol>
+        {investigation.findings.length ? <ol className="grid gap-9">{investigation.findings.map((finding, index) => <FindingCard key={finding.finding_id} finding={finding} index={index} data={data} coverage={investigation.coverage || []}
+          first={investigation.findings.filter(item => item.testable_here !== false).length > 1 && investigation.findings.find(item => item.testable_here !== false)?.finding_id === finding.finding_id} />)}</ol>
           : <Empty title={investigation.nothing_worth_changing ? 'Nothing worth changing.' : 'No findings saved.'} text="Hansa only reports what it can point to in the source." />}
         {(investigation.coverage || []).length === 0 && <Areas findings={investigation.findings} coverage={[]} />}
       </section> : <Empty title="No hunt yet." text="Start one below. Hansa lines up every call against the source and points at the waste, with file and line." />)}
