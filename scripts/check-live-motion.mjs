@@ -108,19 +108,18 @@ try {
   const panel = page.getByRole('dialog', { name: 'Trace', exact: true })
   await panel.waitFor()
   assert.equal(await panel.evaluate(el => getComputedStyle(el).animationName), 'trace-panel-enter')
-  const slide = await panel.evaluate(el => {
+  const pop = await panel.evaluate(el => {
     const animation = el.getAnimations()[0]
     animation.pause(); animation.currentTime = 0
-    const distance = new DOMMatrix(getComputedStyle(el).transform).m41
-    const width = el.offsetWidth
+    const style = getComputedStyle(el), matrix = new DOMMatrix(style.transform)
     animation.finish()
-    return { distance, width }
+    return { opacity: Number(style.opacity), scale: matrix.a, rise: matrix.m42 }
   })
-  assert.equal(slide.distance, slide.width, 'Trace starts one panel width to the right')
+  assert(pop.opacity === 0 && pop.scale < 1 && pop.rise > 0, 'Trace rises and scales into place')
   await panel.getByText('Synthetic trace fixture run', { exact: true }).waitFor()
   const feedback = await panel.getByRole('button', { name: 'Close trace' }).evaluate(el => getComputedStyle(el).transitionDuration.split(',').map(Number.parseFloat))
   assert(feedback.every(seconds => seconds >= 0.12 && seconds <= 0.16))
-  await panel.screenshot({ path: path.join(out, 'trace-slide.png') })
+  await panel.screenshot({ path: path.join(out, 'trace-window.png') })
   await page.emulateMedia({ reducedMotion: 'reduce' })
   assert(Number.parseFloat(await panel.evaluate(el => getComputedStyle(el).animationDuration)) < 0.001)
   assert(Number.parseFloat(await active.locator('.live-dot').first().evaluate(el => getComputedStyle(el).animationDuration)) < 0.001)

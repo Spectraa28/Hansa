@@ -19,6 +19,7 @@
 .hero-footnote { display: flex; align-items: center; gap: 8px; margin-top: 24px; font-size: 15px; color: var(--muted); }
 .experiment-diagram { min-width: 0; padding: 24px; border-radius: 14px; background-color: var(--surface); background-image: radial-gradient(var(--line) .8px, transparent .8px); background-size: 16px 16px; box-shadow: var(--proof-shadow); animation: lab-enter 700ms 120ms var(--ease) both; }
 .experiment-diagram { --loop-accent: #08777D; --loop-soft: #E4F4F1; }
+:root[data-theme=dark] .experiment-diagram { --loop-accent: #5FD3C8; --loop-soft: #10302E; }
 .experiment-diagram figcaption { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 26px; }
 .diagram-label { font-size: 14px; }
 .diagram-input { display: flex; align-items: center; gap: 14px; padding: 16px; background: var(--surface); border-radius: 8px; }
@@ -46,7 +47,7 @@
 .landing-section { padding-block: var(--section-space); }
 .section-heading { margin-bottom: 42px; }
 .section-heading > p { max-width: 65ch; margin-top: 18px; font-size: 17px; line-height: 1.65; color: var(--body); }
-.how { background: var(--surface); }
+.how { background: color-mix(in srgb, var(--surface) 55%, transparent); }
 .process-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; }
 .process-flow li { position: relative; min-width: 0; }
 .process-flow li:not(:last-child)::before { content: ''; position: absolute; top: 8px; left: 8px; width: calc(100% + 32px); height: 1px; background: var(--line); }
@@ -66,7 +67,7 @@
 .artifact-verdict .verdict-label { display: inline-flex; align-items: center; gap: 6px; }
 .process-flow h3 { font-size: 20px; line-height: 1.25; }
 .process-flow p { margin-top: 12px; font-size: 15px; line-height: 1.65; color: var(--body); }
-.real-run { background: var(--surface); }
+.real-run { background: color-mix(in srgb, var(--surface) 55%, transparent); }
 .saved-demo { box-shadow: var(--proof-shadow); border-radius: 12px; overflow: hidden; background: var(--surface); }
 .demo-topline { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; padding: 17px 26px; background: var(--paper); color: var(--muted); font-family: var(--font-mono); font-size: 14px; }
 .demo-topline > span:first-child { display: inline-flex; align-items: center; gap: 9px; letter-spacing: .06em; }

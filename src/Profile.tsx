@@ -57,7 +57,7 @@ export default function Profile({ session }: { session: UseQueryResult<Session |
       <p className="mt-2 max-w-[58ch] text-muted">This removes your account, your GitHub connection, every imported repository copy, and all baselines, findings and results. It can't be undone.</p>
       <label htmlFor="confirm-delete" className="mt-5 block text-[15px] font-medium">Type <b className="tabular">delete</b> to confirm</label>
       <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start"><input id="confirm-delete" className="field min-w-0 sm:max-w-xs sm:flex-1" autoComplete="off" value={confirm} onChange={event => setConfirm(event.target.value)} />
-        <button className="button-primary w-full shrink-0 enabled:bg-ink enabled:text-paper sm:w-auto" disabled={busy !== null || confirm.trim().toLowerCase() !== 'delete'} onClick={() => void leave('delete')}><Trash2 size={16} aria-hidden="true" /> {busy === 'delete' ? 'Deleting…' : 'Delete everything'}</button></div>
+        <button className="button-primary w-full shrink-0 enabled:bg-waste enabled:text-white sm:w-auto" disabled={busy !== null || confirm.trim().toLowerCase() !== 'delete'} onClick={() => void leave('delete')}><Trash2 size={16} aria-hidden="true" /> {busy === 'delete' ? 'Deleting…' : 'Delete everything'}</button></div>
     </section>
     {error && <p role="alert" className="mt-5 font-medium [overflow-wrap:anywhere]">{error}</p>}
   </main>

@@ -1,5 +1,7 @@
 // What to do about a refusal from the API, where the message alone doesn't say.
 export function advice(message: string): string {
+  if (/model allowance is used up/i.test(message)) return 'You can keep exploring every saved result. If this is your own Hansa server, top up the model allowance; the check clears itself a few minutes after a refusal, so start the run again then.'
+  if (/one job at a time/i.test(message)) return 'Wait for that job to finish, then start yours again.'
   if (/beyond the sandbox for now/i.test(message)) return 'Hansa can run agents with light, pure-Python dependencies today. Import a folder that holds just the agent, or trim these packages from the requirements file on a branch and import that.'
   if (/no prebuilt Python 3\.12 package/i.test(message)) return 'Check that every dependency installs on Python 3.12 with plain pip, with no compiler needed.'
   if (/500 MB or 200 packages/i.test(message)) return 'Trim the requirements file to what the agent itself needs, then import again.'
