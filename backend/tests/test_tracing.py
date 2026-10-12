@@ -97,7 +97,7 @@ def test_run_trace_carries_calls_gaps_egress_cost_provenance_and_scope(traced):
     spans = {span["span_id"]: span for span in arguments["spans"]}
     assert [span["kind"] for span in arguments["spans"]] == ["LLM", "CHAIN", "TOOL", "TOOL", "LLM"]
     first, second = spans["llm-1"], spans["llm-2"]
-    assert first["attributes"]["neatlogs.llm.model_name"] == "claude-haiku" and first["attributes"]["hansa.requested_model"] == "gpt-4o"
+    assert first["attributes"]["neatlogs.llm.model_name"] == "anthropic/claude-haiku-4.5" and first["attributes"]["hansa.served_model"] == "claude-haiku" and first["attributes"]["hansa.requested_model"] == "gpt-4o"
     assert first["attributes"]["neatlogs.llm.token_count.prompt"] == 100 and first["attributes"]["hansa.cost_usd"] == 0.001
     assert second["attributes"]["hansa.cost_usd"] == "unknown" and second["attributes"]["hansa.repeated_messages"] == 2
     assert second["attributes"]["hansa.repeated_size"] == 408 and "(size 408) repeat" in second["attributes"]["neatlogs.input.value"]

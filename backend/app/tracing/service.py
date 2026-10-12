@@ -59,6 +59,13 @@ def marker(import_id):
     return "hansaimport" + import_id.replace("-", "")
 
 
+# Neatlogs prices a trace from each call's model name and token counts; it ignores any cost we send. The gateway's
+# short names are not in its price list, so each is sent under the name Neatlogs recognises (checked by reading
+# back labelled test traces on 12 October 2026). Its figure is list price; Hansa's own is the provider's per-call cost.
+PRICED_NAMES = {"claude-sonnet-4.6": "anthropic/claude-sonnet-4.6", "claude-opus-4.6": "anthropic/claude-opus-4.6",
+                "claude-haiku": "anthropic/claude-haiku-4.5"}
+
+
 def llm_spans(calls, prefix="llm"):
     spans, previous = [], {}
     for row in calls:
@@ -75,7 +82,8 @@ def llm_spans(calls, prefix="llm"):
                      f"{repeated} messages (size {repeated_chars}) repeat the previous call.")
         if last:
             described += f" Last {last.get('role')}: {last.get('preview')}"
-        attributes = {"neatlogs.llm.model_name": row["upstream_model"] or row["model"],
+        served = row["upstream_model"] or row["model"]
+        attributes = {"neatlogs.llm.model_name": PRICED_NAMES.get(served, served), "hansa.served_model": served,
                       "neatlogs.input.value": described,
                       "neatlogs.output.value": output.get("preview") or f"{output.get('output_chars', 0)} characters",
                       "hansa.requested_model": row["model"], "hansa.http_status": row["http_status"],
@@ -388,7 +396,7 @@ class TraceService:
                 if span["span_id"] in {f"{wanted[number]}-{number}" for number in wanted}:
                     found = span["attributes"]
                     steps[span["span_id"]] = {
-                        "model": found["neatlogs.llm.model_name"], "requested_model": found["hansa.requested_model"],
+                        "model": found["hansa.served_model"], "requested_model": found["hansa.requested_model"],
                         "tokens_in": found.get("neatlogs.llm.token_count.prompt"),
                         "tokens_out": found.get("neatlogs.llm.token_count.completion"),
                         "cost_usd": found["hansa.cost_usd"] if isinstance(found["hansa.cost_usd"], (int, float)) else None,
