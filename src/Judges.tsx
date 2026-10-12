@@ -53,6 +53,15 @@ export default function Judges() {
         <dt className="font-semibold">{what}</dt><dd className="text-[15.5px] leading-relaxed text-body">{proof}</dd></div>)}</dl>
     </section>)}
 
+    <section className="slab mt-9 overflow-hidden">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b border-line bg-wash px-6 py-4">
+        <h2 className="text-[22px] font-semibold tracking-tight">Public work</h2><span className="font-mono text-[14px] text-muted">15% of the score</span>
+        <p className="w-full text-[16px] text-body">Three posts about the build so far, and the build history itself.</p></div>
+      <ul className="divide-y divide-line">{([['Post on X, one', 'https://x.com/sonuv_dev/status/2109154433456050612'], ['Post on X, two', 'https://x.com/sonuv_dev/status/2109209614344712594'],
+        ['Post on LinkedIn', 'https://www.linkedin.com/posts/sonu-verma28_neathack-ugcPost-7515014968757366785-dUo4/']] as const).map(([label, url]) =>
+        <li key={url} className="px-6 py-3.5"><a href={url} target="_blank" rel="noopener noreferrer" className="link-action font-semibold">{label}</a></li>)}</ul>
+    </section>
+
     <section className="slab mt-9 p-6 md:p-8"><h2 className="text-[22px] font-semibold tracking-tight">By the numbers</h2>
       <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-6 md:grid-cols-4">{([['297', 'backend tests passing'], ['337', 'Neatlogs traces'], ['2', 'real third-party agents taken end to end'], ['−13.3%', 'measured cost on Swarm, 8 tasks']] as const).map(([value, label]) =>
         <div key={label}><dt className="big-number text-[36px]">{value}</dt><dd className="mt-1.5 text-[14.5px] leading-snug text-muted">{label}</dd></div>)}</dl></section>
