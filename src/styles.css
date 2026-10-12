@@ -80,6 +80,10 @@
 :root[data-theme=dark] .footer-invitation .button-primary { background: var(--water); color: #fff; }
 /* In dark, the lighter blue is for text; a pressed button goes deeper instead. */
 :root[data-theme=dark] .button-primary:hover:not(:disabled) { background: #3A6BDA; }
+/* While the theme is switching nothing else moves, so the browser only has the wave to draw. On small
+   screens the drifting colour layer is dropped for that moment too; it is the costliest thing to snapshot. */
+html.theme-switching *, html.theme-switching *::before, html.theme-switching *::after { animation-play-state: paused !important; transition: none !important; }
+@media (max-width: 960px), (pointer: coarse) { html.theme-switching body::after { display: none; } }
 /* The switch itself: the new theme is revealed in a circle growing from the button (see ThemeToggle). */
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 ::view-transition-old(root) { z-index: 1; }
