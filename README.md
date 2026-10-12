@@ -1,158 +1,191 @@
-# Ouro backend
+<p align="center">
+  <img src="docs/images/hansa-mark.svg" width="88" alt="Hansa logo">
+</p>
 
-Repository layout: [`backend/`](backend/) is the Python API, agent, runner and tests, with its documentation in [`backend/docs/`](backend/docs/). [`frontend/`](frontend/) is the product interface. Planning documents are at the root.
+<h1 align="center">Hansa</h1>
 
-Status: authentication, fixed-commit source import, inspection/configuration, task contracts, the model gateway, and a service-only Docker runner are implemented. Real GitHub sign-in/App connection and a fixed-commit import succeeded; the user confirmed the setup UI. A real `claude-haiku` gateway call and local sample container run returned HTTP 200 with LiteLLM-reported cost, and the injected timeout killed the container and its child. Spend admission now checks recorded spend without `/cost/estimate`; calls can overshoot this soft threshold. Binary dependencies resolve in a networked, secret-free container and install offline. Persisted per-task baselines and the authenticated baseline endpoint are implemented, and real imported agents have been onboarded, measured and tested through them. See [BASELINE.md](backend/docs/BASELINE.md). See [GATEWAY.md](backend/docs/GATEWAY.md) and [RUNNER.md](backend/docs/RUNNER.md). The local sample is a labelled fixture, not proof of arbitrary GitHub-agent compatibility. End-to-end task contract confirmation, Google sign-in, optimizer logic, Neatlogs run export, protected evaluation and hosted execution remain unverified or unimplemented. Own-key provider mode remains planned.
+<p align="center"><b>An optimization engineer for your AI agent.</b><br>
+It runs your agent on your own tasks, measures every model call, finds what is wasted,<br>and hands you a tested fix, or tells you plainly that it could not prove one.</p>
 
-## Repository setup and inspection
+<p align="center">
+  <a href="https://hansa.sverma.online"><b>Live site</b></a> ·
+  <a href="https://hansa.sverma.online/demo">Recorded run</a> ·
+  <a href="https://hansa.sverma.online/judges">Every claim, with its evidence</a> ·
+  <a href="https://cfo.ai/s/fG9t075-Bd4KFAHP">Business model</a>
+</p>
 
-After an authorized server restart, open `http://localhost:8000/setup` for the simple testing interface. It supports login, GitHub connection/access, repository/branch import, bounded static inspection, evidence review, and configuration/tool-permission confirmation. No imported source is executed. Confirmed configuration remains non-runnable. See [REPOSITORY_INSPECTION.md](backend/docs/REPOSITORY_INSPECTION.md) for endpoints, scan limits, supported detection, and current verification boundaries.
+<p align="center">
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
+  <img alt="SQLite" src="https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white">
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-sandbox-2496ED?logo=docker&logoColor=white">
+  <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white">
+  <img alt="Vite" src="https://img.shields.io/badge/Vite-646CFF?logo=vite&logoColor=white">
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?logo=tailwindcss&logoColor=white">
+  <br>
+  <img alt="Neatlogs" src="https://img.shields.io/badge/traced_with-Neatlogs-111827">
+  <img alt="Entire" src="https://img.shields.io/badge/built_with-Entire-111827">
+  <img alt="CFO.ai" src="https://img.shields.io/badge/planned_with-CFO.ai-111827">
+  <img alt="AWS EC2" src="https://img.shields.io/badge/AWS-EC2-FF9900?logo=amazonec2&logoColor=white">
+  <img alt="Vercel" src="https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white">
+  <img alt="Tests" src="https://img.shields.io/badge/backend_tests-297_passing-15734F">
+</p>
 
-After configuration confirmation, the same page supports representative tasks, exact/type checks, fact/evidence requirements, human-review rubrics, acceptable failures, protected behavior, and explicit budgets. Save a draft version, review its complete content, and confirm requirements. Edits preserve history; configuration changes make contracts stale. Confirmation does not start execution or enforce limits. See [TASK_CONTRACT.md](backend/docs/TASK_CONTRACT.md).
+<p align="center"><img src="docs/images/home.png" alt="The Hansa homepage" width="900"></p>
 
-## Backend layout
+Built solo for **neatHack 2026** by [@sonuv_dev](https://x.com/sonuv_dev) (team Spectra).
 
-Files are grouped by responsibility within one FastAPI application:
+## The problem
 
-```text
-backend/app/
-├── auth/
-│   ├── routes.py       # Email login, registration, current user, logout
-│   ├── schemas.py      # Login and registration input validation
-│   └── service.py      # Password authentication and sign-in rate limits
-├── oauth/
-│   ├── providers.py    # Google/GitHub clients and identity parsing
-│   └── routes.py       # Provider redirects and callbacks
-├── github/
-│   ├── routes.py       # Connect, selection, import status, disconnect, webhooks
-│   ├── service.py      # Encrypted connections, access checks, import lifecycle
-│   ├── client.py       # Supported GitHub endpoints, scoped tokens, downloads
-│   ├── archive.py      # Bounded extraction and unsupported-feature warnings
-│   └── worker.py       # One worker consuming the SQLite import queue
-├── users.py            # User and provider identity storage
-├── inspection/         # Static findings and confirmed execution configuration
-├── gateway/            # Scoped model proxy and persisted usage/reservations
-├── contracts/          # Versioned development tasks and correctness requirements
-├── ui/                 # Testing page and same-origin assets at /setup
-├── sessions.py         # Session storage, cookies, and logout CSRF checks
-├── database.py         # SQLite connections and schema initialization
-├── config.py           # Environment settings and validation
-└── main.py             # Application setup, routers, and shared middleware
+An agent makes model calls its owner never sees. Some resend the same context every step. Some only pass a request from one agent to the next. Each one costs money and time, and none of it shows up until the bill does.
+
+Tools that point at the waste are common. What is hard is changing the agent and knowing its behaviour did not change with it.
+
+## What Hansa does
+
+1. **Import.** Pick a GitHub repository and branch. Hansa copies one commit, read-only.
+2. **Onboard.** Hansa's own agent reads the code, writes a small adapter so the agent can be run as a batch program, and proves it with a real run.
+3. **Baseline.** Your tasks run in a sandbox. Every model call is counted, timed and priced.
+4. **Find.** Quick wins come free from the measurements. A deeper pass reads the runs and the source and reports each finding with file and line.
+5. **Test.** A fix is made on a private copy and the same tasks are rerun. Plain code, not the model, decides whether anything regressed and whether the saving is real.
+6. **Take it.** A patch against your exact commit, a brief for your own coding agent, and the measurements behind both.
+
+<p align="center"><img src="docs/images/result.png" alt="A tested fix: before and after for cost, time, model calls and input tokens" width="900"></p>
+
+## What it has measured
+
+All of this is from real runs on other people's agents. The checks are automatic; a person has not confirmed the answers.
+
+| Agent | What happened |
+| --- | --- |
+| **OpenAI Swarm**, airline example, hosted server | The deep hunt predicted −14.8% cost from removing an agent that only routes. The fix test measured **−13.3% cost, −22.7% model calls, −16.5% time** across 8 tasks, none regressed. Accepted. |
+| **OpenAI Swarm**, earlier run | A fix saved 10% of model calls and made one passing task fail. Hansa **rejected it** and kept the evidence. |
+| **OpenAI Agents SDK**, customer-service example | The same kind of fix measured 0% change. Hansa finished it as **no improvement**. |
+
+Some changes cannot be shown by rerunning tasks in the sandbox: a model swap, prompt caching, a safety guard. Hansa does not test those. It gives an estimate from the measured baseline and list prices, labelled as an estimate.
+
+<p align="center"><img src="docs/images/findings.png" alt="Findings from the deep hunt, each with file and line and a predicted saving" width="900"></p>
+
+## How it is built
+
+```
+            ┌──────────────────── your browser ────────────────────┐
+            │  React app on Vercel   (hansa.sverma.online)          │
+            └───────────────┬───────────────────────────────────────┘
+                            │  /auth, /github  (passed through by Vercel)
+            ┌───────────────▼───────────────────────────────────────┐
+            │  FastAPI on one EC2 host, behind Caddy (HTTPS)        │
+            │                                                       │
+            │  GitHub import ──► inspection ──► task contract       │
+            │                                                       │
+            │  Hansa's agent ── onboarding · deep hunt · fix test   │
+            │        │  tools: read, search, edit, run, measure     │
+            │        ▼                                              │
+            │  Docker sandbox ──► model gateway ──► model provider  │
+            │  (no network of     (throwaway key,                   │
+            │   its own, no keys)  spend cap, every call recorded)  │
+            │        │                                              │
+            │        ▼                                              │
+            │  call ledger (SQLite) ──► X-ray, comparison, verdict  │
+            │        └──────────────► Neatlogs traces               │
+            └───────────────────────────────────────────────────────┘
 ```
 
-The service modules share the local SQLite database. The gateway adds key/call tables and `/gateway/v1/chat/completions`; see [GATEWAY.md](backend/docs/GATEWAY.md) for configuration and accounting limits.
+Three ideas hold it together:
 
-## Local setup
+- **The model proposes; code decides.** Whether a task regressed, whether a saving clears the bar and whether a fix is accepted are computed from the ledger. A saving under 5% is not accepted when run-to-run variation was not measured.
+- **Imported code never touches the host.** It runs in a container with a read-only copy of its own snapshot, no network of its own, memory and process limits, and one throwaway key that can only reach Hansa's gateway.
+- **Every number has a call behind it.** Cost, tokens and timing come from the gateway's record of each call, not from the agent's own report.
 
-Run from `backend/`. Keep `.env` and the ignored `var/` directory at the repository root. These are setup instructions, not verified execution results.
+## The tools, and how each is used
+
+### Sponsor tools
+
+| Tool | How Hansa uses it |
+| --- | --- |
+| **[Neatlogs](https://neatlogs.com)** | Part of the product. Every sandbox run and every agent job is logged as a trace through the Neatlogs MCP server, then read back to confirm it arrived. The trace window in the app shows each step from Neatlogs beside Hansa's own per-call figures. The investigator also reads Neatlogs' detections as leads. 337 traces in the project so far. Known gap: Neatlogs' cost total reads $0 because Hansa sends cost in its own field. |
+| **[Entire](https://entire.io)** | The project's home. Entire is the git remote, and agent coding sessions (Codex) were recorded as checkpoints alongside the commits they produced. 10 of the first 25 commits carry one. No product feature depends on Entire. |
+| **[CFO.ai](https://cfo.ai)** | The business model, built from measured unit costs: Starter $149 a month for one proof, Team $299 for three, with the customer paying their own model bill. It includes a hosted stress case that loses money. [Open the model](https://cfo.ai/s/fG9t075-Bd4KFAHP). No customer has paid yet. |
+| **AWS** | One `t3.medium` EC2 instance in `us-east-1` runs the API, the sandbox and the database, inside the hackathon's limits. |
+
+### Backend
+
+| Tool | Used for |
+| --- | --- |
+| **Python 3.12, FastAPI, Uvicorn** | The API, the agent loops and the runner, as one process. |
+| **SQLite** | Accounts, imports, task contracts, the call ledger, jobs and results. One file, backed up nightly on the server. |
+| **Docker** | The sandbox. A fresh set of containers per run, with dependencies installed offline from pinned, hashed wheels. Old images are pruned after each build. |
+| **httpx** | The model gateway's calls to the provider, and GitHub's API. |
+| **Authlib, joserfc, pwdlib (Argon2), cryptography** | GitHub and Google sign-in, GitHub App tokens (encrypted at rest), and password login. |
+| **LiteLLM gateway (hosted)** | The model provider Hansa's own gateway forwards to. Claude Sonnet 4.6 runs Hansa's agent. |
+| **pytest** | 297 tests, including real Docker lifecycle checks. |
+
+### Frontend
+
+| Tool | Used for |
+| --- | --- |
+| **React 19, TypeScript, Vite** | The interface. |
+| **Tailwind CSS 4** | Styling, with a small set of shared colour tokens for the light and dark themes. |
+| **TanStack Query** | Fetching and the live run feed, which keeps going through dropped requests. |
+| **React Router** | Pages. |
+| **Lenis** | Smoothed scrolling, loaded after first paint. |
+| **lucide-react** | Icons. |
+| **Vercel** | Hosting, and passing `/auth` and `/github` through to the API so the browser talks to one address. |
+
+### Hosting
+
+**Caddy** terminates HTTPS on the server and exposes only `/auth` and `/github`. **systemd** keeps the one API process running. See [deploy/README.md](deploy/README.md).
+
+<p align="center"><img src="docs/images/baseline-dark.png" alt="A baseline in dark mode: calls, cost and time per pass, and every task" width="900"></p>
+
+## Run it yourself
+
+The quickest way is the [live site](https://hansa.sverma.online): sign in with GitHub or Google and import an agent. The [recorded run](https://hansa.sverma.online/demo) needs no sign-in and spends nothing.
+
+To run it locally you need Python 3.12, [uv](https://docs.astral.sh/uv/), Node 20 or later, and Docker.
 
 ```sh
+# API
+cd backend
 uv sync --locked
-```
-
-Add the authentication settings from [.env.example](backend/.env.example) to your existing ignored `.env`. Preserve any existing keys. Generate the session-signing secret locally:
-
-```sh
-openssl rand -hex 32
-```
-
-Set `AUTH_SECRET_KEY` to that output. Do not paste it into chat or commit it. Defaults use `http://localhost:8000`, enable email/password login, and create `var/auth.sqlite3` when the application starts. SQLite uses the standard library; no database server is required.
-
-Start the API when ready:
-
-```sh
 uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log
+
+# Interface, in a second terminal
+cd frontend
+npm install
+npm run dev          # http://localhost:5173
+
+# Tests
+cd backend && uv run pytest
 ```
 
-The application reads the root `.env`; environment variables take precedence. Access logs are disabled to avoid logging OAuth callback codes. API documentation is at `http://localhost:8000/docs`.
+Settings go in a `.env` file at the repository root; copy [backend/.env.example](backend/.env.example) and fill it in. [backend/docs/SETUP.md](backend/docs/SETUP.md) covers sign-in providers, the GitHub App and the model gateway.
 
-## Google and GitHub setup
+## Repository layout
 
-Register your own OAuth applications with each provider. Their client IDs and secrets belong in `.env`, not SQLite or frontend code. An unconfigured provider returns `503`; email login works independently.
-
-| Provider | Environment variables | Local callback URL | Requested permissions |
-| --- | --- | --- | --- |
-| Google | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | `http://localhost:8000/auth/google/callback` | `openid email profile` |
-| GitHub | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` | `http://localhost:8000/auth/github/callback` | `read:user user:email` |
-
-For Google, create a Web application OAuth client and configure its consent screen/test users as required. For GitHub, create an OAuth App with homepage `http://localhost:8000` and the callback above. Start a browser login using `/auth/google/login` or `/auth/github/login`. Open these URLs as a top-level navigation rather than fetching them with JavaScript. A successful callback sets the application session cookie and redirects to `FRONTEND_ORIGIN/app` (by default `http://localhost:5173/app`). Use `localhost` consistently in development so the OAuth state and session cookies share a host.
-
-OAuth uses state, PKCE, and (for Google) OpenID Connect nonce and ID-token validation through Authlib. GitHub identity uses its stable numeric user ID; Google uses its `sub` claim. Only verified provider emails are stored. GitHub users without a verified email can still sign in through their provider identity.
-
-GitHub sign-in does not request `repo` or `public_repo`. Use a dedicated identity-only GitHub OAuth App. Repository authorization uses the separate GitHub App described below; it connects to the current application account without merging login accounts or matching emails.
-
-## Authentication endpoints
-
-| Method | Path | Behavior |
-| --- | --- | --- |
-| GET | `/auth/providers` | Which login methods are configured/enabled |
-| POST | `/auth/register` | Create an email/password account and sign in |
-| POST | `/auth/login` | Sign in with email/password |
-| GET | `/auth/me` | Current user and session CSRF token; `401` without a valid session |
-| POST | `/auth/logout` | Revoke the current session; requires `X-CSRF-Token` |
-| GET | `/auth/google/login` | Redirect to Google |
-| GET | `/auth/google/callback` | Complete Google sign-in |
-| GET | `/auth/github/login` | Redirect to GitHub |
-| GET | `/auth/github/callback` | Complete GitHub sign-in |
-
-Email registration accepts JSON:
-
-```json
-{
-  "email": "person@example.com",
-  "name": "Person",
-  "password": "choose-a-private-password"
-}
+```
+backend/app/agent/       Hansa's agent: onboarding, deep hunt, fix test, estimates, prompts
+backend/app/gateway/     metered model gateway: throwaway keys, spend caps, the call ledger
+backend/app/runner/      Docker sandbox, baselines, the X-ray, the comparison and verdict
+backend/app/tracing/     Neatlogs client and trace read-back
+backend/app/github/      GitHub App connection and fixed-commit import
+backend/app/contracts/   task contracts and their checks
+backend/docs/            a document for each backend stage
+backend/tests/           the test suite
+frontend/src/            the interface
+deploy/                  server setup, HTTPS config, publish script
 ```
 
-Login accepts `email` and `password`. Registration requires a password of 12–128 characters. Email addresses are normalized case-insensitively. Login and registration return:
+## Known limits
 
-```json
-{
-  "user": {
-    "id": "user-id",
-    "email": "person@example.com",
-    "email_verified": false,
-    "name": "Person",
-    "avatar_url": null,
-    "created_at": 0
-  },
-  "csrf_token": "session-csrf-token"
-}
-```
+- Proof is only as strong as the tasks. Most results rest on 2 to 8 tasks run once, and Hansa rates that itself.
+- Python agents only, speaking the OpenAI chat-completions format, non-streaming.
+- Agents with heavy dependencies (PyTorch, browsers) or provider-hosted tools cannot run in the sandbox yet.
+- One job runs at a time. A second request is refused with what is running, not queued.
+- Model swaps, caching and guards are estimated, not measured.
+- Costs are the figures the provider reported per call, not reconciled against an invoice.
 
-The example above describes the response shape; it is not a recorded run. The login token is only in an HttpOnly, SameSite=Lax cookie. Send cookies with frontend requests (`credentials: "include"`). Fetch `/auth/me` to obtain the CSRF token, then send it in the `X-CSRF-Token` header when logging out. Current sessions expire after seven days; signing in rotates the browser's previous session, and logout revokes it in SQLite.
+## Credits
 
-Set `AUTH_EMAIL_LOGIN_ENABLED=false` to disable both email registration and password login. `FRONTEND_ORIGIN` allows one frontend origin (default `http://localhost:5173`); other browser origins cannot submit authentication mutations.
-
-## Stored credentials and boundaries
-
-- SQLite stores users, Argon2id password hashes, Google/GitHub identity mappings, hashed application session tokens, CSRF tokens, and rate-limit counters. Passwords and raw login tokens are not stored.
-- Provider access/refresh tokens are used transiently for login and are not persisted. Provider passwords are never received. OAuth app secrets stay in server configuration.
-- OAuth flow cookies hold temporary signed state/nonce/PKCE data, expire after ten minutes, and are cleared after the callback. They contain no provider access tokens or account passwords.
-- Existing accounts are not linked automatically by matching email. A collision returns `409` and asks the user to use the existing sign-in method.
-- Email/password accounts are marked `email_verified=false`. Email verification, recovery emails, password reset, and account linking are outside this slice. Unverified email must not be used to grant future repository or organization permissions.
-- Authentication responses disable caching. Validation errors omit submitted input to avoid echoing passwords. Authentication handlers are not exported to Neatlogs.
-- Attempts are limited in SQLite to 30 starts per client IP and 10 email attempts per client IP/address per ten-minute window. `429` includes `Retry-After`; behind a reverse proxy, trust forwarded IP headers only from that proxy.
-
-For hosting, set HTTPS `APP_URL` and `FRONTEND_ORIGIN`, set `AUTH_COOKIE_SECURE=true`, and register the exact hosted callback URLs. Serve frontend and API on the same site so SameSite cookies work. Keep the SQLite file and server secrets outside any future candidate sandbox. This single-host authentication slice has not been security-tested or deployed.
-
-## GitHub repository import
-
-The separate GitHub App connector supports current-account connection, repository/branch selection, fixed-commit snapshots, persisted status, disconnect, source deletion, and signed webhooks. Follow [GITHUB_IMPORT.md](backend/docs/GITHUB_IMPORT.md) for App configuration, API flow, limits, and storage boundaries. The frontend is still pending.
-
-## Verification
-
-Latest verification on October 10, 2026: `RUNNER_DOCKER_TEST=1 uv run pytest -q` passed **196 tests in 81.76 seconds** outside the sandbox, including real container lifecycle and offline dependency installation. Authlib and Starlette emitted two HTTP-client deprecation warnings. Gateway/GitHub regression HTTP traffic uses mocks; separate live probes verified Haiku model access, cost-header accounting, and the sample runner path. See [RUNNER.md](backend/docs/RUNNER.md) for private evidence and reproduction commands. `git diff --check` passed. To rerun the default suite (which skips real Docker checks):
-
-```sh
-uv run pytest
-```
-
-The tests cover authentication and mocked GitHub connection/session binding, encrypted token storage/refresh, access checks, fixed-SHA import, ownership, deletion, restart recovery, signed revocation/removal webhooks, archive limits, path/link rejection, and LFS/submodule warnings. Real OAuth success and private/organization repository imports still need configured applications and separate live checks.
-
-## Planning references
-
-Read [prd.md](prd.md), [ARCHITECTURE.md](backend/docs/ARCHITECTURE.md), [SPONSORS.md](SPONSORS.md), and [hackathon.md](hackathon.md) for the optimization product and event constraints. Authentication and source import do not establish optimization or measured improvement; the reviewed-workflow runner has separate evidence in [RUNNER.md](backend/docs/RUNNER.md).
-
-Implementation references: [Authlib example](https://github.com/authlib/demo-oauth-client/blob/master/starlette-google-login/app.py), [Google web-server OAuth](https://developers.google.com/identity/protocols/oauth2/web-server), [GitHub authorization](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps), [GitHub scopes](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps), and [pwdlib password hashing](https://frankie567.github.io/pwdlib/guide/).
+Built for neatHack 2026 with [Neatlogs](https://neatlogs.com), [Entire](https://entire.io) and [CFO.ai](https://cfo.ai). Tested on OpenAI's [Swarm](https://github.com/openai/swarm) and [Agents SDK](https://github.com/openai/openai-agents-python) examples. Typeface: Hanken Grotesk.

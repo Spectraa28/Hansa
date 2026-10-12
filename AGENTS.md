@@ -29,7 +29,7 @@ This workspace contains the Autonomous Agent Optimization Engineer plans, authen
 - `backend/app/config.py` and `backend/app/main.py`: settings and FastAPI application setup.
 - `backend/app/agent/estimates.py` and `model_prices.json`: arithmetic estimates for changes the sandbox cannot measure (model swap, caching, guards), from the measured baseline and list prices retrieved October 12. Never presented as test results; Nova prices are from third-party listings.
 - `backend/tests/`: 297 passing regression tests (3 skipped without Docker checks) as of October 12; gateway/GitHub HTTP requests and contract tasks use synthetic fixtures. Docker lifecycle and offline-wheel checks use real containers; separate live Haiku proof uses the labelled local sample.
-- `README.md`: setup, authentication contract, and current limitations.
+- `README.md`: what Hansa is, measured results, architecture and how each tool is used. `backend/docs/SETUP.md` holds setup, the authentication contract and provider configuration.
 - `backend/pyproject.toml` and `backend/uv.lock`: Python dependencies.
 - `backend/docs/`: technical documentation for each backend stage.
 - `backend/scripts/` and `backend/examples/`: proof scripts and labelled fixture agents.
@@ -40,7 +40,7 @@ Read both planning documents before extending the product. Python/FastAPI is use
 
 ## Build, Test, and Development Commands
 
-The Python project lives in `backend/`. From `backend/`, `uv sync --locked` installs dependencies. `.env` and the ignored `var/` runtime data stay at the repository root. Configure `.env` as described in `README.md`, then start the API with:
+The Python project lives in `backend/`. From `backend/`, `uv sync --locked` installs dependencies. `.env` and the ignored `var/` runtime data stay at the repository root. Configure `.env` as described in `backend/docs/SETUP.md`, then start the API with:
 
 ```sh
 uv run uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-access-log

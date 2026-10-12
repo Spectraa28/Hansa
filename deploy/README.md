@@ -32,7 +32,7 @@ sudo bash setup-server.sh https://github.com/<you>/<repository>.git hansa-api.sv
 
 It installs Docker, Caddy and the Python environment, clones `main`, pulls the sandbox base image, writes the Caddy config for your API name, adds swap and a nightly database backup (seven kept, under `/var/backups/hansa`), and installs the API service. It writes no secrets and does not start the API until `/opt/hansa/.env` is filled in.
 
-Create `/opt/hansa/.env` as [README.md](../README.md) describes, with these hosted values:
+Create `/opt/hansa/.env` as [backend/docs/SETUP.md](../backend/docs/SETUP.md) describes, with these hosted values:
 
 ```sh
 APP_URL=https://hansa.sverma.online
